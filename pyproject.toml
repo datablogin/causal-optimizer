@@ -1,0 +1,93 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "causal-optimizer"
+version = "0.1.0"
+description = "Causally-informed experiment optimization engine — decides what to try next using causal inference, Bayesian optimization, and evolutionary strategies."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "Robert Welborn" },
+]
+keywords = [
+    "causal-inference",
+    "bayesian-optimization",
+    "experimental-design",
+    "design-of-experiments",
+    "causal-bayesian-optimization",
+    "adaptive-experimentation",
+    "function-optimization",
+]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "numpy>=1.24.0",
+    "pandas>=2.0.0",
+    "scipy>=1.11.0",
+    "scikit-learn>=1.3.0",
+    "networkx>=3.1",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+bayesian = [
+    "botorch>=0.9.0",
+    "ax-platform>=0.4.0",
+    "gpytorch>=1.11",
+]
+doe = [
+    "pyDOE3>=1.0.0",
+]
+evolution = [
+    "qdax>=0.5.0",
+]
+causal = [
+    "causal-inference-marketing @ git+https://github.com/datablogin/causal-inference-marketing.git",
+]
+all = [
+    "causal-optimizer[bayesian,doe,evolution,causal]",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "pytest-xdist>=3.0",
+    "ruff>=0.4.0",
+    "mypy>=1.8.0",
+    "pre-commit>=3.0",
+]
+
+[project.urls]
+Repository = "https://github.com/datablogin/causal-optimizer"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "TCH"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
