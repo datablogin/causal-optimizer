@@ -8,8 +8,11 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
 
+import numpy as np
+
+from causal_optimizer.predictor.off_policy import OffPolicyPredictor
 from causal_optimizer.types import (
     CausalGraph,
     ExperimentLog,
@@ -19,6 +22,14 @@ from causal_optimizer.types import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Minimum requirements for statistical evaluation
+_MIN_EXPERIMENTS = 5
+_MIN_KEPT = 2
+_MIN_DISCARDED = 2
+_N_BOOTSTRAP = 1000
+_ALPHA_EARLY = 0.1  # permissive threshold for < 20 experiments
+_ALPHA_LATE = 0.05  # stricter threshold for >= 20 experiments
 
 
 class ExperimentRunner(Protocol):
@@ -49,6 +60,7 @@ class ExperimentEngine:
         objective_name: str = "objective",
         minimize: bool = True,
         causal_graph: CausalGraph | None = None,
+        max_skips: int = 3,
     ) -> None:
         self.search_space = search_space
         self.runner = runner
@@ -57,6 +69,8 @@ class ExperimentEngine:
         self.causal_graph = causal_graph
         self.log = ExperimentLog()
         self._phase: str = "exploration"
+        self._predictor = OffPolicyPredictor()
+        self._max_skips = max_skips
 
     def run_experiment(self, parameters: dict[str, Any]) -> ExperimentResult:
         """Execute a single experiment and log the result."""
@@ -79,6 +93,10 @@ class ExperimentEngine:
             metadata={"phase": self._phase},
         )
         self.log.results.append(result)
+
+        # Fit the off-policy predictor with updated history
+        self._predictor.fit(self.log, self.search_space, self.objective_name)
+
         return result
 
     def suggest_next(self) -> dict[str, Any]:
@@ -101,8 +119,33 @@ class ExperimentEngine:
         )
 
     def step(self) -> ExperimentResult:
-        """Run one iteration: suggest → run → log → update."""
-        parameters = self.suggest_next()
+        """Run one iteration: suggest → check predictor → run → log → update.
+
+        Uses the off-policy predictor to skip experiments that are predicted
+        to have poor outcomes (with high confidence). If an experiment is
+        skipped, a new suggestion is generated, up to max_skips times.
+        """
+        skips = 0
+        while True:
+            parameters = self.suggest_next()
+
+            # Check if the predictor recommends skipping this experiment
+            if skips < self._max_skips and not self._predictor.should_run_experiment(parameters):
+                skips += 1
+                logger.info(
+                    f"Off-policy predictor recommends skipping experiment "
+                    f"(skip {skips}/{self._max_skips}), suggesting new parameters"
+                )
+                continue
+
+            if skips >= self._max_skips:
+                logger.info(
+                    f"Reached max skips ({self._max_skips}), "
+                    f"running experiment regardless of prediction"
+                )
+
+            break
+
         result = self.run_experiment(parameters)
         self._update_phase()
         return result
@@ -121,8 +164,78 @@ class ExperimentEngine:
             )
         return self.log
 
+    def _is_improvement_significant(self, current_objective: float) -> bool | None:
+        """Check if the current objective is a statistically significant improvement.
+
+        Uses bootstrap confidence intervals on the distribution of kept objectives
+        to determine if the current value represents a real improvement over noise.
+
+        Returns:
+            True if improvement is statistically significant.
+            False if the change is within noise.
+            None if insufficient data for statistical evaluation (fall back to greedy).
+        """
+        n_total = len(self.log.results)
+        kept = [
+            r.metrics.get(self.objective_name)
+            for r in self.log.results
+            if r.status == ExperimentStatus.KEEP
+            and r.metrics.get(self.objective_name) is not None
+        ]
+        discarded = [
+            r.metrics.get(self.objective_name)
+            for r in self.log.results
+            if r.status == ExperimentStatus.DISCARD
+            and r.metrics.get(self.objective_name) is not None
+        ]
+
+        # Not enough history for statistical evaluation
+        if n_total < _MIN_EXPERIMENTS or len(kept) < _MIN_KEPT or len(discarded) < _MIN_DISCARDED:
+            return None
+
+        kept_arr = np.array(kept)
+        best_objective = float(np.min(kept_arr) if self.minimize else np.max(kept_arr))
+
+        # Bootstrap the difference: current_objective - best_objective
+        # For minimization, a negative difference means improvement
+        observed_diff = current_objective - best_objective
+
+        rng = np.random.default_rng(seed=None)
+        bootstrap_diffs = np.empty(_N_BOOTSTRAP)
+        for i in range(_N_BOOTSTRAP):
+            boot_sample = rng.choice(kept_arr, size=len(kept_arr), replace=True)
+            boot_best = float(np.min(boot_sample) if self.minimize else np.max(boot_sample))
+            bootstrap_diffs[i] = current_objective - boot_best
+
+        # Adaptive alpha: permissive early, stricter later
+        alpha = _ALPHA_EARLY if n_total < 20 else _ALPHA_LATE
+
+        if self.minimize:
+            # For minimization: improvement means current < best (negative diff)
+            # Check if the observed diff is significantly negative
+            # (below the lower bound of the bootstrap CI)
+            threshold = float(np.percentile(bootstrap_diffs, 100 * alpha))
+            is_significant = observed_diff < threshold
+        else:
+            # For maximization: improvement means current > best (positive diff)
+            # Check if the observed diff is significantly positive
+            # (above the upper bound of the bootstrap CI)
+            threshold = float(np.percentile(bootstrap_diffs, 100 * (1 - alpha)))
+            is_significant = observed_diff > threshold
+
+        logger.debug(
+            f"Statistical evaluation: diff={observed_diff:.6f}, "
+            f"threshold={threshold:.6f}, alpha={alpha}, significant={is_significant}"
+        )
+
+        return is_significant
+
     def _evaluate_status(self, metrics: dict[str, float]) -> ExperimentStatus:
-        """Determine if this result should be kept."""
+        """Determine if this result should be kept.
+
+        Uses bootstrap-based statistical testing when enough history is available.
+        Falls back to simple greedy comparison otherwise.
+        """
         current_objective = metrics.get(self.objective_name)
         if current_objective is None:
             return ExperimentStatus.CRASH
@@ -131,11 +244,38 @@ class ExperimentEngine:
         if best is None:
             return ExperimentStatus.KEEP
 
+        # Try statistical evaluation first
+        sig_result = self._is_improvement_significant(current_objective)
+        if sig_result is not None:
+            if sig_result:
+                logger.info("Statistical evaluation: significant improvement detected — KEEP")
+                return ExperimentStatus.KEEP
+            else:
+                # Not statistically significant, but still check greedy
+                # (the statistical test may be conservative)
+                best_objective = best.metrics.get(self.objective_name, float("inf"))
+                is_better = (
+                    current_objective < best_objective
+                    if self.minimize
+                    else current_objective > best_objective
+                )
+                if is_better:
+                    logger.info(
+                        "Statistical evaluation: not significant, "
+                        "but greedy improvement detected — KEEP"
+                    )
+                    return ExperimentStatus.KEEP
+                else:
+                    logger.info("Statistical evaluation: no improvement — DISCARD")
+                    return ExperimentStatus.DISCARD
+
+        # Fall back to greedy comparison when insufficient data
         best_objective = best.metrics.get(self.objective_name, float("inf"))
         if self.minimize:
-            return ExperimentStatus.KEEP if current_objective < best_objective else ExperimentStatus.DISCARD
+            is_better = current_objective < best_objective
         else:
-            return ExperimentStatus.KEEP if current_objective > best_objective else ExperimentStatus.DISCARD
+            is_better = current_objective > best_objective
+        return ExperimentStatus.KEEP if is_better else ExperimentStatus.DISCARD
 
     def _update_phase(self) -> None:
         """Transition between optimization phases based on experiment count."""
