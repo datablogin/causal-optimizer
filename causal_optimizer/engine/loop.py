@@ -12,6 +12,8 @@ from typing import Any, Protocol
 
 import numpy as np
 
+from causal_optimizer.designer.screening import ScreeningDesigner, ScreeningResult
+from causal_optimizer.evolution.map_elites import MAPElites
 from causal_optimizer.predictor.off_policy import OffPolicyPredictor
 from causal_optimizer.types import (
     CausalGraph,
@@ -61,6 +63,7 @@ class ExperimentEngine:
         minimize: bool = True,
         causal_graph: CausalGraph | None = None,
         max_skips: int = 3,
+        descriptor_names: list[str] | None = None,
     ) -> None:
         self.search_space = search_space
         self.runner = runner
@@ -71,6 +74,14 @@ class ExperimentEngine:
         self._phase: str = "exploration"
         self._predictor = OffPolicyPredictor()
         self._max_skips = max_skips
+        self._screening_result: ScreeningResult | None = None
+        self._screened_focus_variables: list[str] | None = None
+        self._descriptor_names = descriptor_names
+        self._archive: MAPElites | None = (
+            MAPElites(descriptor_names, minimize=minimize)
+            if descriptor_names
+            else None
+        )
 
     def run_experiment(self, parameters: dict[str, Any]) -> ExperimentResult:
         """Execute a single experiment and log the result."""
@@ -97,6 +108,13 @@ class ExperimentEngine:
         # Fit the off-policy predictor with updated history
         self._predictor.fit(self.log, self.search_space, self.objective_name)
 
+        # Add to MAP-Elites archive if configured
+        if self._archive is not None and self._descriptor_names:
+            fitness = metrics.get(self.objective_name, float("inf"))
+            descriptors = self._extract_descriptors(metrics)
+            if descriptors:
+                self._archive.add(result, fitness, descriptors)
+
         return result
 
     def suggest_next(self) -> dict[str, Any]:
@@ -105,9 +123,31 @@ class ExperimentEngine:
         Uses the current phase to determine strategy:
         - exploration: DoE-based screening
         - optimization: CBO with causal graph
-        - exploitation: best-neighborhood search
+        - exploitation: best-neighborhood search (with MAP-Elites diversity)
         """
         from causal_optimizer.optimizer.suggest import suggest_parameters
+
+        # In exploitation phase, 50% of the time sample from MAP-Elites archive
+        if (
+            self._phase == "exploitation"
+            and self._archive is not None
+            and self._archive.archive
+        ):
+            rng = np.random.default_rng()
+            if rng.random() < 0.5:
+                elite = self._archive.sample_elite()
+                if elite is not None:
+                    logger.info("Sampling from MAP-Elites archive for diversity")
+                    return suggest_parameters(
+                        search_space=self.search_space,
+                        experiment_log=self.log,
+                        causal_graph=self.causal_graph,
+                        phase=self._phase,
+                        minimize=self.minimize,
+                        objective_name=self.objective_name,
+                        screened_variables=self._screened_focus_variables,
+                        base_parameters=elite.parameters,
+                    )
 
         return suggest_parameters(
             search_space=self.search_space,
@@ -116,6 +156,7 @@ class ExperimentEngine:
             phase=self._phase,
             minimize=self.minimize,
             objective_name=self.objective_name,
+            screened_variables=self._screened_focus_variables,
         )
 
     def step(self) -> ExperimentResult:
@@ -280,9 +321,56 @@ class ExperimentEngine:
     def _update_phase(self) -> None:
         """Transition between optimization phases based on experiment count."""
         n = len(self.log.results)
+        old_phase = self._phase
+
         if n < 10:
             self._phase = "exploration"
         elif n < 50:
             self._phase = "optimization"
         else:
             self._phase = "exploitation"
+
+        # Run screening when transitioning from exploration to optimization
+        if old_phase == "exploration" and self._phase == "optimization":
+            self._run_screening()
+
+    def _run_screening(self) -> None:
+        """Run screening analysis to identify important variables."""
+        designer = ScreeningDesigner(self.search_space)
+        result = designer.screen(self.log, self.objective_name)
+        self._screening_result = result
+
+        if result.important_variables:
+            self._screened_focus_variables = result.important_variables
+            logger.info(
+                "Screening identified important variables: %s",
+                result.important_variables,
+            )
+        else:
+            # No important variables found — extend exploration
+            self._phase = "exploration"
+            self._screened_focus_variables = None
+            logger.info(
+                "Screening found no important variables above threshold; "
+                "extending exploration phase"
+            )
+
+        if result.interactions:
+            logger.info(
+                "Screening identified interactions: %s",
+                list(result.interactions.keys()),
+            )
+
+        logger.info("Screening summary:\n%s", result.summary)
+
+    def _extract_descriptors(
+        self, metrics: dict[str, float]
+    ) -> dict[str, float]:
+        """Extract descriptor values from metrics for MAP-Elites."""
+        if not self._descriptor_names:
+            return {}
+        return {
+            name: metrics[name]
+            for name in self._descriptor_names
+            if name in metrics
+        }
