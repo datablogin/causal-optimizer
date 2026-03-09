@@ -282,18 +282,86 @@ using Ax/BoTorch) or as predicted values in the RF surrogate.
 
 ---
 
+## Sprint 1 Execution Log (Track A — Wire the Loop)
+
+**Status: COMPLETE** (2026-03-08)
+
+### Process
+
+Used a team of 3 parallel agents in git worktrees to implement all 5 integration tasks:
+
+```
+Agent Alpha (worktree) ──── PR #1: Effect estimation + off-policy prediction
+  ├─ Bootstrap CI in _evaluate_status() with adaptive alpha (0.1 → 0.05)
+  ├─ OffPolicyPredictor.fit() after each experiment
+  ├─ should_run_experiment() check in step() with max_skips=3
+  └─ 23 new tests (12 effect estimation, 11 off-policy)
+
+Agent Beta (worktree) ───── PR #2: Focus variables wired into suggestions
+  ├─ _suggest_surrogate() trains RF only on focus variables
+  ├─ _suggest_exploitation() only perturbs focus variables
+  ├─ _suggest_bayesian() constrains Ax to focus variables
+  └─ 8 new tests
+
+Agent Gamma (worktree) ──── PR #3→#4: Screening + MAP-Elites
+  ├─ ScreeningDesigner.screen() at exploration→optimization transition
+  ├─ Screened variables complement graph-based focus (intersection/union)
+  ├─ MAP-Elites archive populated after each experiment
+  ├─ Exploitation samples from diverse elites 50% of the time
+  └─ 16 new tests (6 screening, 10 MAP-Elites)
+```
+
+### Merge Order & Conflict Resolution
+
+1. **PR #2 merged first** — only modifies `suggest.py` (no conflicts)
+2. **PR #1 merged second** — only modifies `loop.py` (no conflicts with PR #2)
+3. **PR #3 closed** — conflicted with both PRs #1 and #2 in `loop.py` and `suggest.py`
+4. **PR #4 created** — manually integrated PR #3's changes on top of merged PRs #1+#2
+   - Merged screening's `screened_variables` param with PR #2's `focus_variables`
+   - Merged MAP-Elites' `base_parameters` param with PR #2's exploitation changes
+   - Combined PR #1's predictor + PR #3's archive in `run_experiment()`
+
+### Quality Checks Run
+
+- `check-pr` on all 3 PRs (no CI failures, no review comments)
+- `claude-review.sh --focus engine` on PRs #1 and #3
+- `claude-review.sh --focus algorithms` on PR #2
+- `@greptileai` triggered on all 3 PRs (Greptile not installed on repo)
+- Manual code review of all 3 diffs
+
+### Results
+
+| Metric | Before | After |
+|--------|--------|-------|
+| Tests | 18 | 66 |
+| Modules wired into loop | 1 (factorial) | 5 (factorial + effect est. + off-policy + screening + MAP-Elites) |
+| Lines added | — | ~1,400 (470 engine/suggest + 930 tests) |
+
+### What's Ready for Next Sprint
+
+All Priority 1 integration is complete. The engine now:
+- Makes statistically rigorous keep/discard decisions (bootstrap CI)
+- Skips predicted-poor experiments (off-policy prediction)
+- Focuses on causal ancestors of the objective (focus variables)
+- Identifies important variables via screening at phase transitions
+- Maintains diverse solutions via MAP-Elites archive
+
+CausalGraph already has bidirected edges and all graph operations needed for POMIS.
+
+---
+
 ## Summary: The Build Order
 
 ```
-Week 1: Wire the loop ──────────── Integration only, no new algorithms
-         ├─ Effect estimation in keep/discard
-         ├─ Off-policy prediction before execution
-         ├─ Causal focus variables in suggestions
-         ├─ Screening at phase transitions
-         └─ MAP-Elites for diversity
+Week 1: Wire the loop ──────────── COMPLETE ✓ (66 tests, all pass)
+         ├─ Effect estimation in keep/discard ✓
+         ├─ Off-policy prediction before execution ✓
+         ├─ Causal focus variables in suggestions ✓
+         ├─ Screening at phase transitions ✓
+         └─ MAP-Elites for diversity ✓
 
 Week 2: POMIS computation ──────── Core novel algorithm (~150 lines)
-         ├─ Extend CausalGraph with bidirected edges
+         ├─ Extend CausalGraph with bidirected edges ✓ (done in Sprint 1 prep)
          ├─ Port POMIS from reference implementation
          └─ Integrate into suggestion strategy
 
