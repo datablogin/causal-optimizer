@@ -74,7 +74,13 @@ class MarketingAdapter(DomainAdapter):
                 ("click_through_rate", "site_visits"),
                 ("retargeting_enabled", "return_visits"),
                 ("return_visits", "conversions"),
-            ]
+            ],
+            bidirected_edges=[
+                # Purchase intent confounds both ad exposure and conversions
+                ("social_impressions", "conversions"),
+                # Seasonality confounds brand awareness and search volume
+                ("brand_awareness", "search_volume"),
+            ],
         )
 
     def get_descriptor_names(self) -> list[str]:

@@ -74,7 +74,13 @@ class MLTrainingAdapter(DomainAdapter):
                 ("gradient_flow", "training_stability"),
                 ("throughput", "tokens_seen"),
                 ("tokens_seen", "val_loss"),
-            ]
+            ],
+            bidirected_edges=[
+                # Hardware/platform confounds both throughput and memory usage
+                ("throughput", "memory_usage"),
+                # Data distribution confounds both model capacity needs and val_loss
+                ("model_capacity", "val_loss"),
+            ],
         )
 
     def get_descriptor_names(self) -> list[str]:
