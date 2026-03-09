@@ -34,8 +34,12 @@ def suggest_parameters(
             search_space, experiment_log, causal_graph, minimize, objective_name
         )
     elif phase == "exploitation":
+        focus_variables = _get_focus_variables(
+            search_space, causal_graph, objective_name
+        )
         return _suggest_exploitation(
-            search_space, experiment_log, minimize, objective_name
+            search_space, experiment_log, minimize, objective_name,
+            focus_variables=focus_variables,
         )
     else:
         return _suggest_exploration(search_space, experiment_log)
@@ -73,7 +77,10 @@ def _suggest_optimization(
 
     # Try Bayesian optimization via Ax
     try:
-        return _suggest_bayesian(search_space, experiment_log, minimize, objective_name)
+        return _suggest_bayesian(
+            search_space, experiment_log, minimize, objective_name,
+            focus_variables=focus_variables,
+        )
     except ImportError:
         logger.info("Ax/BoTorch not available, using surrogate-guided sampling")
         return _suggest_surrogate(
@@ -86,8 +93,13 @@ def _suggest_exploitation(
     experiment_log: ExperimentLog,
     minimize: bool,
     objective_name: str,
+    focus_variables: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Exploitation: perturb the best known configuration."""
+    """Exploitation: perturb the best known configuration.
+
+    If focus_variables is provided and non-empty, only perturb variables in
+    that set, keeping others at their best-known values.
+    """
     best = experiment_log.best_result
     if best is None:
         return _random_sample(search_space)
@@ -95,18 +107,33 @@ def _suggest_exploitation(
     rng = np.random.default_rng()
     params = dict(best.parameters)
 
-    # Perturb one or two variables slightly
-    n_perturb = rng.integers(1, min(3, len(search_space.variables)) + 1)
-    indices = rng.choice(len(search_space.variables), size=n_perturb, replace=False)
+    # Determine which variables are eligible for perturbation
+    if focus_variables:
+        eligible_vars = [
+            (i, v) for i, v in enumerate(search_space.variables)
+            if v.name in focus_variables
+        ]
+    else:
+        eligible_vars = list(enumerate(search_space.variables))
 
-    for idx in indices:
-        var = search_space.variables[idx]
-        if var.variable_type == VariableType.CONTINUOUS and var.lower is not None and var.upper is not None:
+    if not eligible_vars:
+        eligible_vars = list(enumerate(search_space.variables))
+
+    # Perturb one or two variables slightly
+    n_perturb = rng.integers(1, min(3, len(eligible_vars)) + 1)
+    chosen = rng.choice(len(eligible_vars), size=n_perturb, replace=False)
+
+    for choice_idx in chosen:
+        _idx, var = eligible_vars[choice_idx]
+        is_continuous = var.variable_type == VariableType.CONTINUOUS
+        is_integer = var.variable_type == VariableType.INTEGER
+        has_bounds = var.lower is not None and var.upper is not None
+        if is_continuous and has_bounds:
             current = params.get(var.name, (var.lower + var.upper) / 2)
             scale = (var.upper - var.lower) * 0.1  # 10% perturbation
             new_val = current + rng.normal(0, scale)
             params[var.name] = float(np.clip(new_val, var.lower, var.upper))
-        elif var.variable_type == VariableType.INTEGER and var.lower is not None and var.upper is not None:
+        elif is_integer and has_bounds:
             current = params.get(var.name, int((var.lower + var.upper) / 2))
             new_val = current + rng.integers(-2, 3)
             params[var.name] = int(np.clip(new_val, var.lower, var.upper))
@@ -125,15 +152,27 @@ def _suggest_bayesian(
     experiment_log: ExperimentLog,
     minimize: bool,
     objective_name: str,
+    focus_variables: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Bayesian optimization via Ax/BoTorch."""
+    """Bayesian optimization via Ax/BoTorch.
+
+    If focus_variables is provided and non-empty, only those variables are
+    optimized; non-focus variables are fixed at their best-known values.
+    """
     from ax.service.ax_client import AxClient
 
     ax_client = AxClient()
 
-    # Build Ax parameter list
+    # Determine which variables to optimize vs. fix
+    focus_set = set(focus_variables) if focus_variables else None
+    best = experiment_log.best_result
+    best_params = dict(best.parameters) if best else {}
+
+    # Build Ax parameter list (only focus variables)
     ax_params = []
     for var in search_space.variables:
+        if focus_set and var.name not in focus_set:
+            continue
         if var.variable_type == VariableType.CONTINUOUS:
             ax_params.append({
                 "name": var.name,
@@ -167,17 +206,29 @@ def _suggest_bayesian(
         minimize=minimize,
     )
 
-    # Feed historical data
+    # Feed historical data (only focus variable columns)
     for result in experiment_log.results:
         if objective_name in result.metrics:
-            _, trial_index = ax_client.attach_trial(result.parameters)
+            trial_params = {
+                k: v for k, v in result.parameters.items()
+                if not focus_set or k in focus_set
+            }
+            _, trial_index = ax_client.attach_trial(trial_params)
             ax_client.complete_trial(
                 trial_index=trial_index,
                 raw_data={objective_name: result.metrics[objective_name]},
             )
 
     params, _ = ax_client.get_next_trial()
-    return dict(params)
+    result_params = dict(params)
+
+    # Fill in non-focus variables at best-known values
+    if focus_set:
+        for var in search_space.variables:
+            if var.name not in focus_set and var.name in best_params:
+                result_params[var.name] = best_params[var.name]
+
+    return result_params
 
 
 def _suggest_surrogate(
@@ -187,31 +238,62 @@ def _suggest_surrogate(
     minimize: bool,
     objective_name: str,
 ) -> dict[str, Any]:
-    """Surrogate-guided sampling using random forest (fallback when Ax unavailable)."""
+    """Surrogate-guided sampling using random forest (fallback when Ax unavailable).
+
+    If focus_variables is provided and non-empty, trains the RF model only on
+    those features and only varies focus variables in candidates. Non-focus
+    variables are held at their best-known values.
+    """
     from sklearn.ensemble import RandomForestRegressor
 
     df = experiment_log.to_dataframe()
-    var_names = [v.name for v in search_space.variables if v.name in df.columns]
+    all_var_names = [v.name for v in search_space.variables if v.name in df.columns]
 
-    if len(var_names) == 0 or len(df) < 3:
+    if len(all_var_names) == 0 or len(df) < 3:
         return _random_sample(search_space)
 
-    X = df[var_names].apply(lambda x: x.astype(float, errors="ignore")).fillna(0).values
+    # Filter to focus variables for RF training; fall back to all if empty
+    focus_var_names = (
+        [v for v in all_var_names if v in focus_variables]
+        if focus_variables
+        else []
+    )
+
+    if not focus_var_names:
+        focus_var_names = all_var_names
+
+    # Get best-known values for non-focus variables
+    best = experiment_log.best_result
+    best_params = dict(best.parameters) if best else {}
+
+    features = df[focus_var_names].apply(
+        lambda x: x.astype(float, errors="ignore")
+    ).fillna(0).values
     y = df[objective_name].values
 
     rf = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=42)
-    rf.fit(X, y)
+    rf.fit(features, y)
 
     # Generate candidates and pick the best predicted
     from causal_optimizer.designer.factorial import FactorialDesigner
     designer = FactorialDesigner(search_space)
     candidates = designer.latin_hypercube(n_samples=100)
 
+    # For each candidate, hold non-focus variables at best-known values
+    non_focus_vars = set(all_var_names) - set(focus_var_names)
+    if non_focus_vars and best_params:
+        for candidate in candidates:
+            for var_name in non_focus_vars:
+                if var_name in best_params:
+                    candidate[var_name] = best_params[var_name]
+
     best_candidate = None
     best_pred = float("inf") if minimize else float("-inf")
 
     for candidate in candidates:
-        x = np.array([candidate.get(v, 0) for v in var_names]).reshape(1, -1)
+        x = np.array(
+            [candidate.get(v, 0) for v in focus_var_names]
+        ).reshape(1, -1)
         pred = rf.predict(x)[0]
         if (minimize and pred < best_pred) or (not minimize and pred > best_pred):
             best_pred = pred
@@ -249,10 +331,15 @@ def _random_sample(search_space: SearchSpace) -> dict[str, Any]:
     rng = np.random.default_rng()
     params: dict[str, Any] = {}
     for var in search_space.variables:
-        if var.variable_type == VariableType.CONTINUOUS and var.lower is not None and var.upper is not None:
+        is_cont = var.variable_type == VariableType.CONTINUOUS
+        is_int = var.variable_type == VariableType.INTEGER
+        has_bounds = var.lower is not None and var.upper is not None
+        if is_cont and has_bounds:
             params[var.name] = float(rng.uniform(var.lower, var.upper))
-        elif var.variable_type == VariableType.INTEGER and var.lower is not None and var.upper is not None:
-            params[var.name] = int(rng.integers(int(var.lower), int(var.upper) + 1))
+        elif is_int and has_bounds:
+            params[var.name] = int(
+                rng.integers(int(var.lower), int(var.upper) + 1)
+            )
         elif var.variable_type == VariableType.BOOLEAN:
             params[var.name] = bool(rng.choice([True, False]))
         elif var.variable_type == VariableType.CATEGORICAL and var.choices:
