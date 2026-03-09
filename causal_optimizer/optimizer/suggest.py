@@ -25,17 +25,28 @@ def suggest_parameters(
     phase: str = "exploration",
     minimize: bool = True,
     objective_name: str = "objective",
+    screened_variables: list[str] | None = None,
+    base_parameters: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Suggest next experiment parameters based on current phase and history."""
+    """Suggest next experiment parameters based on current phase and history.
+
+    Args:
+        screened_variables: Variables identified as important by screening.
+            Complements graph-based focus variables (intersection if both available).
+        base_parameters: Base parameters to perturb from (e.g., from MAP-Elites elite).
+            Used in exploitation phase instead of the overall best.
+    """
     if phase == "exploration":
         return _suggest_exploration(search_space, experiment_log)
     elif phase == "optimization":
         return _suggest_optimization(
-            search_space, experiment_log, causal_graph, minimize, objective_name
+            search_space, experiment_log, causal_graph, minimize, objective_name,
+            screened_variables=screened_variables,
         )
     elif phase == "exploitation":
         return _suggest_exploitation(
-            search_space, experiment_log, minimize, objective_name
+            search_space, experiment_log, minimize, objective_name,
+            base_parameters=base_parameters,
         )
     else:
         return _suggest_exploration(search_space, experiment_log)
@@ -58,18 +69,34 @@ def _suggest_optimization(
     causal_graph: CausalGraph | None,
     minimize: bool,
     objective_name: str,
+    screened_variables: list[str] | None = None,
 ) -> dict[str, Any]:
     """Optimization: Bayesian optimization with optional causal guidance.
 
     If a causal graph is available, uses it to identify which variables
-    to prioritize (ancestors of the objective in the DAG).
+    to prioritize (ancestors of the objective in the DAG). Screening results
+    complement the graph-based focus.
     """
     df = experiment_log.to_dataframe()
     if len(df) < 3:
         return _suggest_exploration(search_space, experiment_log)
 
     # Identify which variables to focus on
-    focus_variables = _get_focus_variables(search_space, causal_graph, objective_name)
+    graph_focus = _get_focus_variables(search_space, causal_graph, objective_name)
+
+    # Combine graph-based and screening-based focus variables
+    if screened_variables is not None and causal_graph is not None:
+        # Both available: use intersection (variables both sources agree on)
+        focus_variables = [v for v in graph_focus if v in screened_variables]
+        # Fall back to union if intersection is empty
+        if not focus_variables:
+            focus_variables = list(set(graph_focus) | set(screened_variables))
+    elif screened_variables is not None:
+        # Only screening available (no graph)
+        focus_variables = screened_variables
+    else:
+        # Only graph (or default)
+        focus_variables = graph_focus
 
     # Try Bayesian optimization via Ax
     try:
@@ -86,14 +113,18 @@ def _suggest_exploitation(
     experiment_log: ExperimentLog,
     minimize: bool,
     objective_name: str,
+    base_parameters: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Exploitation: perturb the best known configuration."""
-    best = experiment_log.best_result
-    if best is None:
-        return _random_sample(search_space)
+    """Exploitation: perturb the best known configuration or a provided base."""
+    if base_parameters is not None:
+        params = dict(base_parameters)
+    else:
+        best = experiment_log.best_result
+        if best is None:
+            return _random_sample(search_space)
+        params = dict(best.parameters)
 
     rng = np.random.default_rng()
-    params = dict(best.parameters)
 
     # Perturb one or two variables slightly
     n_perturb = rng.integers(1, min(3, len(search_space.variables)) + 1)
