@@ -53,6 +53,7 @@ class ToyGraphBenchmark:
         If only z is provided, x is sampled. If only x is provided, z follows structural eq.
         If both provided, both are fixed.
         """
+        # X's prior is N(0, 1) — separate from structural noise_scale
         x = parameters.get("x", self.rng.normal(0, 1))
         z_structural = np.exp(-x) + self.rng.normal(0, self.noise_scale)
         z = parameters.get("z", z_structural)

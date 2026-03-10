@@ -9,7 +9,7 @@ from causal_optimizer.benchmarks.complete_graph import CompleteGraphBenchmark
 from causal_optimizer.benchmarks.interaction import InteractionBenchmark
 from causal_optimizer.benchmarks.toy_graph import ToyGraphBenchmark
 from causal_optimizer.engine.loop import ExperimentEngine
-from causal_optimizer.types import CausalGraph, SearchSpace
+from causal_optimizer.types import CausalGraph, SearchSpace, VariableType
 
 ALL_BENCHMARKS = [ToyGraphBenchmark, CompleteGraphBenchmark, InteractionBenchmark]
 
@@ -245,16 +245,16 @@ def _default_params(space: SearchSpace) -> dict[str, object]:
     """Build default parameters from a search space for testing."""
     params: dict[str, object] = {}
     for var in space.variables:
-        if var.variable_type.value == "boolean":
+        if var.variable_type == VariableType.BOOLEAN:
             params[var.name] = False
-        elif var.variable_type.value == "continuous":
+        elif var.variable_type == VariableType.CONTINUOUS:
             lower = var.lower if var.lower is not None else -1.0
             upper = var.upper if var.upper is not None else 1.0
             params[var.name] = (lower + upper) / 2.0
-        elif var.variable_type.value == "integer":
+        elif var.variable_type == VariableType.INTEGER:
             lower = var.lower if var.lower is not None else 0
             upper = var.upper if var.upper is not None else 10
             params[var.name] = int((lower + upper) / 2)
-        elif var.variable_type.value == "categorical" and var.choices:
-            params[var.name] = var.choices[0]
+        elif var.variable_type == VariableType.CATEGORICAL:
+            params[var.name] = var.choices[0] if var.choices else "default"
     return params
