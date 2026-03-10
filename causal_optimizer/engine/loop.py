@@ -372,8 +372,10 @@ class ExperimentEngine:
 
             self._pomis_sets = compute_pomis(self.causal_graph, self.objective_name)
             logger.info("POMIS sets: %s", self._pomis_sets)
-        except (ImportError, ValueError):
-            logger.warning("POMIS computation failed or unavailable, continuing without")
+        except Exception:
+            logger.warning(
+                "POMIS computation failed or unavailable, continuing without", exc_info=True
+            )
             self._pomis_sets = None
 
     def _extract_descriptors(self, metrics: dict[str, float]) -> dict[str, float]:

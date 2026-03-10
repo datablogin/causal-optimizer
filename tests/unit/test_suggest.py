@@ -1,5 +1,8 @@
 """Tests for parameter suggestion strategies with causal focus variables."""
 
+from __future__ import annotations
+
+from typing import Any
 from unittest.mock import patch
 
 from causal_optimizer.optimizer.suggest import (
@@ -32,7 +35,7 @@ def _make_search_space() -> SearchSpace:
     )
 
 
-def _make_experiment_log(n: int = 5) -> ExperimentLog:
+def _make_experiment_log(n: int = 5, phase: str | None = None) -> ExperimentLog:
     """Create an experiment log with n results."""
     import numpy as np
 
@@ -43,12 +46,16 @@ def _make_experiment_log(n: int = 5) -> ExperimentLog:
         y_val = float(rng.uniform(0, 10))
         z_val = float(rng.uniform(0, 10))
         obj = x_val + y_val  # objective depends on x and y, not z
+        metadata: dict[str, Any] = {}
+        if phase is not None:
+            metadata["phase"] = phase
         results.append(
             ExperimentResult(
                 experiment_id=str(i),
                 parameters={"x": x_val, "y": y_val, "z": z_val},
                 metrics={"objective": obj},
                 status=ExperimentStatus.KEEP,
+                metadata=metadata,
             )
         )
     return ExperimentLog(results=results)
@@ -198,9 +205,10 @@ def test_suggest_parameters_exploitation_passes_focus():
 def test_suggest_optimization_with_pomis_constrains_focus():
     """When pomis_sets is provided, _suggest_optimization constrains focus variables."""
     ss = _make_search_space()
-    log = _make_experiment_log(n=5)
+    log = _make_experiment_log(n=5, phase="optimization")
 
-    # With 5 experiments, round-robin index = 5 % 2 = 1, so second set {"y", "z"} is chosen
+    # With 5 optimization-phase experiments, round-robin index = 5 % 2 = 1,
+    # so second set {"y", "z"} is chosen
     pomis_sets = [frozenset({"x"}), frozenset({"y", "z"})]
 
     with patch("causal_optimizer.optimizer.suggest._suggest_surrogate") as mock_surrogate:
@@ -337,21 +345,25 @@ def test_select_pomis_set_round_robin():
     set_c = frozenset({"z"})
     pomis_sets = [set_a, set_b, set_c]
 
-    # With 0 experiments, should pick index 0
+    # With 0 optimization-phase experiments, should pick index 0
     log_0 = ExperimentLog(results=[])
     assert _select_pomis_set(pomis_sets, log_0) == set_a
 
-    # With 1 experiment, should pick index 1
-    log_1 = _make_experiment_log(n=1)
+    # With 1 optimization-phase experiment, should pick index 1
+    log_1 = _make_experiment_log(n=1, phase="optimization")
     assert _select_pomis_set(pomis_sets, log_1) == set_b
 
-    # With 2 experiments, should pick index 2
-    log_2 = _make_experiment_log(n=2)
+    # With 2 optimization-phase experiments, should pick index 2
+    log_2 = _make_experiment_log(n=2, phase="optimization")
     assert _select_pomis_set(pomis_sets, log_2) == set_c
 
-    # With 3 experiments, should wrap to index 0
-    log_3 = _make_experiment_log(n=3)
+    # With 3 optimization-phase experiments, should wrap to index 0
+    log_3 = _make_experiment_log(n=3, phase="optimization")
     assert _select_pomis_set(pomis_sets, log_3) == set_a
+
+    # Non-optimization experiments should not affect the round-robin offset
+    log_exploration = _make_experiment_log(n=5, phase="exploration")
+    assert _select_pomis_set(pomis_sets, log_exploration) == set_a
 
 
 def test_select_pomis_set_empty_returns_none():

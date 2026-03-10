@@ -398,7 +398,9 @@ def _select_pomis_set(
     if not pomis_sets:
         return None
 
-    idx = len(experiment_log.results) % len(pomis_sets)
+    # Count only optimization-phase experiments for balanced round-robin
+    opt_count = sum(1 for r in experiment_log.results if r.metadata.get("phase") == "optimization")
+    idx = opt_count % len(pomis_sets)
     return pomis_sets[idx]
 
 
