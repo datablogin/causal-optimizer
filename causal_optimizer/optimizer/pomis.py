@@ -47,9 +47,6 @@ def compute_pomis(graph: CausalGraph, outcome: str) -> list[frozenset[str]]:
     order = _topological_sort(h, muct - {outcome})
     order.reverse()
 
-    # Filter order to only include nodes present in the subgraph
-    order = [w for w in order if w in set(h.nodes)]
-
     result = _sub_pomis(h, outcome, order)
     # The interventional border is always a valid POMIS member — it represents
     # intervening on all parents of the confounded territory, which by definition
@@ -57,25 +54,6 @@ def compute_pomis(graph: CausalGraph, outcome: str) -> list[frozenset[str]]:
     result.add(frozenset(ib))
 
     return sorted(result, key=lambda s: (len(s), sorted(s)))
-
-
-def _bidirected_reachable(graph: CausalGraph, node: str) -> set[str]:
-    """Find all nodes reachable from node via bidirected edges."""
-    # Build adjacency list for bidirected edges for O(V+E) traversal
-    bi_adj: dict[str, set[str]] = {}
-    for u, v in graph.bidirected_edges:
-        bi_adj.setdefault(u, set()).add(v)
-        bi_adj.setdefault(v, set()).add(u)
-
-    visited = {node}
-    frontier = {node}
-    while frontier:
-        current = frontier.pop()
-        for neighbor in bi_adj.get(current, set()):
-            if neighbor not in visited:
-                visited.add(neighbor)
-                frontier.add(neighbor)
-    return visited
 
 
 def _muct(graph: CausalGraph, outcome: str) -> tuple[set[str], CausalGraph]:
@@ -106,13 +84,27 @@ def _muct(graph: CausalGraph, outcome: str) -> tuple[set[str], CausalGraph]:
     h = graph.subgraph(ancestor_nodes)
     h_nodes = set(h.nodes)
 
+    # Build bidirected adjacency once
+    bi_adj: dict[str, set[str]] = {}
+    for u, v in h.bidirected_edges:
+        bi_adj.setdefault(u, set()).add(v)
+        bi_adj.setdefault(v, set()).add(u)
+
     ts: set[str] = {outcome}
     frontier: set[str] = {outcome}
 
     while frontier:
         node = frontier.pop()
-        # Find c-component of node in the ancestral subgraph
-        cc = _bidirected_reachable(h, node) & h_nodes
+        # Inline BFS over pre-built bi_adj
+        visited = {node}
+        queue = {node}
+        while queue:
+            cur = queue.pop()
+            for nb in bi_adj.get(cur, set()):
+                if nb not in visited:
+                    visited.add(nb)
+                    queue.add(nb)
+        cc = visited & h_nodes
         ts |= cc
         # Add descendants of the c-component within the ancestral subgraph
         desc: set[str] = set()
