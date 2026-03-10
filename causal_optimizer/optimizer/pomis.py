@@ -91,7 +91,10 @@ def _muct(graph: CausalGraph, outcome: str) -> tuple[set[str], CausalGraph]:
         bi_adj.setdefault(v, set()).add(u)
 
     ts: set[str] = {outcome}
-    frontier: set[str] = {outcome}
+    # Use a sorted list for deterministic traversal order.
+    # The MUCT result is a fixed-point computation independent of traversal order,
+    # but deterministic ordering aids debugging and reproducibility.
+    frontier: list[str] = [outcome]
     expanded: set[str] = set()
 
     while frontier:
@@ -108,14 +111,14 @@ def _muct(graph: CausalGraph, outcome: str) -> tuple[set[str], CausalGraph]:
                     visited.add(nb)
                     queue.add(nb)
         expanded |= visited
-        cc = visited & h_nodes
+        cc = visited
         ts |= cc
         # Add descendants of the c-component within the ancestral subgraph
         desc: set[str] = set()
         for v in cc:
             desc |= h.descendants(v)
         new_nodes = (desc & h_nodes) - ts
-        frontier |= new_nodes
+        frontier.extend(sorted(new_nodes))
         ts |= new_nodes
 
     return ts, h
@@ -146,10 +149,10 @@ def _topological_sort(graph: CausalGraph, node_set: set[str]) -> list[str]:
     in_degree: dict[str, int] = {n: 0 for n in nodes}
     adj: dict[str, list[str]] = {n: [] for n in nodes}
 
-    for u, v in graph.edges:
-        if u in node_set and v in node_set:
-            in_degree[v] += 1
-            adj[u].append(v)
+    relevant_edges = [(u, v) for u, v in graph.edges if u in node_set and v in node_set]
+    for u, v in relevant_edges:
+        in_degree[v] += 1
+        adj[u].append(v)
 
     # Start with zero in-degree nodes
     queue = deque(sorted(n for n in nodes if in_degree[n] == 0))
