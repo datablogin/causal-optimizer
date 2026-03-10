@@ -200,6 +200,7 @@ def test_suggest_optimization_with_pomis_constrains_focus():
     ss = _make_search_space()
     log = _make_experiment_log(n=5)
 
+    # With 5 experiments, round-robin index = 5 % 2 = 1, so second set {"y", "z"} is chosen
     pomis_sets = [frozenset({"x"}), frozenset({"y", "z"})]
 
     with patch("causal_optimizer.optimizer.suggest._suggest_surrogate") as mock_surrogate:
@@ -219,9 +220,71 @@ def test_suggest_optimization_with_pomis_constrains_focus():
             if len(call_args[0]) > 2
             else call_args.kwargs.get("focus_variables", [])
         )
-        # Focus should be a subset of one of the POMIS sets intersected with search space
+        # Round-robin picks set at index 1: {"y", "z"}
+        # No graph, so existing focus is all vars — intersection with POMIS = POMIS set
         focus_set = frozenset(focus)
-        assert focus_set.issubset({"x"}) or focus_set.issubset({"y", "z"})
+        assert focus_set == frozenset({"y", "z"})
+
+
+def test_suggest_optimization_pomis_intersects_with_graph_focus():
+    """POMIS focus is intersected with graph+screening focus variables."""
+    ss = _make_search_space()
+    log = _make_experiment_log(n=5)
+    # Graph: x -> objective (only x is ancestor)
+    graph = CausalGraph(edges=[("x", "objective")])
+
+    # POMIS set includes x and y, but graph focus is only x
+    # With 5 experiments, round-robin index = 5 % 1 = 0
+    pomis_sets = [frozenset({"x", "y"})]
+
+    with patch("causal_optimizer.optimizer.suggest._suggest_surrogate") as mock_surrogate:
+        mock_surrogate.return_value = {"x": 1.0, "y": 2.0, "z": 3.0}
+        _suggest_optimization(
+            ss,
+            log,
+            causal_graph=graph,
+            minimize=True,
+            objective_name="objective",
+            pomis_sets=pomis_sets,
+        )
+        call_args = mock_surrogate.call_args
+        focus = (
+            call_args[0][2]
+            if len(call_args[0]) > 2
+            else call_args.kwargs.get("focus_variables", [])
+        )
+        # POMIS focus {x, y} intersected with graph focus {x} = {x}
+        assert set(focus) == {"x"}
+
+
+def test_suggest_optimization_pomis_fallback_when_no_intersection():
+    """When POMIS and graph focus don't intersect, fall back to POMIS-only."""
+    ss = _make_search_space()
+    log = _make_experiment_log(n=5)
+    # Graph: z -> objective (only z is ancestor)
+    graph = CausalGraph(edges=[("z", "objective")])
+
+    # POMIS set has x and y, which don't overlap with graph focus {z}
+    pomis_sets = [frozenset({"x", "y"})]
+
+    with patch("causal_optimizer.optimizer.suggest._suggest_surrogate") as mock_surrogate:
+        mock_surrogate.return_value = {"x": 1.0, "y": 2.0, "z": 3.0}
+        _suggest_optimization(
+            ss,
+            log,
+            causal_graph=graph,
+            minimize=True,
+            objective_name="objective",
+            pomis_sets=pomis_sets,
+        )
+        call_args = mock_surrogate.call_args
+        focus = (
+            call_args[0][2]
+            if len(call_args[0]) > 2
+            else call_args.kwargs.get("focus_variables", [])
+        )
+        # No intersection, so fall back to POMIS-only {x, y}
+        assert set(focus) == {"x", "y"}
 
 
 def test_suggest_optimization_without_pomis_unchanged():
@@ -267,16 +330,28 @@ def test_suggest_parameters_passes_pomis_to_optimization():
         assert call_kwargs.kwargs.get("pomis_sets") == pomis_sets
 
 
-def test_select_pomis_set_least_explored():
-    """_select_pomis_set returns the least-explored POMIS set."""
-    log = _make_experiment_log(n=5)
-    # All experiments have x, y, z — so sets containing those will be explored
-    set_a = frozenset({"x"})  # All 5 experiments have x
-    set_b = frozenset({"w"})  # No experiments have w
+def test_select_pomis_set_round_robin():
+    """_select_pomis_set cycles through sets based on experiment count."""
+    set_a = frozenset({"x"})
+    set_b = frozenset({"y"})
+    set_c = frozenset({"z"})
+    pomis_sets = [set_a, set_b, set_c]
 
-    result = _select_pomis_set([set_a, set_b], log)
-    # set_b should be chosen since no experiments explored "w"
-    assert result == set_b
+    # With 0 experiments, should pick index 0
+    log_0 = ExperimentLog(results=[])
+    assert _select_pomis_set(pomis_sets, log_0) == set_a
+
+    # With 1 experiment, should pick index 1
+    log_1 = _make_experiment_log(n=1)
+    assert _select_pomis_set(pomis_sets, log_1) == set_b
+
+    # With 2 experiments, should pick index 2
+    log_2 = _make_experiment_log(n=2)
+    assert _select_pomis_set(pomis_sets, log_2) == set_c
+
+    # With 3 experiments, should wrap to index 0
+    log_3 = _make_experiment_log(n=3)
+    assert _select_pomis_set(pomis_sets, log_3) == set_a
 
 
 def test_select_pomis_set_empty_returns_none():
@@ -286,12 +361,9 @@ def test_select_pomis_set_empty_returns_none():
     assert result is None
 
 
-def test_select_pomis_set_ties_broken_randomly():
-    """When all POMIS sets are equally explored, one is chosen (no crash)."""
-    log = ExperimentLog(results=[])
+def test_select_pomis_set_single_set():
+    """With a single POMIS set, it is always returned."""
+    log = _make_experiment_log(n=5)
     set_a = frozenset({"x"})
-    set_b = frozenset({"y"})
-
-    # With empty log, both have 0 count — should return one without error
-    result = _select_pomis_set([set_a, set_b], log)
-    assert result in (set_a, set_b)
+    result = _select_pomis_set([set_a], log)
+    assert result == set_a

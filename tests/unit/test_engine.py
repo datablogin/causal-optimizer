@@ -181,3 +181,63 @@ def test_engine_pomis_not_computed_without_graph():
 
     engine.run_loop(n_experiments=10)
     assert engine._pomis_sets is None
+
+
+def test_engine_pomis_failure_sets_none():
+    """If compute_pomis raises, _pomis_sets should be None."""
+    import types
+
+    graph = CausalGraph(
+        edges=[("x", "objective"), ("y", "objective")],
+        bidirected_edges=[("x", "y")],
+    )
+    engine = ExperimentEngine(
+        search_space=make_search_space(),
+        runner=QuadraticRunner(),
+        causal_graph=graph,
+    )
+
+    # Create a fake pomis module that raises ValueError
+    fake_pomis = types.ModuleType("causal_optimizer.optimizer.pomis")
+
+    def _raise(*args: Any, **kwargs: Any) -> None:
+        raise ValueError("test error")
+
+    fake_pomis.compute_pomis = _raise  # type: ignore[attr-defined]
+
+    import sys
+
+    sys.modules["causal_optimizer.optimizer.pomis"] = fake_pomis
+    try:
+        engine.run_loop(n_experiments=10)
+    finally:
+        del sys.modules["causal_optimizer.optimizer.pomis"]
+
+    assert engine._pomis_sets is None
+
+
+def test_engine_pomis_not_computed_when_screening_resets_phase():
+    """POMIS should not be computed if screening resets phase to exploration."""
+    graph = CausalGraph(
+        edges=[("x", "objective"), ("y", "objective")],
+        bidirected_edges=[("x", "y")],
+    )
+    engine = ExperimentEngine(
+        search_space=make_search_space(),
+        runner=QuadraticRunner(),
+        causal_graph=graph,
+    )
+
+    def screening_resets_phase() -> None:
+        """Simulate screening finding no important variables."""
+        engine._phase = "exploration"
+        engine._screened_focus_variables = None
+
+    with (
+        patch.object(engine, "_run_screening", side_effect=screening_resets_phase),
+        patch.object(engine, "_compute_pomis") as mock_pomis,
+    ):
+        engine.run_loop(n_experiments=10)
+
+    # _compute_pomis should NOT have been called because screening reverted phase
+    mock_pomis.assert_not_called()

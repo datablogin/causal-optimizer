@@ -142,9 +142,10 @@ class ExperimentEngine:
                         objective_name=self.objective_name,
                         screened_variables=self._screened_focus_variables,
                         base_parameters=elite.parameters,
-                        pomis_sets=self._pomis_sets,
                     )
 
+        # Only pass pomis_sets during optimization phase (not used in exploitation)
+        pomis_sets = self._pomis_sets if self._phase == "optimization" else None
         return suggest_parameters(
             search_space=self.search_space,
             experiment_log=self.log,
@@ -153,7 +154,7 @@ class ExperimentEngine:
             minimize=self.minimize,
             objective_name=self.objective_name,
             screened_variables=self._screened_focus_variables,
-            pomis_sets=self._pomis_sets,
+            pomis_sets=pomis_sets,
         )
 
     def step(self) -> ExperimentResult:
@@ -329,7 +330,8 @@ class ExperimentEngine:
         # Run screening and POMIS when transitioning from exploration to optimization
         if old_phase == "exploration" and self._phase == "optimization":
             self._run_screening()
-            self._compute_pomis()
+            if self._phase == "optimization":  # screening may have reverted to exploration
+                self._compute_pomis()
 
     def _run_screening(self) -> None:
         """Run screening analysis to identify important variables."""
@@ -370,8 +372,8 @@ class ExperimentEngine:
 
             self._pomis_sets = compute_pomis(self.causal_graph, self.objective_name)
             logger.info("POMIS sets: %s", self._pomis_sets)
-        except Exception:
-            logger.warning("POMIS computation failed, continuing without POMIS guidance")
+        except (ImportError, ValueError):
+            logger.warning("POMIS computation failed or unavailable, continuing without")
             self._pomis_sets = None
 
     def _extract_descriptors(self, metrics: dict[str, float]) -> dict[str, float]:

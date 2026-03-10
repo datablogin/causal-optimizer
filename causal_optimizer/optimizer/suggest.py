@@ -120,7 +120,9 @@ def _suggest_optimization(
         if chosen_set is not None:
             pomis_focus = [v for v in search_space.variable_names if v in chosen_set]
             if pomis_focus:
-                focus_variables = pomis_focus
+                # Intersect with existing focus (graph + screening)
+                intersected = [v for v in pomis_focus if v in focus_variables]
+                focus_variables = intersected if intersected else pomis_focus
                 logger.info("POMIS constraining focus to: %s", focus_variables)
 
     # Try Bayesian optimization via Ax
@@ -388,31 +390,16 @@ def _select_pomis_set(
     pomis_sets: list[frozenset[str]],
     experiment_log: ExperimentLog,
 ) -> frozenset[str] | None:
-    """Select which POMIS set to explore next (least-explored strategy).
+    """Select which POMIS set to explore next (round-robin strategy).
 
-    Counts how many past experiments varied parameters matching each POMIS set,
-    then returns the least-explored one. Ties are broken randomly.
+    Uses a deterministic round-robin based on experiment count to ensure
+    each POMIS set gets equal exploration over time.
     """
     if not pomis_sets:
         return None
 
-    rng = np.random.default_rng()
-
-    # Count experiments that explored each POMIS set
-    counts: dict[int, int] = {i: 0 for i in range(len(pomis_sets))}
-    for result in experiment_log.results:
-        varied_params = frozenset(result.parameters.keys())
-        for i, pset in enumerate(pomis_sets):
-            # An experiment "explored" a POMIS set if it varied variables in that set
-            if pset & varied_params:
-                counts[i] += 1
-
-    min_count = min(counts.values())
-    # Collect all sets tied at the minimum
-    candidates = [i for i, c in counts.items() if c == min_count]
-
-    chosen_idx = int(rng.choice(candidates))
-    return pomis_sets[chosen_idx]
+    idx = len(experiment_log.results) % len(pomis_sets)
+    return pomis_sets[idx]
 
 
 def _random_sample(search_space: SearchSpace) -> dict[str, Any]:
