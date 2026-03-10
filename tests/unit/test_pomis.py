@@ -105,28 +105,28 @@ class TestEmptyGraph:
 
 
 class TestDiamondWithConfounder:
-    """Diamond: X->M1, X->M2, M1->Y, M2->Y with X<->Y confounder."""
+    """Diamond: X->M1, X->M2, M1->Y, M2->Y with X<->Y confounder.
 
-    def test_pomis_nonempty(self) -> None:
+    An(Y) = {x, m1, m2, y}. MUCT({y}): C-comp(y) via bidirected = {x, y}.
+    De({x,y}) in An(Y) = {m1, m2, y}. So MUCT = {x, y, m1, m2} = all nodes.
+    IB = Pa(MUCT) \\ MUCT = {} (x has no external parents).
+    SubPOMIS then produces {m1}, {m2}, {m1,m2} via intervening on mediators.
+    Together with the top-level empty IB: {}, {m1}, {m2}, {m1,m2}.
+    """
+
+    def test_pomis_exact(self) -> None:
         graph = CausalGraph(
             edges=[("x", "m1"), ("x", "m2"), ("m1", "y"), ("m2", "y")],
             bidirected_edges=[("x", "y")],
         )
         result = compute_pomis(graph, "y")
-        assert len(result) > 0
-        for s in result:
-            assert isinstance(s, frozenset)
-
-    def test_pomis_contains_expected_sets(self) -> None:
-        """With X<->Y confounder, MUCT expands to include X and its descendants."""
-        graph = CausalGraph(
-            edges=[("x", "m1"), ("x", "m2"), ("m1", "y"), ("m2", "y")],
-            bidirected_edges=[("x", "y")],
-        )
-        result = compute_pomis(graph, "y")
-        result_set = set(result)
-        # The empty IB (all nodes in MUCT) should be a POMIS
-        assert frozenset() in result_set
+        expected = {
+            frozenset(),
+            frozenset({"m1"}),
+            frozenset({"m2"}),
+            frozenset({"m1", "m2"}),
+        }
+        assert set(result) == expected
 
 
 class TestMUCTFixedPoint:
@@ -213,6 +213,11 @@ class TestTopologicalSort:
         graph = CausalGraph(edges=[("a", "b"), ("b", "c"), ("c", "d")])
         order = _topological_sort(graph, {"b", "c"})
         assert order == ["b", "c"]
+
+    def test_cycle_raises(self) -> None:
+        graph = CausalGraph(edges=[("a", "b"), ("b", "c"), ("c", "a")])
+        with pytest.raises(ValueError, match="cycle"):
+            _topological_sort(graph, {"a", "b", "c"})
 
 
 class TestInterventionalBorder:

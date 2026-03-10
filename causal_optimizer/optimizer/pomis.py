@@ -7,6 +7,7 @@ optimize an outcome variable.
 
 from __future__ import annotations
 
+from collections import deque
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -29,20 +30,18 @@ def compute_pomis(graph: CausalGraph, outcome: str) -> list[frozenset[str]]:
     if outcome not in graph.nodes:
         raise ValueError(f"Outcome '{outcome}' is not a node in the graph.")
 
-    # Restrict to ancestors of Y (plus Y itself)
-    ancestor_nodes = graph.ancestors(outcome) | {outcome}
-    g_an = graph.subgraph(ancestor_nodes)
-
-    # If Y has no ancestors, the only POMIS is the empty set
-    if len(g_an.nodes) == 1:
-        return [frozenset()]
-
-    muct = _muct(g_an, outcome)
-    ib = _interventional_border(g_an, muct)
+    # _muct handles ancestor restriction internally, which is needed for the
+    # recursive _sub_pomis case where the graph isn't pre-restricted.
+    muct = _muct(graph, outcome)
+    ib = _interventional_border(graph, muct)
 
     # H = G.do(IB) restricted to MUCT ∪ IB
-    g_do_ib = g_an.do(ib)
+    g_do_ib = graph.do(ib)
     h = g_do_ib.subgraph(muct | ib)
+
+    # If Y has no ancestors, the only POMIS is the empty set
+    if len(muct) == 1 and not ib:
+        return [frozenset()]
 
     # Reverse topological order of MUCT \ {Y} (leaves first)
     order = _topological_sort(h, muct - {outcome})
@@ -52,6 +51,9 @@ def compute_pomis(graph: CausalGraph, outcome: str) -> list[frozenset[str]]:
     order = [w for w in order if w in set(h.nodes)]
 
     result = _sub_pomis(h, outcome, order)
+    # The interventional border is always a valid POMIS member — it represents
+    # intervening on all parents of the confounded territory, which by definition
+    # controls all confounding.
     result.add(frozenset(ib))
 
     return sorted(result, key=lambda s: (len(s), sorted(s)))
@@ -59,17 +61,18 @@ def compute_pomis(graph: CausalGraph, outcome: str) -> list[frozenset[str]]:
 
 def _bidirected_reachable(graph: CausalGraph, node: str) -> set[str]:
     """Find all nodes reachable from node via bidirected edges."""
+    # Build adjacency list for bidirected edges for O(V+E) traversal
+    bi_adj: dict[str, set[str]] = {}
+    for u, v in graph.bidirected_edges:
+        bi_adj.setdefault(u, set()).add(v)
+        bi_adj.setdefault(v, set()).add(u)
+
     visited = {node}
     frontier = {node}
     while frontier:
         current = frontier.pop()
-        for u, v in graph.bidirected_edges:
-            neighbor: str | None = None
-            if u == current:
-                neighbor = v
-            elif v == current:
-                neighbor = u
-            if neighbor is not None and neighbor not in visited:
+        for neighbor in bi_adj.get(current, set()):
+            if neighbor not in visited:
                 visited.add(neighbor)
                 frontier.add(neighbor)
     return visited
@@ -82,6 +85,10 @@ def _muct(graph: CausalGraph, outcome: str) -> set[str]:
     Then uses a frontier-based approach: start from {outcome}, expand each
     node's c-component (nodes reachable via bidirected edges), then add their
     descendants to the frontier. Continue until no new nodes are found.
+
+    Within the ancestral subgraph G[An(Y)], we expand MUCT by adding descendants
+    of c-component members. This is correct per Lee & Bareinboim (2018) — the
+    ancestral restriction ensures descendants are still relevant to the outcome.
     """
     # Restrict to ancestors of Y first
     ancestor_nodes = graph.ancestors(outcome) | {outcome}
@@ -96,7 +103,7 @@ def _muct(graph: CausalGraph, outcome: str) -> set[str]:
         # Find c-component of node in the ancestral subgraph
         cc = _bidirected_reachable(h, node) & h_nodes
         ts |= cc
-        # Add descendants of the c-component to the frontier
+        # Add descendants of the c-component within the ancestral subgraph
         desc: set[str] = set()
         for v in cc:
             desc |= h.descendants(v)
@@ -120,6 +127,9 @@ def _topological_sort(graph: CausalGraph, node_set: set[str]) -> list[str]:
 
     Only considers directed edges between nodes in node_set.
     Returns nodes in topological order (roots first).
+
+    Raises:
+        ValueError: If the subgraph induced by node_set contains a cycle.
     """
     if not node_set:
         return []
@@ -135,17 +145,23 @@ def _topological_sort(graph: CausalGraph, node_set: set[str]) -> list[str]:
             adj[u].append(v)
 
     # Start with zero in-degree nodes
-    queue = sorted([n for n in nodes if in_degree[n] == 0])
+    queue = deque(sorted(n for n in nodes if in_degree[n] == 0))
     result: list[str] = []
 
     while queue:
-        node = queue.pop(0)
+        node = queue.popleft()
         result.append(node)
         for neighbor in sorted(adj[node]):
             in_degree[neighbor] -= 1
             if in_degree[neighbor] == 0:
                 queue.append(neighbor)
-        queue.sort()  # keep deterministic
+        # Re-sort deque for deterministic ordering
+        sorted_queue = sorted(queue)
+        queue.clear()
+        queue.extend(sorted_queue)
+
+    if len(result) != len(node_set):
+        raise ValueError("Graph contains a cycle; topological sort is not possible.")
 
     return result
 
