@@ -92,9 +92,12 @@ def _muct(graph: CausalGraph, outcome: str) -> tuple[set[str], CausalGraph]:
 
     ts: set[str] = {outcome}
     frontier: set[str] = {outcome}
+    expanded: set[str] = set()
 
     while frontier:
         node = frontier.pop()
+        if node in expanded:
+            continue
         # Inline BFS over pre-built bi_adj
         visited = {node}
         queue = {node}
@@ -104,6 +107,7 @@ def _muct(graph: CausalGraph, outcome: str) -> tuple[set[str], CausalGraph]:
                 if nb not in visited:
                     visited.add(nb)
                     queue.add(nb)
+        expanded |= visited
         cc = visited & h_nodes
         ts |= cc
         # Add descendants of the c-component within the ancestral subgraph
@@ -192,15 +196,14 @@ def _sub_pomis(
 
     result: set[frozenset[str]] = set()
 
+    processed = set(obs)
     for i, w_i in enumerate(order):
         g_do_wi = graph.do({w_i})
         muct_i, g_an_i = _muct(g_do_wi, outcome)
         ib_i = _interventional_border(g_an_i, muct_i)
 
-        new_obs = obs | set(order[:i])
-
         # Only add if IB doesn't overlap with already-observed variables
-        if not (ib_i & new_obs):
+        if not (ib_i & processed):
             result.add(frozenset(ib_i))
 
             # Filter remaining order to nodes still in MUCT
@@ -210,7 +213,9 @@ def _sub_pomis(
                 # Recurse on restricted graph: do(IB) on original G, then subgraph
                 g_do_ib = graph.do(ib_i)
                 h_i = g_do_ib.subgraph(muct_i | ib_i)
-                sub_results = _sub_pomis(h_i, outcome, new_order, new_obs)
+                sub_results = _sub_pomis(h_i, outcome, new_order, processed)
                 result |= sub_results
+
+        processed.add(w_i)
 
     return result
