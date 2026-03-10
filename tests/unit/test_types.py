@@ -1,13 +1,10 @@
 """Tests for core types."""
 
-import numpy as np
-
 from causal_optimizer.types import (
     CausalGraph,
     ExperimentLog,
     ExperimentResult,
     ExperimentStatus,
-    SearchSpace,
     Variable,
     VariableType,
 )
@@ -91,11 +88,28 @@ def test_causal_graph_subgraph():
 
 
 def test_experiment_log_best():
-    log = ExperimentLog(results=[
-        ExperimentResult(experiment_id="1", parameters={"x": 1}, metrics={"objective": 5.0}, status=ExperimentStatus.KEEP),
-        ExperimentResult(experiment_id="2", parameters={"x": 2}, metrics={"objective": 3.0}, status=ExperimentStatus.KEEP),
-        ExperimentResult(experiment_id="3", parameters={"x": 3}, metrics={"objective": 7.0}, status=ExperimentStatus.DISCARD),
-    ])
+    log = ExperimentLog(
+        results=[
+            ExperimentResult(
+                experiment_id="1",
+                parameters={"x": 1},
+                metrics={"objective": 5.0},
+                status=ExperimentStatus.KEEP,
+            ),
+            ExperimentResult(
+                experiment_id="2",
+                parameters={"x": 2},
+                metrics={"objective": 3.0},
+                status=ExperimentStatus.KEEP,
+            ),
+            ExperimentResult(
+                experiment_id="3",
+                parameters={"x": 3},
+                metrics={"objective": 7.0},
+                status=ExperimentStatus.DISCARD,
+            ),
+        ]
+    )
     best = log.best_result
     assert best is not None
     assert best.experiment_id == "2"
@@ -103,9 +117,16 @@ def test_experiment_log_best():
 
 
 def test_experiment_log_to_dataframe():
-    log = ExperimentLog(results=[
-        ExperimentResult(experiment_id="1", parameters={"x": 1}, metrics={"objective": 5.0}, status=ExperimentStatus.KEEP),
-    ])
+    log = ExperimentLog(
+        results=[
+            ExperimentResult(
+                experiment_id="1",
+                parameters={"x": 1},
+                metrics={"objective": 5.0},
+                status=ExperimentStatus.KEEP,
+            ),
+        ]
+    )
     df = log.to_dataframe()
     assert len(df) == 1
     assert "x" in df.columns

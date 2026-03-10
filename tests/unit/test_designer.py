@@ -1,17 +1,17 @@
 """Tests for experimental design generators."""
 
-import pytest
-
 from causal_optimizer.designer.factorial import FactorialDesigner
 from causal_optimizer.types import SearchSpace, Variable, VariableType
 
 
 def make_search_space() -> SearchSpace:
-    return SearchSpace(variables=[
-        Variable(name="a", variable_type=VariableType.CONTINUOUS, lower=0.0, upper=1.0),
-        Variable(name="b", variable_type=VariableType.CONTINUOUS, lower=0.0, upper=1.0),
-        Variable(name="c", variable_type=VariableType.BOOLEAN),
-    ])
+    return SearchSpace(
+        variables=[
+            Variable(name="a", variable_type=VariableType.CONTINUOUS, lower=0.0, upper=1.0),
+            Variable(name="b", variable_type=VariableType.CONTINUOUS, lower=0.0, upper=1.0),
+            Variable(name="c", variable_type=VariableType.BOOLEAN),
+        ]
+    )
 
 
 def test_full_factorial():
@@ -35,13 +35,15 @@ def test_latin_hypercube():
 
 
 def test_categorical_variables():
-    space = SearchSpace(variables=[
-        Variable(
-            name="method",
-            variable_type=VariableType.CATEGORICAL,
-            choices=["A", "B", "C"],
-        ),
-    ])
+    space = SearchSpace(
+        variables=[
+            Variable(
+                name="method",
+                variable_type=VariableType.CATEGORICAL,
+                choices=["A", "B", "C"],
+            ),
+        ]
+    )
     designer = FactorialDesigner(space)
     designs = designer.full_factorial(levels=3)
     assert len(designs) == 3

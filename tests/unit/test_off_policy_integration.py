@@ -13,10 +13,12 @@ from causal_optimizer.types import (
 
 
 def make_search_space() -> SearchSpace:
-    return SearchSpace(variables=[
-        Variable(name="x", variable_type=VariableType.CONTINUOUS, lower=-5.0, upper=5.0),
-        Variable(name="y", variable_type=VariableType.CONTINUOUS, lower=-5.0, upper=5.0),
-    ])
+    return SearchSpace(
+        variables=[
+            Variable(name="x", variable_type=VariableType.CONTINUOUS, lower=-5.0, upper=5.0),
+            Variable(name="y", variable_type=VariableType.CONTINUOUS, lower=-5.0, upper=5.0),
+        ]
+    )
 
 
 class QuadraticRunner:
@@ -67,9 +69,7 @@ class TestPredictorFitting:
 
         engine.run_experiment({"x": 1.0, "y": 2.0})
 
-        engine._predictor.fit.assert_called_once_with(
-            engine.log, engine.search_space, "objective"
-        )
+        engine._predictor.fit.assert_called_once_with(engine.log, engine.search_space, "objective")
 
     def test_predictor_fit_called_multiple_times(self):
         engine = ExperimentEngine(

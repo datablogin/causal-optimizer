@@ -8,13 +8,14 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import cross_val_score
 
-from causal_optimizer.types import ExperimentLog, SearchSpace
+if TYPE_CHECKING:
+    from causal_optimizer.types import ExperimentLog, SearchSpace
 
 logger = logging.getLogger(__name__)
 
@@ -62,19 +63,27 @@ class OffPolicyPredictor:
             self._model = None
             return
 
-        X = df[self._var_names].apply(lambda x: x.astype(float, errors="ignore")).fillna(0).values
+        features = (
+            df[self._var_names]
+            .apply(
+                lambda x: x.astype(float, errors="ignore"),
+            )
+            .fillna(0)
+            .values
+        )
         y = df[objective_name].values
 
-        self._model = RandomForestRegressor(
-            n_estimators=100, max_depth=8, random_state=42
-        )
-        self._model.fit(X, y)
+        self._model = RandomForestRegressor(n_estimators=100, max_depth=8, random_state=42)
+        self._model.fit(features, y)
 
         # Estimate model quality
         if len(df) >= 10:
             scores = cross_val_score(
                 RandomForestRegressor(n_estimators=50, max_depth=8, random_state=42),
-                X, y, cv=min(5, len(df)), scoring="r2",
+                features,
+                y,
+                cv=min(5, len(df)),
+                scoring="r2",
             )
             self._model_quality = float(max(0, np.mean(scores)))
         else:
@@ -88,9 +97,7 @@ class OffPolicyPredictor:
         x = np.array([parameters.get(v, 0) for v in self._var_names]).reshape(1, -1)
 
         # Get predictions from individual trees for uncertainty
-        tree_predictions = np.array([
-            tree.predict(x)[0] for tree in self._model.estimators_
-        ])
+        tree_predictions = np.array([tree.predict(x)[0] for tree in self._model.estimators_])
 
         expected = float(np.mean(tree_predictions))
         uncertainty = float(np.std(tree_predictions))
