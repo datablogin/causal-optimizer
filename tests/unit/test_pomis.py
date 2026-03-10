@@ -140,14 +140,14 @@ class TestMUCTFixedPoint:
             edges=[("a", "b"), ("b", "y")],
             bidirected_edges=[("a", "y")],
         )
-        muct = _muct(graph, "y")
+        muct, _g_an = _muct(graph, "y")
         assert "a" in muct
         assert "b" in muct
         assert "y" in muct
 
     def test_muct_no_confounders(self) -> None:
         graph = CausalGraph(edges=[("a", "b"), ("b", "y")])
-        muct = _muct(graph, "y")
+        muct, _g_an = _muct(graph, "y")
         # Without confounders, MUCT is just {Y}
         assert muct == {"y"}
 
@@ -162,7 +162,7 @@ class TestMUCTFixedPoint:
             bidirected_edges=[("a", "y"), ("b", "c")],
             nodes=["a", "b", "c", "y"],
         )
-        muct = _muct(graph, "y")
+        muct, _g_an = _muct(graph, "y")
         assert "c" not in muct
         assert "a" in muct
         assert "y" in muct
@@ -234,3 +234,59 @@ class TestInterventionalBorder:
         muct = {"b", "c"}
         ib = _interventional_border(graph, muct)
         assert ib == {"a"}
+
+
+class TestIBConsistencyFullVsAncestral:
+    """Verify that IB computed on the full graph equals IB on the ancestor subgraph.
+
+    In a DAG, Pa(MUCT) is always a subset of An(Y) because MUCT is a subset of An(Y)
+    and parents of ancestors are themselves ancestors. So _interventional_border yields
+    the same result whether computed on the full graph or the ancestral subgraph.
+    """
+
+    def test_ib_matches_on_graph_with_non_ancestor_nodes(self) -> None:
+        """Graph with nodes that are NOT ancestors of Y.
+
+        w -> x -> y, z (isolated non-ancestor).
+        IB on full graph and ancestral subgraph should both be {x}.
+        """
+        graph = CausalGraph(
+            edges=[("w", "x"), ("x", "y")],
+            nodes=["w", "x", "y", "z"],
+        )
+        muct_full, g_an = _muct(graph, "y")
+        ib_full = _interventional_border(graph, muct_full)
+        ib_ancestral = _interventional_border(g_an, muct_full)
+        assert ib_full == ib_ancestral
+
+    def test_ib_matches_with_confounders_and_extra_nodes(self) -> None:
+        """Graph with confounders and extra non-ancestor nodes.
+
+        a -> b -> y, a <-> y, c -> d (c, d not ancestors of y).
+        Non-ancestors should not appear in IB regardless of which graph is used.
+        """
+        graph = CausalGraph(
+            edges=[("a", "b"), ("b", "y"), ("c", "d")],
+            bidirected_edges=[("a", "y")],
+            nodes=["a", "b", "c", "d", "y"],
+        )
+        muct, g_an = _muct(graph, "y")
+        ib_full = _interventional_border(graph, muct)
+        ib_ancestral = _interventional_border(g_an, muct)
+        assert ib_full == ib_ancestral
+        assert "c" not in ib_full
+        assert "d" not in ib_full
+
+    def test_ancestor_subgraph_excludes_non_ancestors(self) -> None:
+        """Confirm _muct returns an ancestor subgraph that excludes non-ancestors."""
+        graph = CausalGraph(
+            edges=[("a", "b"), ("b", "y"), ("c", "d")],
+            nodes=["a", "b", "c", "d", "y"],
+        )
+        _muct_set, g_an = _muct(graph, "y")
+        an_nodes = set(g_an.nodes)
+        assert "c" not in an_nodes
+        assert "d" not in an_nodes
+        assert "a" in an_nodes
+        assert "b" in an_nodes
+        assert "y" in an_nodes

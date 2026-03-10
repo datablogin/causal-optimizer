@@ -32,8 +32,8 @@ def compute_pomis(graph: CausalGraph, outcome: str) -> list[frozenset[str]]:
 
     # _muct handles ancestor restriction internally, which is needed for the
     # recursive _sub_pomis case where the graph isn't pre-restricted.
-    muct = _muct(graph, outcome)
-    ib = _interventional_border(graph, muct)
+    muct, g_an = _muct(graph, outcome)
+    ib = _interventional_border(g_an, muct)
 
     # H = G.do(IB) restricted to MUCT ∪ IB
     g_do_ib = graph.do(ib)
@@ -78,7 +78,7 @@ def _bidirected_reachable(graph: CausalGraph, node: str) -> set[str]:
     return visited
 
 
-def _muct(graph: CausalGraph, outcome: str) -> set[str]:
+def _muct(graph: CausalGraph, outcome: str) -> tuple[set[str], CausalGraph]:
     """Compute the Minimal Unobserved Confounder's Territory.
 
     First restricts the graph to ancestors of the outcome (plus outcome itself).
@@ -89,6 +89,17 @@ def _muct(graph: CausalGraph, outcome: str) -> set[str]:
     Within the ancestral subgraph G[An(Y)], we expand MUCT by adding descendants
     of c-component members. This is correct per Lee & Bareinboim (2018) — the
     ancestral restriction ensures descendants are still relevant to the outcome.
+
+    Returns:
+        A tuple of (muct_set, ancestor_subgraph). The ancestor subgraph is
+        returned so callers can use it for subsequent operations (e.g.
+        computing the interventional border) without re-deriving it.
+
+    Note:
+        In a DAG, Pa(MUCT) is always a subset of An(Y) because MUCT ⊆ An(Y)
+        and parents of ancestors are themselves ancestors. So computing the
+        interventional border on the full graph vs. the ancestral subgraph
+        yields the same result. We return the subgraph for clarity.
     """
     # Restrict to ancestors of Y first
     ancestor_nodes = graph.ancestors(outcome) | {outcome}
@@ -111,7 +122,7 @@ def _muct(graph: CausalGraph, outcome: str) -> set[str]:
         frontier |= new_nodes
         ts |= new_nodes
 
-    return ts
+    return ts, h
 
 
 def _interventional_border(graph: CausalGraph, muct: set[str]) -> set[str]:
@@ -191,8 +202,8 @@ def _sub_pomis(
 
     for i, w_i in enumerate(order):
         g_do_wi = graph.do({w_i})
-        muct_i = _muct(g_do_wi, outcome)
-        ib_i = _interventional_border(g_do_wi, muct_i)
+        muct_i, g_an_i = _muct(g_do_wi, outcome)
+        ib_i = _interventional_border(g_an_i, muct_i)
 
         new_obs = obs | set(order[:i])
 
