@@ -5,9 +5,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from benchmarks.complete_graph import CompleteGraphBenchmark
-from benchmarks.interaction import InteractionBenchmark
-from benchmarks.toy_graph import ToyGraphBenchmark
+from causal_optimizer.benchmarks.complete_graph import CompleteGraphBenchmark
+from causal_optimizer.benchmarks.interaction import InteractionBenchmark
+from causal_optimizer.benchmarks.toy_graph import ToyGraphBenchmark
 from causal_optimizer.engine.loop import ExperimentEngine
 from causal_optimizer.types import CausalGraph, SearchSpace
 
@@ -18,7 +18,7 @@ class TestToyGraph:
     """Tests for the ToyGraphBenchmark."""
 
     def test_run_returns_valid_metrics(self) -> None:
-        bench = ToyGraphBenchmark()
+        bench = ToyGraphBenchmark(rng=np.random.default_rng(42))
         result = bench.run({"x": 1.0, "z": 2.0})
         assert "objective" in result
         assert isinstance(result["objective"], float)
@@ -44,25 +44,22 @@ class TestToyGraph:
 
     def test_partial_intervention_only_z(self) -> None:
         """When only z is provided, x is sampled from its prior."""
-        bench = ToyGraphBenchmark(noise_scale=0.0)
-        np.random.seed(42)
+        bench = ToyGraphBenchmark(noise_scale=0.0, rng=np.random.default_rng(42))
         result = bench.run({"z": 0.0})
         assert "objective" in result
 
     def test_partial_intervention_only_x(self) -> None:
         """When only x is provided, z follows structural equation."""
-        bench = ToyGraphBenchmark(noise_scale=0.0)
-        np.random.seed(42)
+        bench = ToyGraphBenchmark(noise_scale=0.0, rng=np.random.default_rng(42))
         result = bench.run({"x": 0.0})
         # z = exp(-0) = 1.0, y = cos(1) - exp(-1/20) ~ 0.5403 - 0.9512
         assert "objective" in result
 
-    def test_determinism_with_seed(self) -> None:
-        bench = ToyGraphBenchmark()
-        np.random.seed(123)
-        r1 = bench.run({"x": 1.0, "z": 2.0})
-        np.random.seed(123)
-        r2 = bench.run({"x": 1.0, "z": 2.0})
+    def test_determinism_with_rng(self) -> None:
+        bench1 = ToyGraphBenchmark(rng=np.random.default_rng(123))
+        bench2 = ToyGraphBenchmark(rng=np.random.default_rng(123))
+        r1 = bench1.run({"x": 1.0, "z": 2.0})
+        r2 = bench2.run({"x": 1.0, "z": 2.0})
         assert r1["objective"] == r2["objective"]
 
 
@@ -70,7 +67,7 @@ class TestCompleteGraph:
     """Tests for the CompleteGraphBenchmark."""
 
     def test_run_returns_valid_metrics(self) -> None:
-        bench = CompleteGraphBenchmark()
+        bench = CompleteGraphBenchmark(rng=np.random.default_rng(42))
         params = {"f": 0.0, "a": 1.0, "b": 0.5, "c": 1.0, "d": 0.1, "e": 0.5}
         result = bench.run(params)
         assert "objective" in result
@@ -109,18 +106,16 @@ class TestCompleteGraph:
 
     def test_partial_intervention_subset(self) -> None:
         """Providing only some variables works; others follow structural eqs."""
-        bench = CompleteGraphBenchmark(noise_scale=0.0)
-        np.random.seed(42)
+        bench = CompleteGraphBenchmark(noise_scale=0.0, rng=np.random.default_rng(42))
         result = bench.run({"b": 1.0, "d": 0.5})
         assert "objective" in result
 
-    def test_determinism_with_seed(self) -> None:
-        bench = CompleteGraphBenchmark()
+    def test_determinism_with_rng(self) -> None:
         params = {"f": 1.0, "a": 2.0, "b": 0.0, "c": 1.0, "d": 0.1, "e": 0.5}
-        np.random.seed(456)
-        r1 = bench.run(params)
-        np.random.seed(456)
-        r2 = bench.run(params)
+        bench1 = CompleteGraphBenchmark(rng=np.random.default_rng(456))
+        bench2 = CompleteGraphBenchmark(rng=np.random.default_rng(456))
+        r1 = bench1.run(params)
+        r2 = bench2.run(params)
         assert r1["objective"] == r2["objective"]
 
 
@@ -128,7 +123,7 @@ class TestInteraction:
     """Tests for the InteractionBenchmark."""
 
     def test_run_returns_valid_metrics(self) -> None:
-        bench = InteractionBenchmark()
+        bench = InteractionBenchmark(rng=np.random.default_rng(42))
         result = bench.run({"use_a": True, "use_b": True, "c_value": 0.5})
         assert "objective" in result
         assert isinstance(result["objective"], float)
@@ -156,7 +151,7 @@ class TestInteraction:
 
     def test_interaction_effect(self) -> None:
         """Both together should produce a lower objective than either alone."""
-        bench = InteractionBenchmark()
+        bench = InteractionBenchmark(rng=np.random.default_rng(42))
         n_samples = 200
         both_results = []
         a_only_results = []
@@ -179,18 +174,16 @@ class TestInteraction:
 
     def test_partial_intervention_defaults(self) -> None:
         """Running with no parameters should use defaults."""
-        bench = InteractionBenchmark()
-        np.random.seed(42)
+        bench = InteractionBenchmark(rng=np.random.default_rng(42))
         result = bench.run({})
         assert "objective" in result
 
-    def test_determinism_with_seed(self) -> None:
-        bench = InteractionBenchmark()
+    def test_determinism_with_rng(self) -> None:
         params = {"use_a": True, "use_b": False, "c_value": 0.3}
-        np.random.seed(789)
-        r1 = bench.run(params)
-        np.random.seed(789)
-        r2 = bench.run(params)
+        bench1 = InteractionBenchmark(rng=np.random.default_rng(789))
+        bench2 = InteractionBenchmark(rng=np.random.default_rng(789))
+        r1 = bench1.run(params)
+        r2 = bench2.run(params)
         assert r1["objective"] == r2["objective"]
 
 
@@ -203,7 +196,7 @@ class TestBenchmarkProtocol:
     """Tests that all benchmarks satisfy the ExperimentRunner protocol."""
 
     def test_run_produces_objective(self, benchmark_cls: type) -> None:
-        bench = benchmark_cls()
+        bench = benchmark_cls(rng=np.random.default_rng(42))
         space = benchmark_cls.search_space()
         # Build default parameters from search space
         params = _default_params(space)
@@ -230,7 +223,7 @@ class TestBenchmarkProtocol:
 
     def test_engine_smoke_test(self, benchmark_cls: type) -> None:
         """Run 5 steps with ExperimentEngine to verify integration."""
-        bench = benchmark_cls()
+        bench = benchmark_cls(rng=np.random.default_rng(42))
         space = benchmark_cls.search_space()
         graph = benchmark_cls.causal_graph()
 
@@ -240,7 +233,6 @@ class TestBenchmarkProtocol:
             causal_graph=graph,
         )
 
-        np.random.seed(42)
         for _ in range(5):
             result = engine.step()
             assert "objective" in result.metrics
