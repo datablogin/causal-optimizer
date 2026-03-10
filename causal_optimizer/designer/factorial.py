@@ -38,7 +38,7 @@ class FactorialDesigner:
         designs = []
         for combo in combinations:
             design = {}
-            for var_name, value in zip(variable_levels.keys(), combo):
+            for var_name, value in zip(variable_levels.keys(), combo, strict=False):
                 design[var_name] = value
             designs.append(design)
 

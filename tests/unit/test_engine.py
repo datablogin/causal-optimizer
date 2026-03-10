@@ -2,8 +2,6 @@
 
 from typing import Any
 
-import pytest
-
 from causal_optimizer.engine.loop import ExperimentEngine
 from causal_optimizer.types import (
     ExperimentStatus,
@@ -14,10 +12,12 @@ from causal_optimizer.types import (
 
 
 def make_search_space() -> SearchSpace:
-    return SearchSpace(variables=[
-        Variable(name="x", variable_type=VariableType.CONTINUOUS, lower=-5.0, upper=5.0),
-        Variable(name="y", variable_type=VariableType.CONTINUOUS, lower=-5.0, upper=5.0),
-    ])
+    return SearchSpace(
+        variables=[
+            Variable(name="x", variable_type=VariableType.CONTINUOUS, lower=-5.0, upper=5.0),
+            Variable(name="y", variable_type=VariableType.CONTINUOUS, lower=-5.0, upper=5.0),
+        ]
+    )
 
 
 class QuadraticRunner:

@@ -8,9 +8,10 @@ ML training, manufacturing processes, etc.).
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from causal_optimizer.types import CausalGraph, SearchSpace
+if TYPE_CHECKING:
+    from causal_optimizer.types import CausalGraph, SearchSpace
 
 
 class DomainAdapter(ABC):

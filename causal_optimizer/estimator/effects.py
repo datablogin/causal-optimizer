@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from scipy import stats
 
-from causal_optimizer.types import ExperimentLog
+if TYPE_CHECKING:
+    from causal_optimizer.types import ExperimentLog
 
 logger = logging.getLogger(__name__)
 
@@ -86,13 +87,17 @@ class EffectEstimator:
         elif self.method == "bootstrap":
             return self._bootstrap_estimate(treated, control)
         elif self.method == "aipw":
-            return self._aipw_estimate(experiment_log, treatment_param, treatment_value, control_value, objective_name)
+            return self._aipw_estimate(
+                experiment_log,
+                treatment_param,
+                treatment_value,
+                control_value,
+                objective_name,
+            )
         else:
             raise ValueError(f"Unknown method: {self.method}")
 
-    def _difference_estimate(
-        self, treated: np.ndarray, control: np.ndarray
-    ) -> EffectEstimate:
+    def _difference_estimate(self, treated: np.ndarray, control: np.ndarray) -> EffectEstimate:
         """Simple difference in means with t-test."""
         effect = float(np.mean(treated) - np.mean(control))
         t_stat, p_value = stats.ttest_ind(treated, control)
@@ -109,9 +114,7 @@ class EffectEstimator:
             method="difference",
         )
 
-    def _bootstrap_estimate(
-        self, treated: np.ndarray, control: np.ndarray
-    ) -> EffectEstimate:
+    def _bootstrap_estimate(self, treated: np.ndarray, control: np.ndarray) -> EffectEstimate:
         """Bootstrap confidence interval for treatment effect."""
         rng = np.random.default_rng(42)
         effects = np.empty(self.n_bootstrap)

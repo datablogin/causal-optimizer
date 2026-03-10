@@ -20,25 +20,41 @@ class MLTrainingAdapter(DomainAdapter):
     """
 
     def get_search_space(self) -> SearchSpace:
-        return SearchSpace(variables=[
-            Variable(name="learning_rate", variable_type=VariableType.CONTINUOUS, lower=1e-5, upper=1e-1),
-            Variable(name="batch_size", variable_type=VariableType.INTEGER, lower=8, upper=512),
-            Variable(name="n_layers", variable_type=VariableType.INTEGER, lower=2, upper=24),
-            Variable(name="n_heads", variable_type=VariableType.INTEGER, lower=1, upper=16),
-            Variable(name="hidden_dim", variable_type=VariableType.INTEGER, lower=128, upper=2048),
-            Variable(name="dropout", variable_type=VariableType.CONTINUOUS, lower=0.0, upper=0.5),
-            Variable(name="weight_decay", variable_type=VariableType.CONTINUOUS, lower=0.0, upper=0.5),
-            Variable(
-                name="optimizer",
-                variable_type=VariableType.CATEGORICAL,
-                choices=["adamw", "muon", "sgd", "lion"],
-            ),
-            Variable(
-                name="activation",
-                variable_type=VariableType.CATEGORICAL,
-                choices=["gelu", "swiglu", "relu"],
-            ),
-        ])
+        return SearchSpace(
+            variables=[
+                Variable(
+                    name="learning_rate",
+                    variable_type=VariableType.CONTINUOUS,
+                    lower=1e-5,
+                    upper=1e-1,
+                ),
+                Variable(name="batch_size", variable_type=VariableType.INTEGER, lower=8, upper=512),
+                Variable(name="n_layers", variable_type=VariableType.INTEGER, lower=2, upper=24),
+                Variable(name="n_heads", variable_type=VariableType.INTEGER, lower=1, upper=16),
+                Variable(
+                    name="hidden_dim", variable_type=VariableType.INTEGER, lower=128, upper=2048
+                ),
+                Variable(
+                    name="dropout", variable_type=VariableType.CONTINUOUS, lower=0.0, upper=0.5
+                ),
+                Variable(
+                    name="weight_decay",
+                    variable_type=VariableType.CONTINUOUS,
+                    lower=0.0,
+                    upper=0.5,
+                ),
+                Variable(
+                    name="optimizer",
+                    variable_type=VariableType.CATEGORICAL,
+                    choices=["adamw", "muon", "sgd", "lion"],
+                ),
+                Variable(
+                    name="activation",
+                    variable_type=VariableType.CATEGORICAL,
+                    choices=["gelu", "swiglu", "relu"],
+                ),
+            ]
+        )
 
     def run_experiment(self, parameters: dict[str, Any]) -> dict[str, float]:
         """Run an ML training experiment."""

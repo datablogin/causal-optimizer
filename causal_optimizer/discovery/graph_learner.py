@@ -7,12 +7,14 @@ structure over optimization variables from experiment logs.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING
 
 import numpy as np
-import pandas as pd
 
 from causal_optimizer.types import CausalGraph, ExperimentLog
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 logger = logging.getLogger(__name__)
 

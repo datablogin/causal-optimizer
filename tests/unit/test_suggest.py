@@ -21,11 +21,13 @@ from causal_optimizer.types import (
 
 def _make_search_space() -> SearchSpace:
     """Create a simple 3-variable search space for testing."""
-    return SearchSpace(variables=[
-        Variable(name="x", variable_type=VariableType.CONTINUOUS, lower=0.0, upper=10.0),
-        Variable(name="y", variable_type=VariableType.CONTINUOUS, lower=0.0, upper=10.0),
-        Variable(name="z", variable_type=VariableType.CONTINUOUS, lower=0.0, upper=10.0),
-    ])
+    return SearchSpace(
+        variables=[
+            Variable(name="x", variable_type=VariableType.CONTINUOUS, lower=0.0, upper=10.0),
+            Variable(name="y", variable_type=VariableType.CONTINUOUS, lower=0.0, upper=10.0),
+            Variable(name="z", variable_type=VariableType.CONTINUOUS, lower=0.0, upper=10.0),
+        ]
+    )
 
 
 def _make_experiment_log(n: int = 5) -> ExperimentLog:
@@ -39,12 +41,14 @@ def _make_experiment_log(n: int = 5) -> ExperimentLog:
         y_val = float(rng.uniform(0, 10))
         z_val = float(rng.uniform(0, 10))
         obj = x_val + y_val  # objective depends on x and y, not z
-        results.append(ExperimentResult(
-            experiment_id=str(i),
-            parameters={"x": x_val, "y": y_val, "z": z_val},
-            metrics={"objective": obj},
-            status=ExperimentStatus.KEEP,
-        ))
+        results.append(
+            ExperimentResult(
+                experiment_id=str(i),
+                parameters={"x": x_val, "y": y_val, "z": z_val},
+                metrics={"objective": obj},
+                status=ExperimentStatus.KEEP,
+            )
+        )
     return ExperimentLog(results=results)
 
 
@@ -127,7 +131,10 @@ def test_suggest_exploitation_focus_variables():
     z_changed = False
     for _ in range(50):
         result = _suggest_exploitation(
-            ss, log, minimize=True, objective_name="objective",
+            ss,
+            log,
+            minimize=True,
+            objective_name="objective",
             focus_variables=["x", "y"],
         )
         if result["z"] != best.parameters["z"]:
@@ -145,7 +152,10 @@ def test_suggest_exploitation_no_focus_perturbs_any():
     assert best is not None
 
     result = _suggest_exploitation(
-        ss, log, minimize=True, objective_name="objective",
+        ss,
+        log,
+        minimize=True,
+        objective_name="objective",
         focus_variables=None,
     )
 
@@ -161,13 +171,15 @@ def test_suggest_parameters_exploitation_passes_focus():
     log = _make_experiment_log(n=5)
     graph = CausalGraph(edges=[("x", "y"), ("y", "objective")])
 
-    with patch(
-        "causal_optimizer.optimizer.suggest._suggest_exploitation"
-    ) as mock_exploit:
+    with patch("causal_optimizer.optimizer.suggest._suggest_exploitation") as mock_exploit:
         mock_exploit.return_value = {"x": 1.0, "y": 2.0, "z": 3.0}
         suggest_parameters(
-            ss, log, causal_graph=graph, phase="exploitation",
-            minimize=True, objective_name="objective",
+            ss,
+            log,
+            causal_graph=graph,
+            phase="exploitation",
+            minimize=True,
+            objective_name="objective",
         )
         # Verify focus_variables was passed
         call_kwargs = mock_exploit.call_args

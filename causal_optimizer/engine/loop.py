@@ -78,9 +78,7 @@ class ExperimentEngine:
         self._screened_focus_variables: list[str] | None = None
         self._descriptor_names = descriptor_names
         self._archive: MAPElites | None = (
-            MAPElites(descriptor_names, minimize=minimize)
-            if descriptor_names
-            else None
+            MAPElites(descriptor_names, minimize=minimize) if descriptor_names else None
         )
 
     def run_experiment(self, parameters: dict[str, Any]) -> ExperimentResult:
@@ -128,11 +126,7 @@ class ExperimentEngine:
         from causal_optimizer.optimizer.suggest import suggest_parameters
 
         # In exploitation phase, 50% of the time sample from MAP-Elites archive
-        if (
-            self._phase == "exploitation"
-            and self._archive is not None
-            and self._archive.archive
-        ):
+        if self._phase == "exploitation" and self._archive is not None and self._archive.archive:
             rng = np.random.default_rng()
             if rng.random() < 0.5:
                 elite = self._archive.sample_elite()
@@ -220,8 +214,7 @@ class ExperimentEngine:
         kept = [
             r.metrics.get(self.objective_name)
             for r in self.log.results
-            if r.status == ExperimentStatus.KEEP
-            and r.metrics.get(self.objective_name) is not None
+            if r.status == ExperimentStatus.KEEP and r.metrics.get(self.objective_name) is not None
         ]
         discarded = [
             r.metrics.get(self.objective_name)
@@ -363,14 +356,8 @@ class ExperimentEngine:
 
         logger.info("Screening summary:\n%s", result.summary)
 
-    def _extract_descriptors(
-        self, metrics: dict[str, float]
-    ) -> dict[str, float]:
+    def _extract_descriptors(self, metrics: dict[str, float]) -> dict[str, float]:
         """Extract descriptor values from metrics for MAP-Elites."""
         if not self._descriptor_names:
             return {}
-        return {
-            name: metrics[name]
-            for name in self._descriptor_names
-            if name in metrics
-        }
+        return {name: metrics[name] for name in self._descriptor_names if name in metrics}

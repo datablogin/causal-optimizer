@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
 from scipy import stats
 
-from causal_optimizer.types import ExperimentLog
+if TYPE_CHECKING:
+    from causal_optimizer.types import ExperimentLog
 
 logger = logging.getLogger(__name__)
 
@@ -65,11 +67,15 @@ class SensitivityValidator:
             )
 
         effect = float(np.mean(improved_vals) - np.mean(baseline_vals))
-        pooled_std = float(np.sqrt(
-            (np.var(baseline_vals) * (len(baseline_vals) - 1)
-             + np.var(improved_vals) * (len(improved_vals) - 1))
-            / (len(baseline_vals) + len(improved_vals) - 2)
-        ))
+        pooled_std = float(
+            np.sqrt(
+                (
+                    np.var(baseline_vals) * (len(baseline_vals) - 1)
+                    + np.var(improved_vals) * (len(improved_vals) - 1)
+                )
+                / (len(baseline_vals) + len(improved_vals) - 2)
+            )
+        )
 
         # Cohen's d
         cohens_d = abs(effect / pooled_std) if pooled_std > 0 else 0.0

@@ -32,16 +32,20 @@ class BraninRunner:
 
 def main() -> None:
     # Define search space
-    search_space = SearchSpace(variables=[
-        Variable(name="x1", variable_type=VariableType.CONTINUOUS, lower=-5.0, upper=10.0),
-        Variable(name="x2", variable_type=VariableType.CONTINUOUS, lower=0.0, upper=15.0),
-    ])
+    search_space = SearchSpace(
+        variables=[
+            Variable(name="x1", variable_type=VariableType.CONTINUOUS, lower=-5.0, upper=10.0),
+            Variable(name="x2", variable_type=VariableType.CONTINUOUS, lower=0.0, upper=15.0),
+        ]
+    )
 
     # Optional: provide prior causal knowledge
-    prior_graph = CausalGraph(edges=[
-        ("x1", "objective"),
-        ("x2", "objective"),
-    ])
+    prior_graph = CausalGraph(
+        edges=[
+            ("x1", "objective"),
+            ("x2", "objective"),
+        ]
+    )
 
     # Create and run the optimizer
     engine = ExperimentEngine(
@@ -54,6 +58,7 @@ def main() -> None:
 
     # Run 30 experiments
     import logging
+
     logging.basicConfig(level=logging.INFO)
 
     log = engine.run_loop(n_experiments=30)
@@ -63,7 +68,7 @@ def main() -> None:
     if best:
         print(f"\nBest result: objective={best.metrics['objective']:.6f}")
         print(f"Parameters: {best.parameters}")
-        print(f"(Branin global minimum ≈ 0.397887)")
+        print("(Branin global minimum ≈ 0.397887)")
 
     print(f"\nTotal experiments: {len(log.results)}")
     kept = sum(1 for r in log.results if r.status.value == "keep")

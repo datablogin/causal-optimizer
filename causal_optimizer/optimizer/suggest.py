@@ -40,15 +40,20 @@ def suggest_parameters(
         return _suggest_exploration(search_space, experiment_log)
     elif phase == "optimization":
         return _suggest_optimization(
-            search_space, experiment_log, causal_graph, minimize, objective_name,
+            search_space,
+            experiment_log,
+            causal_graph,
+            minimize,
+            objective_name,
             screened_variables=screened_variables,
         )
     elif phase == "exploitation":
-        focus_variables = _get_focus_variables(
-            search_space, causal_graph, objective_name
-        )
+        focus_variables = _get_focus_variables(search_space, causal_graph, objective_name)
         return _suggest_exploitation(
-            search_space, experiment_log, minimize, objective_name,
+            search_space,
+            experiment_log,
+            minimize,
+            objective_name,
             focus_variables=focus_variables,
             base_parameters=base_parameters,
         )
@@ -103,7 +108,10 @@ def _suggest_optimization(
     # Try Bayesian optimization via Ax
     try:
         return _suggest_bayesian(
-            search_space, experiment_log, minimize, objective_name,
+            search_space,
+            experiment_log,
+            minimize,
+            objective_name,
             focus_variables=focus_variables,
         )
     except ImportError:
@@ -141,8 +149,7 @@ def _suggest_exploitation(
     # Determine which variables are eligible for perturbation
     if focus_variables:
         eligible_vars = [
-            (i, v) for i, v in enumerate(search_space.variables)
-            if v.name in focus_variables
+            (i, v) for i, v in enumerate(search_space.variables) if v.name in focus_variables
         ]
     else:
         eligible_vars = list(enumerate(search_space.variables))
@@ -205,31 +212,39 @@ def _suggest_bayesian(
         if focus_set and var.name not in focus_set:
             continue
         if var.variable_type == VariableType.CONTINUOUS:
-            ax_params.append({
-                "name": var.name,
-                "type": "range",
-                "bounds": [var.lower or 0.0, var.upper or 1.0],
-                "value_type": "float",
-            })
+            ax_params.append(
+                {
+                    "name": var.name,
+                    "type": "range",
+                    "bounds": [var.lower or 0.0, var.upper or 1.0],
+                    "value_type": "float",
+                }
+            )
         elif var.variable_type == VariableType.INTEGER:
-            ax_params.append({
-                "name": var.name,
-                "type": "range",
-                "bounds": [int(var.lower or 0), int(var.upper or 10)],
-                "value_type": "int",
-            })
+            ax_params.append(
+                {
+                    "name": var.name,
+                    "type": "range",
+                    "bounds": [int(var.lower or 0), int(var.upper or 10)],
+                    "value_type": "int",
+                }
+            )
         elif var.variable_type == VariableType.CATEGORICAL:
-            ax_params.append({
-                "name": var.name,
-                "type": "choice",
-                "values": var.choices or [],
-            })
+            ax_params.append(
+                {
+                    "name": var.name,
+                    "type": "choice",
+                    "values": var.choices or [],
+                }
+            )
         elif var.variable_type == VariableType.BOOLEAN:
-            ax_params.append({
-                "name": var.name,
-                "type": "choice",
-                "values": [True, False],
-            })
+            ax_params.append(
+                {
+                    "name": var.name,
+                    "type": "choice",
+                    "values": [True, False],
+                }
+            )
 
     ax_client.create_experiment(
         name="causal_optimizer",
@@ -241,8 +256,7 @@ def _suggest_bayesian(
     for result in experiment_log.results:
         if objective_name in result.metrics:
             trial_params = {
-                k: v for k, v in result.parameters.items()
-                if not focus_set or k in focus_set
+                k: v for k, v in result.parameters.items() if not focus_set or k in focus_set
             }
             _, trial_index = ax_client.attach_trial(trial_params)
             ax_client.complete_trial(
@@ -284,11 +298,7 @@ def _suggest_surrogate(
         return _random_sample(search_space)
 
     # Filter to focus variables for RF training; fall back to all if empty
-    focus_var_names = (
-        [v for v in all_var_names if v in focus_variables]
-        if focus_variables
-        else []
-    )
+    focus_var_names = [v for v in all_var_names if v in focus_variables] if focus_variables else []
 
     if not focus_var_names:
         focus_var_names = all_var_names
@@ -297,9 +307,9 @@ def _suggest_surrogate(
     best = experiment_log.best_result
     best_params = dict(best.parameters) if best else {}
 
-    features = df[focus_var_names].apply(
-        lambda x: x.astype(float, errors="ignore")
-    ).fillna(0).values
+    features = (
+        df[focus_var_names].apply(lambda x: x.astype(float, errors="ignore")).fillna(0).values
+    )
     y = df[objective_name].values
 
     rf = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=42)
@@ -307,6 +317,7 @@ def _suggest_surrogate(
 
     # Generate candidates and pick the best predicted
     from causal_optimizer.designer.factorial import FactorialDesigner
+
     designer = FactorialDesigner(search_space)
     candidates = designer.latin_hypercube(n_samples=100)
 
@@ -322,9 +333,7 @@ def _suggest_surrogate(
     best_pred = float("inf") if minimize else float("-inf")
 
     for candidate in candidates:
-        x = np.array(
-            [candidate.get(v, 0) for v in focus_var_names]
-        ).reshape(1, -1)
+        x = np.array([candidate.get(v, 0) for v in focus_var_names]).reshape(1, -1)
         pred = rf.predict(x)[0]
         if (minimize and pred < best_pred) or (not minimize and pred > best_pred):
             best_pred = pred
@@ -366,11 +375,11 @@ def _random_sample(search_space: SearchSpace) -> dict[str, Any]:
         is_int = var.variable_type == VariableType.INTEGER
         has_bounds = var.lower is not None and var.upper is not None
         if is_cont and has_bounds:
+            assert var.lower is not None and var.upper is not None
             params[var.name] = float(rng.uniform(var.lower, var.upper))
         elif is_int and has_bounds:
-            params[var.name] = int(
-                rng.integers(int(var.lower), int(var.upper) + 1)
-            )
+            assert var.lower is not None and var.upper is not None
+            params[var.name] = int(rng.integers(int(var.lower), int(var.upper) + 1))
         elif var.variable_type == VariableType.BOOLEAN:
             params[var.name] = bool(rng.choice([True, False]))
         elif var.variable_type == VariableType.CATEGORICAL and var.choices:

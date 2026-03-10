@@ -20,35 +20,37 @@ class MarketingAdapter(DomainAdapter):
     """
 
     def get_search_space(self) -> SearchSpace:
-        return SearchSpace(variables=[
-            Variable(
-                name="email_frequency",
-                variable_type=VariableType.INTEGER,
-                lower=0,
-                upper=7,
-            ),
-            Variable(
-                name="social_spend_pct",
-                variable_type=VariableType.CONTINUOUS,
-                lower=0.0,
-                upper=1.0,
-            ),
-            Variable(
-                name="search_bid_multiplier",
-                variable_type=VariableType.CONTINUOUS,
-                lower=0.5,
-                upper=3.0,
-            ),
-            Variable(
-                name="creative_variant",
-                variable_type=VariableType.CATEGORICAL,
-                choices=["control", "urgency", "social_proof", "benefit"],
-            ),
-            Variable(
-                name="retargeting_enabled",
-                variable_type=VariableType.BOOLEAN,
-            ),
-        ])
+        return SearchSpace(
+            variables=[
+                Variable(
+                    name="email_frequency",
+                    variable_type=VariableType.INTEGER,
+                    lower=0,
+                    upper=7,
+                ),
+                Variable(
+                    name="social_spend_pct",
+                    variable_type=VariableType.CONTINUOUS,
+                    lower=0.0,
+                    upper=1.0,
+                ),
+                Variable(
+                    name="search_bid_multiplier",
+                    variable_type=VariableType.CONTINUOUS,
+                    lower=0.5,
+                    upper=3.0,
+                ),
+                Variable(
+                    name="creative_variant",
+                    variable_type=VariableType.CATEGORICAL,
+                    choices=["control", "urgency", "social_proof", "benefit"],
+                ),
+                Variable(
+                    name="retargeting_enabled",
+                    variable_type=VariableType.BOOLEAN,
+                ),
+            ]
+        )
 
     def run_experiment(self, parameters: dict[str, Any]) -> dict[str, float]:
         """Run a marketing experiment (simulation or live A/B test)."""

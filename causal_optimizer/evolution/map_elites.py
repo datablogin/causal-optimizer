@@ -9,12 +9,13 @@ different strategies — inspired by AlphaEvolve.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
 
-from causal_optimizer.types import ExperimentResult
+if TYPE_CHECKING:
+    from causal_optimizer.types import ExperimentResult
 
 logger = logging.getLogger(__name__)
 
@@ -86,8 +87,7 @@ class MAPElites:
                 descriptor=bin_indices, result=result, fitness=fitness
             )
             logger.debug(
-                f"Improved elite in cell {bin_indices}: "
-                f"{existing.fitness:.6f} -> {fitness:.6f}"
+                f"Improved elite in cell {bin_indices}: {existing.fitness:.6f} -> {fitness:.6f}"
             )
             return True
 
@@ -98,8 +98,9 @@ class MAPElites:
         if not self.archive:
             return None
         rng = np.random.default_rng()
-        cell = rng.choice(list(self.archive.values()))
-        return cell.result
+        cells = list(self.archive.values())
+        idx = rng.integers(0, len(cells))
+        return cells[idx].result
 
     def sample_diverse(self, n: int = 5) -> list[ExperimentResult]:
         """Sample diverse elites from different regions of the archive."""
@@ -108,8 +109,8 @@ class MAPElites:
         cells = list(self.archive.values())
         n = min(n, len(cells))
         rng = np.random.default_rng()
-        selected = rng.choice(cells, size=n, replace=False)
-        return [cell.result for cell in selected]
+        indices = rng.choice(len(cells), size=n, replace=False)
+        return [cells[i].result for i in indices]
 
     @property
     def best(self) -> EliteCell | None:

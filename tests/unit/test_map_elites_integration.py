@@ -14,10 +14,12 @@ from causal_optimizer.types import (
 
 
 def make_search_space() -> SearchSpace:
-    return SearchSpace(variables=[
-        Variable(name="x", variable_type=VariableType.CONTINUOUS, lower=-5.0, upper=5.0),
-        Variable(name="y", variable_type=VariableType.CONTINUOUS, lower=-5.0, upper=5.0),
-    ])
+    return SearchSpace(
+        variables=[
+            Variable(name="x", variable_type=VariableType.CONTINUOUS, lower=-5.0, upper=5.0),
+            Variable(name="y", variable_type=VariableType.CONTINUOUS, lower=-5.0, upper=5.0),
+        ]
+    )
 
 
 class MetricRunner:

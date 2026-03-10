@@ -9,13 +9,15 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING
 
-import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 
-from causal_optimizer.types import ExperimentLog, SearchSpace
+if TYPE_CHECKING:
+    import numpy as np
+
+    from causal_optimizer.types import ExperimentLog, SearchSpace
 
 logger = logging.getLogger(__name__)
 
@@ -73,17 +75,18 @@ class ScreeningDesigner:
                 important_variables=[],
             )
 
-        X = df[available].apply(pd.to_numeric, errors="coerce").fillna(0)
+        features = df[available].apply(pd.to_numeric, errors="coerce").fillna(0)
         y = df[objective_name].values
 
         # Main effects via random forest feature importance
-        main_effects = self._compute_main_effects(X, y)
+        main_effects = self._compute_main_effects(features, y)
 
         # Interaction effects via pairwise residual analysis
-        interactions = self._compute_interactions(X, y, main_effects)
+        interactions = self._compute_interactions(features, y, main_effects)
 
         important = [
-            var for var, imp in sorted(main_effects.items(), key=lambda x: -x[1])
+            var
+            for var, imp in sorted(main_effects.items(), key=lambda x: -x[1])
             if imp > self.importance_threshold
         ]
 
@@ -93,27 +96,25 @@ class ScreeningDesigner:
             important_variables=important,
         )
 
-    def _compute_main_effects(
-        self, X: pd.DataFrame, y: np.ndarray
-    ) -> dict[str, float]:
+    def _compute_main_effects(self, features: pd.DataFrame, y: np.ndarray) -> dict[str, float]:
         """Compute main effect importance via random forest."""
-        if len(X) < 5:
+        if len(features) < 5:
             # Not enough data — return uniform importance
-            return {col: 1.0 / len(X.columns) for col in X.columns}
+            return {col: 1.0 / len(features.columns) for col in features.columns}
 
         rf = RandomForestRegressor(
             n_estimators=100,
-            max_depth=min(5, len(X) // 2),
+            max_depth=min(5, len(features) // 2),
             random_state=42,
         )
-        rf.fit(X, y)
+        rf.fit(features, y)
 
         importances = rf.feature_importances_
-        return {col: float(imp) for col, imp in zip(X.columns, importances)}
+        return {col: float(imp) for col, imp in zip(features.columns, importances, strict=False)}
 
     def _compute_interactions(
         self,
-        X: pd.DataFrame,
+        features: pd.DataFrame,
         y: np.ndarray,
         main_effects: dict[str, float],
     ) -> dict[tuple[str, str], float]:
@@ -122,11 +123,11 @@ class ScreeningDesigner:
         Uses the H-statistic approach: fit a model with interaction terms
         and measure how much the interaction adds beyond main effects.
         """
-        if len(X) < 10 or len(X.columns) < 2:
+        if len(features) < 10 or len(features.columns) < 2:
             return {}
 
         interactions: dict[tuple[str, str], float] = {}
-        cols = X.columns.tolist()
+        cols = features.columns.tolist()
 
         for i, c1 in enumerate(cols):
             for j, c2 in enumerate(cols):
@@ -134,22 +135,18 @@ class ScreeningDesigner:
                     continue
 
                 # Create interaction feature
-                X_with_interaction = X[[c1, c2]].copy()
-                X_with_interaction["interaction"] = X[c1] * X[c2]
+                pair_with_inter = features[[c1, c2]].copy()
+                pair_with_inter["interaction"] = features[c1] * features[c2]
 
                 # Fit with and without interaction
-                rf_without = RandomForestRegressor(
-                    n_estimators=50, max_depth=3, random_state=42
-                )
-                rf_with = RandomForestRegressor(
-                    n_estimators=50, max_depth=3, random_state=42
-                )
+                rf_without = RandomForestRegressor(n_estimators=50, max_depth=3, random_state=42)
+                rf_with = RandomForestRegressor(n_estimators=50, max_depth=3, random_state=42)
 
-                rf_without.fit(X[[c1, c2]], y)
-                rf_with.fit(X_with_interaction, y)
+                rf_without.fit(features[[c1, c2]], y)
+                rf_with.fit(pair_with_inter, y)
 
-                score_without = max(0, rf_without.score(X[[c1, c2]], y))
-                score_with = max(0, rf_with.score(X_with_interaction, y))
+                score_without = max(0, rf_without.score(features[[c1, c2]], y))
+                score_with = max(0, rf_with.score(pair_with_inter, y))
 
                 interaction_strength = max(0, score_with - score_without)
                 if interaction_strength > 0.01:

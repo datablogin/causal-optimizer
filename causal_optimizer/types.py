@@ -45,9 +45,7 @@ class Variable(BaseModel):
             return isinstance(value, bool)
         if self.lower is not None and value < self.lower:
             return False
-        if self.upper is not None and value > self.upper:
-            return False
-        return True
+        return not (self.upper is not None and value > self.upper)
 
 
 class SearchSpace(BaseModel):
@@ -184,7 +182,8 @@ class CausalGraph:
         """Graph surgery: remove all incoming directed edges to intervened variables."""
         new_edges = [(u, v) for u, v in self.edges if v not in interventions]
         new_bidirected = [
-            (u, v) for u, v in self.bidirected_edges
+            (u, v)
+            for u, v in self.bidirected_edges
             if u not in interventions and v not in interventions
         ]
         return CausalGraph(
@@ -197,8 +196,7 @@ class CausalGraph:
         """Induced subgraph on the given node set."""
         new_edges = [(u, v) for u, v in self.edges if u in node_set and v in node_set]
         new_bidirected = [
-            (u, v) for u, v in self.bidirected_edges
-            if u in node_set and v in node_set
+            (u, v) for u, v in self.bidirected_edges if u in node_set and v in node_set
         ]
         return CausalGraph(
             edges=new_edges,
@@ -222,7 +220,10 @@ class ExperimentLog(BaseModel):
     def to_dataframe(self) -> pd.DataFrame:
         rows = []
         for r in self.results:
-            row = {"experiment_id": r.experiment_id, "status": r.status.value}
+            row: dict[str, object] = {
+                "experiment_id": r.experiment_id,
+                "status": r.status.value,
+            }
             row.update(r.parameters)
             row.update(r.metrics)
             rows.append(row)
