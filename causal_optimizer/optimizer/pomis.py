@@ -219,6 +219,12 @@ def _sub_pomis(
                 sub_results = _sub_pomis(h_i, outcome, new_order, processed)
                 result |= sub_results
 
+        # Note: w_i is intentionally added AFTER the recursive call. The
+        # `processed` set is a pruning optimization (not in the paper's
+        # algorithm). Adding w_i before the recursive call would over-prune:
+        # if w_i appears in a sub-call's IB (due to graph surgery), that is
+        # a legitimate intervention target in the subproblem's context, and
+        # filtering it would cause valid POMIS sets to be missed.
         processed.add(w_i)
 
     return result
