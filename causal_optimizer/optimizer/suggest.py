@@ -27,6 +27,7 @@ def suggest_parameters(
     objective_name: str = "objective",
     screened_variables: list[str] | None = None,
     base_parameters: dict[str, Any] | None = None,
+    pomis_sets: list[frozenset[str]] | None = None,
 ) -> dict[str, Any]:
     """Suggest next experiment parameters based on current phase and history.
 
@@ -35,20 +36,28 @@ def suggest_parameters(
             Complements graph-based focus variables (intersection if both available).
         base_parameters: Base parameters to perturb from (e.g., from MAP-Elites elite).
             Used in exploitation phase instead of the overall best.
+        pomis_sets: POMIS intervention sets from causal graph analysis.
+            When provided, constrains optimization to intervene on POMIS members.
     """
     if phase == "exploration":
         return _suggest_exploration(search_space, experiment_log)
     elif phase == "optimization":
         return _suggest_optimization(
-            search_space, experiment_log, causal_graph, minimize, objective_name,
+            search_space,
+            experiment_log,
+            causal_graph,
+            minimize,
+            objective_name,
             screened_variables=screened_variables,
+            pomis_sets=pomis_sets,
         )
     elif phase == "exploitation":
-        focus_variables = _get_focus_variables(
-            search_space, causal_graph, objective_name
-        )
+        focus_variables = _get_focus_variables(search_space, causal_graph, objective_name)
         return _suggest_exploitation(
-            search_space, experiment_log, minimize, objective_name,
+            search_space,
+            experiment_log,
+            minimize,
+            objective_name,
             focus_variables=focus_variables,
             base_parameters=base_parameters,
         )
@@ -74,12 +83,17 @@ def _suggest_optimization(
     minimize: bool,
     objective_name: str,
     screened_variables: list[str] | None = None,
+    pomis_sets: list[frozenset[str]] | None = None,
 ) -> dict[str, Any]:
     """Optimization: Bayesian optimization with optional causal guidance.
 
     If a causal graph is available, uses it to identify which variables
     to prioritize (ancestors of the objective in the DAG). Screening results
     complement the graph-based focus.
+
+    If POMIS sets are provided (from graphs with confounders), the optimizer
+    selects the least-explored POMIS set and constrains suggestions to those
+    variables.
     """
     df = experiment_log.to_dataframe()
     if len(df) < 3:
@@ -100,10 +114,22 @@ def _suggest_optimization(
     else:
         focus_variables = graph_focus
 
+    # If POMIS sets available, use them to constrain intervention variables
+    if pomis_sets is not None and len(pomis_sets) > 0:
+        chosen_set = _select_pomis_set(pomis_sets, experiment_log)
+        if chosen_set is not None:
+            pomis_focus = [v for v in search_space.variable_names if v in chosen_set]
+            if pomis_focus:
+                focus_variables = pomis_focus
+                logger.info("POMIS constraining focus to: %s", focus_variables)
+
     # Try Bayesian optimization via Ax
     try:
         return _suggest_bayesian(
-            search_space, experiment_log, minimize, objective_name,
+            search_space,
+            experiment_log,
+            minimize,
+            objective_name,
             focus_variables=focus_variables,
         )
     except ImportError:
@@ -141,8 +167,7 @@ def _suggest_exploitation(
     # Determine which variables are eligible for perturbation
     if focus_variables:
         eligible_vars = [
-            (i, v) for i, v in enumerate(search_space.variables)
-            if v.name in focus_variables
+            (i, v) for i, v in enumerate(search_space.variables) if v.name in focus_variables
         ]
     else:
         eligible_vars = list(enumerate(search_space.variables))
@@ -205,31 +230,39 @@ def _suggest_bayesian(
         if focus_set and var.name not in focus_set:
             continue
         if var.variable_type == VariableType.CONTINUOUS:
-            ax_params.append({
-                "name": var.name,
-                "type": "range",
-                "bounds": [var.lower or 0.0, var.upper or 1.0],
-                "value_type": "float",
-            })
+            ax_params.append(
+                {
+                    "name": var.name,
+                    "type": "range",
+                    "bounds": [var.lower or 0.0, var.upper or 1.0],
+                    "value_type": "float",
+                }
+            )
         elif var.variable_type == VariableType.INTEGER:
-            ax_params.append({
-                "name": var.name,
-                "type": "range",
-                "bounds": [int(var.lower or 0), int(var.upper or 10)],
-                "value_type": "int",
-            })
+            ax_params.append(
+                {
+                    "name": var.name,
+                    "type": "range",
+                    "bounds": [int(var.lower or 0), int(var.upper or 10)],
+                    "value_type": "int",
+                }
+            )
         elif var.variable_type == VariableType.CATEGORICAL:
-            ax_params.append({
-                "name": var.name,
-                "type": "choice",
-                "values": var.choices or [],
-            })
+            ax_params.append(
+                {
+                    "name": var.name,
+                    "type": "choice",
+                    "values": var.choices or [],
+                }
+            )
         elif var.variable_type == VariableType.BOOLEAN:
-            ax_params.append({
-                "name": var.name,
-                "type": "choice",
-                "values": [True, False],
-            })
+            ax_params.append(
+                {
+                    "name": var.name,
+                    "type": "choice",
+                    "values": [True, False],
+                }
+            )
 
     ax_client.create_experiment(
         name="causal_optimizer",
@@ -241,8 +274,7 @@ def _suggest_bayesian(
     for result in experiment_log.results:
         if objective_name in result.metrics:
             trial_params = {
-                k: v for k, v in result.parameters.items()
-                if not focus_set or k in focus_set
+                k: v for k, v in result.parameters.items() if not focus_set or k in focus_set
             }
             _, trial_index = ax_client.attach_trial(trial_params)
             ax_client.complete_trial(
@@ -284,11 +316,7 @@ def _suggest_surrogate(
         return _random_sample(search_space)
 
     # Filter to focus variables for RF training; fall back to all if empty
-    focus_var_names = (
-        [v for v in all_var_names if v in focus_variables]
-        if focus_variables
-        else []
-    )
+    focus_var_names = [v for v in all_var_names if v in focus_variables] if focus_variables else []
 
     if not focus_var_names:
         focus_var_names = all_var_names
@@ -297,9 +325,9 @@ def _suggest_surrogate(
     best = experiment_log.best_result
     best_params = dict(best.parameters) if best else {}
 
-    features = df[focus_var_names].apply(
-        lambda x: x.astype(float, errors="ignore")
-    ).fillna(0).values
+    features = (
+        df[focus_var_names].apply(lambda x: x.astype(float, errors="ignore")).fillna(0).values
+    )
     y = df[objective_name].values
 
     rf = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=42)
@@ -307,6 +335,7 @@ def _suggest_surrogate(
 
     # Generate candidates and pick the best predicted
     from causal_optimizer.designer.factorial import FactorialDesigner
+
     designer = FactorialDesigner(search_space)
     candidates = designer.latin_hypercube(n_samples=100)
 
@@ -322,9 +351,7 @@ def _suggest_surrogate(
     best_pred = float("inf") if minimize else float("-inf")
 
     for candidate in candidates:
-        x = np.array(
-            [candidate.get(v, 0) for v in focus_var_names]
-        ).reshape(1, -1)
+        x = np.array([candidate.get(v, 0) for v in focus_var_names]).reshape(1, -1)
         pred = rf.predict(x)[0]
         if (minimize and pred < best_pred) or (not minimize and pred > best_pred):
             best_pred = pred
@@ -357,6 +384,37 @@ def _get_focus_variables(
     return focus if focus else search_space.variable_names
 
 
+def _select_pomis_set(
+    pomis_sets: list[frozenset[str]],
+    experiment_log: ExperimentLog,
+) -> frozenset[str] | None:
+    """Select which POMIS set to explore next (least-explored strategy).
+
+    Counts how many past experiments varied parameters matching each POMIS set,
+    then returns the least-explored one. Ties are broken randomly.
+    """
+    if not pomis_sets:
+        return None
+
+    rng = np.random.default_rng()
+
+    # Count experiments that explored each POMIS set
+    counts: dict[int, int] = {i: 0 for i in range(len(pomis_sets))}
+    for result in experiment_log.results:
+        varied_params = frozenset(result.parameters.keys())
+        for i, pset in enumerate(pomis_sets):
+            # An experiment "explored" a POMIS set if it varied variables in that set
+            if pset & varied_params:
+                counts[i] += 1
+
+    min_count = min(counts.values())
+    # Collect all sets tied at the minimum
+    candidates = [i for i, c in counts.items() if c == min_count]
+
+    chosen_idx = int(rng.choice(candidates))
+    return pomis_sets[chosen_idx]
+
+
 def _random_sample(search_space: SearchSpace) -> dict[str, Any]:
     """Generate a random sample from the search space."""
     rng = np.random.default_rng()
@@ -368,9 +426,7 @@ def _random_sample(search_space: SearchSpace) -> dict[str, Any]:
         if is_cont and has_bounds:
             params[var.name] = float(rng.uniform(var.lower, var.upper))
         elif is_int and has_bounds:
-            params[var.name] = int(
-                rng.integers(int(var.lower), int(var.upper) + 1)
-            )
+            params[var.name] = int(rng.integers(int(var.lower), int(var.upper) + 1))
         elif var.variable_type == VariableType.BOOLEAN:
             params[var.name] = bool(rng.choice([True, False]))
         elif var.variable_type == VariableType.CATEGORICAL and var.choices:

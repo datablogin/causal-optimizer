@@ -76,11 +76,10 @@ class ExperimentEngine:
         self._max_skips = max_skips
         self._screening_result: ScreeningResult | None = None
         self._screened_focus_variables: list[str] | None = None
+        self._pomis_sets: list[frozenset[str]] | None = None
         self._descriptor_names = descriptor_names
         self._archive: MAPElites | None = (
-            MAPElites(descriptor_names, minimize=minimize)
-            if descriptor_names
-            else None
+            MAPElites(descriptor_names, minimize=minimize) if descriptor_names else None
         )
 
     def run_experiment(self, parameters: dict[str, Any]) -> ExperimentResult:
@@ -128,11 +127,7 @@ class ExperimentEngine:
         from causal_optimizer.optimizer.suggest import suggest_parameters
 
         # In exploitation phase, 50% of the time sample from MAP-Elites archive
-        if (
-            self._phase == "exploitation"
-            and self._archive is not None
-            and self._archive.archive
-        ):
+        if self._phase == "exploitation" and self._archive is not None and self._archive.archive:
             rng = np.random.default_rng()
             if rng.random() < 0.5:
                 elite = self._archive.sample_elite()
@@ -147,6 +142,7 @@ class ExperimentEngine:
                         objective_name=self.objective_name,
                         screened_variables=self._screened_focus_variables,
                         base_parameters=elite.parameters,
+                        pomis_sets=self._pomis_sets,
                     )
 
         return suggest_parameters(
@@ -157,6 +153,7 @@ class ExperimentEngine:
             minimize=self.minimize,
             objective_name=self.objective_name,
             screened_variables=self._screened_focus_variables,
+            pomis_sets=self._pomis_sets,
         )
 
     def step(self) -> ExperimentResult:
@@ -220,8 +217,7 @@ class ExperimentEngine:
         kept = [
             r.metrics.get(self.objective_name)
             for r in self.log.results
-            if r.status == ExperimentStatus.KEEP
-            and r.metrics.get(self.objective_name) is not None
+            if r.status == ExperimentStatus.KEEP and r.metrics.get(self.objective_name) is not None
         ]
         discarded = [
             r.metrics.get(self.objective_name)
@@ -330,9 +326,10 @@ class ExperimentEngine:
         else:
             self._phase = "exploitation"
 
-        # Run screening when transitioning from exploration to optimization
+        # Run screening and POMIS when transitioning from exploration to optimization
         if old_phase == "exploration" and self._phase == "optimization":
             self._run_screening()
+            self._compute_pomis()
 
     def _run_screening(self) -> None:
         """Run screening analysis to identify important variables."""
@@ -363,14 +360,22 @@ class ExperimentEngine:
 
         logger.info("Screening summary:\n%s", result.summary)
 
-    def _extract_descriptors(
-        self, metrics: dict[str, float]
-    ) -> dict[str, float]:
+    def _compute_pomis(self) -> None:
+        """Compute POMIS sets if the causal graph has confounders."""
+        if self.causal_graph is None or not self.causal_graph.has_confounders:
+            return
+
+        try:
+            from causal_optimizer.optimizer.pomis import compute_pomis
+
+            self._pomis_sets = compute_pomis(self.causal_graph, self.objective_name)
+            logger.info("POMIS sets: %s", self._pomis_sets)
+        except Exception:
+            logger.warning("POMIS computation failed, continuing without POMIS guidance")
+            self._pomis_sets = None
+
+    def _extract_descriptors(self, metrics: dict[str, float]) -> dict[str, float]:
         """Extract descriptor values from metrics for MAP-Elites."""
         if not self._descriptor_names:
             return {}
-        return {
-            name: metrics[name]
-            for name in self._descriptor_names
-            if name in metrics
-        }
+        return {name: metrics[name] for name in self._descriptor_names if name in metrics}
