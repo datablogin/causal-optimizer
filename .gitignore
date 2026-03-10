@@ -14,3 +14,4 @@ venv/
 .ruff_cache/
 *.log
 .DS_Store
+.mcp.json
