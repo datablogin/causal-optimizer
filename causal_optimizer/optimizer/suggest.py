@@ -413,8 +413,10 @@ def _random_sample(search_space: SearchSpace) -> dict[str, Any]:
         is_int = var.variable_type == VariableType.INTEGER
         has_bounds = var.lower is not None and var.upper is not None
         if is_cont and has_bounds:
+            assert var.lower is not None and var.upper is not None
             params[var.name] = float(rng.uniform(var.lower, var.upper))
         elif is_int and has_bounds:
+            assert var.lower is not None and var.upper is not None
             params[var.name] = int(rng.integers(int(var.lower), int(var.upper) + 1))
         elif var.variable_type == VariableType.BOOLEAN:
             params[var.name] = bool(rng.choice([True, False]))
