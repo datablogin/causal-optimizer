@@ -378,7 +378,6 @@ class ExperimentEngine:
             )
             self._pomis_sets = None
 
-
     def _extract_descriptors(self, metrics: dict[str, float]) -> dict[str, float]:
         """Extract descriptor values from metrics for MAP-Elites."""
         if not self._descriptor_names:
