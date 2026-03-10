@@ -222,7 +222,11 @@ class TestBenchmarkProtocol:
             assert isinstance(p, frozenset)
 
     def test_engine_smoke_test(self, benchmark_cls: type) -> None:
-        """Run 5 steps with ExperimentEngine to verify integration."""
+        """Run 5 steps with ExperimentEngine to verify integration.
+
+        Smoke test: verify engine runs without crashing.
+        Non-deterministic by design — engine internals use unseeded RNGs.
+        """
         bench = benchmark_cls(rng=np.random.default_rng(42))
         space = benchmark_cls.search_space()
         graph = benchmark_cls.causal_graph()

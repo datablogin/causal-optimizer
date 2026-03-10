@@ -17,6 +17,9 @@ class BenchmarkSCM(Protocol):
 
     Provides a search space, causal graph, known POMIS sets, and a run method
     that executes the structural equations under (partial) intervention.
+
+    All implementations should accept noise_scale and optional rng
+    in __init__, but Protocol cannot enforce constructor signatures.
     """
 
     @staticmethod

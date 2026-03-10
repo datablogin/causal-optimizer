@@ -14,7 +14,7 @@ class CompleteGraphBenchmark:
 
     Structural equations:
         U1 ~ N(0,1), U2 ~ N(0,1)  (unobserved)
-        F = epsilon
+        F ~ Uniform(-4, 4)
         A = F^2 + U1 + epsilon
         B = U2 + epsilon
         C = exp(-B) + epsilon
