@@ -430,8 +430,8 @@ class ExperimentEngine:
         learner = GraphLearner(method=self._discovery_method)
         try:
             discovered = learner.learn(self.log, objective_name=self.objective_name)
-        except Exception:
-            logger.warning("Auto-discovery failed, continuing without", exc_info=True)
+        except Exception as exc:  # intentional broad catch — graph discovery can fail in many ways
+            logger.warning("Auto-discovery failed (%s), continuing without causal graph", exc)
             return
 
         self._discovered_graph = discovered

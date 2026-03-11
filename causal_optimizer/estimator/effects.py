@@ -251,7 +251,7 @@ class EffectEstimator:
                 confidence_interval=(float("-inf"), float("inf")),
                 p_value=0.0 if is_better else 1.0,
                 is_significant=is_better,  # greedy comparison for small samples
-                method=self.method,
+                method="greedy",  # raw comparison, no estimation performed
             )
 
         kept_arr = np.array(kept_values, dtype=float)

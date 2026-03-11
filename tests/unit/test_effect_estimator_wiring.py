@@ -427,13 +427,7 @@ def test_observe_path_does_not_add_to_log() -> None:
 
     initial_count = len(engine.log.results)
 
-    # Mock predictor to force observe (should_run=False)
-    with patch.object(engine._predictor, "should_run_experiment", return_value=False):
-        # With max_skips=0, we reach the max-skip threshold immediately and run anyway
-        # But we want to test the observe path — set max_skips to a high value
-        pass
-
-    # Now test with a higher max_skips and force the observe path
+    # Test with a higher max_skips and force the observe path
     engine._max_skips = 1
 
     # Force predictor to say "observe" for the first check, then run
