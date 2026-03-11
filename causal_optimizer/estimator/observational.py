@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
+    import pandas as pd
+
     from causal_optimizer.types import CausalGraph, ExperimentLog
 
 logger = logging.getLogger(__name__)
@@ -193,10 +195,15 @@ class ObservationalEstimator:
                 intercept_val = float(intercept_raw)
                 expected_outcome = intercept_val + float(estimate.value) * treatment_value
             else:
+                # frontdoor/iv: estimate.value is the ATE (scalar shift), not a slope.
+                # Approximate E[Y|do(T=t)] ≈ mean(Y) + ATE * (t - mean(T)).
+                if treatment_var not in df.columns:
+                    raise ValueError(
+                        f"treatment_var={treatment_var!r} not found in data columns. "
+                        f"Available columns: {list(df.columns)}"
+                    )
                 baseline = float(np.mean(df[objective_name].values))
-                t_mean = (
-                    float(np.mean(df[treatment_var].values)) if treatment_var in df.columns else 0.0
-                )
+                t_mean = float(np.mean(df[treatment_var].values))
                 expected_outcome = baseline + float(estimate.value) * (treatment_value - t_mean)
 
             # Confidence interval from standard error
@@ -245,17 +252,13 @@ class ObservationalEstimator:
 
     def _rf_fallback(
         self,
-        df: object,
+        df: pd.DataFrame,
         treatment_var: str,
         treatment_value: float,
         objective_name: str,
     ) -> ObservationalEstimate:
         """Predict E[Y | X=x] using a random-forest surrogate (no causal adjustment)."""
-        import pandas as pd
         from sklearn.ensemble import RandomForestRegressor
-
-        if not isinstance(df, pd.DataFrame):
-            raise TypeError(f"Expected pd.DataFrame, got {type(df).__name__}")
 
         feature_cols = [c for c in df.columns if c != objective_name]
         features_df = df[feature_cols].select_dtypes(include=[np.number]).fillna(0.0)
