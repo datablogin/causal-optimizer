@@ -463,10 +463,15 @@ class ExperimentEngine:
         # a graph becomes available from auto-discovery.  This ensures that
         # effect_method="observational" gets a real DoWhy-backed graph, and
         # that other methods have access to the graph if they need it later.
+        # Preserve all non-graph settings from the existing estimator so that
+        # any future parameters added to EffectEstimator are not silently dropped.
         if self._causal_graph is not None:
             self._effect_estimator = EffectEstimator(
                 method=self._effect_method,
                 causal_graph=self._causal_graph,
+                confidence_level=self._effect_estimator.confidence_level,
+                n_bootstrap=self._effect_estimator.n_bootstrap,
+                obs_method=self._effect_estimator.obs_method,
             )
 
     def _run_screening(self) -> None:

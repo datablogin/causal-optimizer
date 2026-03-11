@@ -367,16 +367,25 @@ class EffectEstimator:
         control_value: float,
         objective_name: str,
     ) -> EffectEstimate:
-        """Bootstrap fallback when observational estimation fails or is unavailable."""
-        import pandas as pd
+        """Bootstrap fallback when observational estimation fails or is unavailable.
 
+        For continuous treatments, exact float equality rarely matches observed rows.
+        Falls back to a midpoint split: rows at or above the midpoint between
+        treatment_value and control_value are treated as the treatment group.
+        """
         df = experiment_log.to_dataframe()
-        if not isinstance(df, pd.DataFrame):
-            raise TypeError(f"Expected pd.DataFrame, got {type(df).__name__}")
+        # Try exact equality first (works for binary/discrete treatments).
         treated_arr = df[df[treatment_param] == treatment_value][objective_name].values
         control_arr = df[df[treatment_param] == control_value][objective_name].values
         if len(treated_arr) >= 2 and len(control_arr) >= 2:
             return self._bootstrap_estimate(treated_arr, control_arr)
+        # Tolerance-based midpoint split for continuous treatments.
+        if treatment_param in df.columns:
+            mid = (float(treatment_value) + float(control_value)) / 2.0
+            treated_arr = df[df[treatment_param] >= mid][objective_name].values
+            control_arr = df[df[treatment_param] < mid][objective_name].values
+            if len(treated_arr) >= 2 and len(control_arr) >= 2:
+                return self._bootstrap_estimate(treated_arr, control_arr)
         all_vals = df[objective_name].values
         half = max(1, len(all_vals) // 2)
         return self._bootstrap_estimate(all_vals[:half], all_vals[half:])

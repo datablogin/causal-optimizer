@@ -41,6 +41,11 @@ def causal_graph_to_dowhy_str(graph: CausalGraph) -> str:
     """
     lines: list[str] = ["digraph {"]
 
+    # Declare all observed nodes explicitly so isolated nodes (no edges) are
+    # visible to DoWhy and don't silently disappear from graph analysis.
+    for node in graph.nodes:
+        lines.append(f'    "{node}";')
+
     # Directed edges
     for src, dst in graph.edges:
         lines.append(f'    "{src}" -> "{dst}";')
