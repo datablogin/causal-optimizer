@@ -338,16 +338,30 @@ def test_screening_max_retries_proceeds_to_optimization():
 
 def test_screening_resets_counter_on_success():
     """Successful screening resets the attempt counter to allow future re-screening."""
+    from causal_optimizer.designer.screening import ScreeningResult
+
     engine = ExperimentEngine(
         search_space=make_search_space(),
         runner=QuadraticRunner(),
     )
     assert engine._screening_attempts == 0
 
-    # Run 10 experiments to trigger the exploration->optimization transition
-    engine.run_loop(n_experiments=10)
+    success_result = ScreeningResult(
+        main_effects={"x": 1.0, "y": 1.0},
+        important_variables=["x", "y"],
+        interactions={},
+    )
 
-    # Screening succeeded (QuadraticRunner produces useful data), so counter resets to 0
+    with (
+        patch(
+            "causal_optimizer.engine.loop.ScreeningDesigner.screen",
+            return_value=success_result,
+        ),
+        patch.object(engine, "_compute_pomis"),
+    ):
+        engine.run_loop(n_experiments=10)
+
+    # Screening succeeded, so counter resets to 0
     assert engine._screening_result is not None
     assert engine._screening_attempts == 0
 
