@@ -339,14 +339,15 @@ class ExperimentEngine:
             self._phase = "exploitation"
 
         # Run screening and POMIS when transitioning from exploration to optimization
-        if old_phase == "exploration" and self._phase == "optimization":
+        # (also covers direct exploration → exploitation if max_screening_attempts is large)
+        if old_phase == "exploration" and self._phase in ("optimization", "exploitation"):
             if self._screening_attempts < self._max_screening_attempts:
                 self._run_screening()
             else:
                 # Max screening retries exceeded — proceed with all variables
                 logger.warning(
                     "Max screening attempts (%d) reached with no important variables; "
-                    "proceeding to optimization with all variables",
+                    "proceeding with all variables",
                     self._max_screening_attempts,
                 )
                 self._screened_focus_variables = self.search_space.variable_names
