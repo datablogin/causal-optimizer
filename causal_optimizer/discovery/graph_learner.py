@@ -18,7 +18,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Default threshold for treating a correlation as a strong association
+# Default threshold above which a non-outcome pair gets a bidirected edge
+# instead of a directed-by-index-order edge.  Must be ≥ `threshold` to have
+# any effect.  Exposed as a default so callers can override per instance.
 _DEFAULT_BIDIR_THRESHOLD = 0.7
 
 
@@ -31,9 +33,26 @@ class GraphLearner:
     - 'notears': NOTEARS continuous optimization (requires causal-inference dependency)
     """
 
-    def __init__(self, method: str = "correlation", threshold: float = 0.3) -> None:
+    def __init__(
+        self,
+        method: str = "correlation",
+        threshold: float = 0.3,
+        bidir_threshold: float = _DEFAULT_BIDIR_THRESHOLD,
+    ) -> None:
+        """Create a GraphLearner.
+
+        Args:
+            method: Discovery algorithm (``"correlation"``, ``"pc"``, or ``"notears"``).
+            threshold: Minimum absolute correlation to include an edge at all.
+            bidir_threshold: For the correlation method, pairs of non-outcome
+                variables whose |r| exceeds *this* threshold receive a bidirected
+                edge (X ↔ Y) rather than a directed edge.  Must satisfy
+                ``bidir_threshold >= threshold`` to have any effect.  Defaults to
+                ``0.7`` (``_DEFAULT_BIDIR_THRESHOLD``).
+        """
         self.method = method
         self.threshold = threshold
+        self.bidir_threshold = bidir_threshold
 
     def learn(
         self,
@@ -89,9 +108,9 @@ class GraphLearner:
 
         Directed edges (X → Y) are added for pairs where *one* variable is the
         known outcome (``objective_name``).  All other pairs with absolute
-        correlation above ``_DEFAULT_BIDIR_THRESHOLD`` (0.7) receive a
-        bidirected edge (X ↔ Y) to indicate a potential confounder.  Pairs
-        with moderate correlation (above ``self.threshold`` but at most 0.7)
+        correlation above ``self.bidir_threshold`` receive a bidirected edge
+        (X ↔ Y) to indicate a potential confounder.  Pairs with moderate
+        correlation (above ``self.threshold`` but at most ``self.bidir_threshold``)
         are represented as directed edges in index order.
         """
         corr = df.corr().abs()
@@ -118,7 +137,7 @@ class GraphLearner:
                 elif c1 in outcome_cols:
                     # c2 → objective
                     directed_edges.append((c2, c1))
-                elif r > _DEFAULT_BIDIR_THRESHOLD:
+                elif r > self.bidir_threshold:
                     # Strong correlation between two non-outcome variables and
                     # direction is ambiguous → bidirected (confounder proxy)
                     bidirected_edges.append((c1, c2))

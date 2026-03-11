@@ -72,6 +72,7 @@ class ExperimentEngine:
         n_max: int = 100,
         seed: int | None = None,
         discovery_method: str | None = None,
+        discovery_threshold: float = 0.3,
     ) -> None:
         """Initialize the experiment engine.
 
@@ -87,6 +88,10 @@ class ExperimentEngine:
                 auto-discovery (backward-compatible).  When a *causal_graph*
                 is also provided the discovered graph is logged but the prior
                 graph is **not** replaced (hybrid mode).
+            discovery_threshold: Correlation threshold forwarded to
+                :class:`~causal_optimizer.discovery.graph_learner.GraphLearner`.
+                Variable pairs with |r| ≤ this value are not connected.
+                Defaults to ``0.3`` (the ``GraphLearner`` default).
         """
         if discovery_method is not None and discovery_method not in self._VALID_DISCOVERY_METHODS:
             raise ValueError(
@@ -98,7 +103,8 @@ class ExperimentEngine:
         self.runner = runner
         self.objective_name = objective_name
         self.minimize = minimize
-        self.causal_graph = causal_graph
+        # _causal_graph is the single source of truth for the active graph.
+        # self.causal_graph is kept as a public alias that stays in sync.
         self._causal_graph: CausalGraph | None = causal_graph
         # Separate reference to the user-supplied prior so _run_auto_discovery can
         # distinguish "no prior was given" from "auto-discovery already ran once".
@@ -108,6 +114,7 @@ class ExperimentEngine:
         # and block re-discovery from the richer dataset.
         self._prior_causal_graph: CausalGraph | None = causal_graph
         self._discovery_method: str | None = discovery_method
+        self._discovery_threshold: float = discovery_threshold
         self._discovered_graph: CausalGraph | None = None
         self.log = ExperimentLog()
         self._phase: str = "exploration"
@@ -122,6 +129,15 @@ class ExperimentEngine:
         self._archive: MAPElites | None = (
             MAPElites(descriptor_names, minimize=minimize) if descriptor_names else None
         )
+
+    @property
+    def causal_graph(self) -> CausalGraph | None:
+        """The active causal graph (user-supplied prior or auto-discovered)."""
+        return self._causal_graph
+
+    @causal_graph.setter
+    def causal_graph(self, graph: CausalGraph | None) -> None:
+        self._causal_graph = graph
 
     def run_experiment(self, parameters: dict[str, Any]) -> ExperimentResult:
         """Execute a single experiment and log the result."""
@@ -420,7 +436,7 @@ class ExperimentEngine:
 
         from causal_optimizer.discovery.graph_learner import GraphLearner
 
-        learner = GraphLearner(method=self._discovery_method)
+        learner = GraphLearner(method=self._discovery_method, threshold=self._discovery_threshold)
         try:
             discovered = learner.learn(self.log, objective_name=self.objective_name)
         except Exception as exc:
