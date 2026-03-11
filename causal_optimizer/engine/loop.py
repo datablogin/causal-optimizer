@@ -68,6 +68,14 @@ class ExperimentEngine:
         n_max: int = 100,
         seed: int | None = None,
     ) -> None:
+        """Initialize the experiment engine.
+
+        Args:
+            seed: Seed for the epsilon controller's RNG only. Controls
+                reproducibility of observe/intervene decisions in
+                ``OffPolicyPredictor``. Does **not** seed other random
+                sources in the engine (MAP-Elites sampling, bootstrap CI).
+        """
         self.search_space = search_space
         self.runner = runner
         self.objective_name = objective_name

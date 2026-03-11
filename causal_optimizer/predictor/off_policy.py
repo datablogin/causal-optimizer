@@ -49,6 +49,14 @@ class OffPolicyPredictor:
         n_max: int = 100,
         seed: int | None = None,
     ) -> None:
+        """Initialize the off-policy predictor.
+
+        Args:
+            seed: Seed for the epsilon controller's internal RNG. Controls
+                reproducibility of observe/intervene coin flips in
+                ``_should_run_epsilon``. Has no effect when
+                ``epsilon_mode=False``.
+        """
         self.uncertainty_threshold = uncertainty_threshold
         self.min_history = min_history
         self.epsilon_mode = epsilon_mode
