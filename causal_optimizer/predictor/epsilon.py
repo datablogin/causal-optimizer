@@ -48,6 +48,11 @@ def compute_epsilon(
         (more likely to observe rather than intervene).
 
     Note:
+        The convex hull provides an **upper bound** on actual coverage: it
+        includes regions enclosed by observed points but not yet sampled.
+        For example, 4 corner points of a unit square give coverage=1.0
+        despite an unobserved interior.
+
         ``ConvexHull`` complexity grows exponentially with dimensionality.
         For search spaces with more than ~10 continuous variables, consider
         reducing dimensionality or using a simpler coverage estimate.

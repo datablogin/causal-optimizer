@@ -57,6 +57,7 @@ class OffPolicyPredictor:
         self._numeric_var_names: list[str] = []
         self._model_quality: float = 0.0
         self._cached_features: np.ndarray | None = None
+        self._cached_epsilon: float = 0.0
         self._search_space: SearchSpace | None = None
         self._rng: np.random.Generator = np.random.default_rng()
 
@@ -86,22 +87,9 @@ class OffPolicyPredictor:
             and v.variable_type in (VariableType.CONTINUOUS, VariableType.INTEGER)
         ]
 
-        if len(df) < self.min_history or not self._var_names:
-            self._model = None
-            self._cached_features = None
-            return
-
-        features = (
-            df[self._var_names]
-            .apply(
-                lambda x: x.astype(float, errors="ignore"),
-            )
-            .fillna(0)
-            .values
-        )
-
-        # Cache numeric features for epsilon controller
-        if self._numeric_var_names:
+        # Cache numeric features for epsilon controller (even before min_history,
+        # since the convex hull only needs 3+ rows, not min_history rows)
+        if self._numeric_var_names and len(df) >= 1:
             self._cached_features = np.asarray(
                 df[self._numeric_var_names]
                 .apply(lambda x: x.astype(float, errors="ignore"))
@@ -112,6 +100,28 @@ class OffPolicyPredictor:
         else:
             self._cached_features = None
 
+        # Precompute epsilon so _should_run_epsilon avoids repeated ConvexHull work
+        domain_bounds = self._get_domain_bounds()
+        if self._cached_features is not None and domain_bounds is not None:
+            n_current = self._cached_features.shape[0]
+            self._cached_epsilon = compute_epsilon(
+                self._cached_features, domain_bounds, n_current, self.n_max
+            )
+        else:
+            self._cached_epsilon = 0.0
+
+        if len(df) < self.min_history or not self._var_names:
+            self._model = None
+            return
+
+        features = (
+            df[self._var_names]
+            .apply(
+                lambda x: x.astype(float, errors="ignore"),
+            )
+            .fillna(0)
+            .values
+        )
         y = df[objective_name].values
 
         self._model = RandomForestRegressor(n_estimators=100, max_depth=8, random_state=42)
@@ -184,15 +194,14 @@ class OffPolicyPredictor:
         return prediction.uncertainty > self.uncertainty_threshold
 
     def _should_run_epsilon(self, parameters: dict[str, Any]) -> bool:
-        """Epsilon controller decision logic from CBO (Aglietti et al.)."""
-        observed_data = self._get_observed_data()
-        domain_bounds = self._get_domain_bounds()
+        """Epsilon controller decision logic from CBO (Aglietti et al.).
 
-        if observed_data is None or domain_bounds is None:
-            return True  # Not enough data, must run
-
-        n_current = observed_data.shape[0]
-        epsilon = compute_epsilon(observed_data, domain_bounds, n_current, self.n_max)
+        Uses the epsilon value cached during the last ``fit()`` call to avoid
+        recomputing the ConvexHull on every decision.
+        """
+        epsilon = self._cached_epsilon
+        if epsilon <= 0.0:
+            return True  # No coverage data or zero epsilon, must run
 
         # With probability epsilon, observe (skip experiment); otherwise intervene
         if self._rng.random() < epsilon:
@@ -260,8 +269,6 @@ class OffPolicyPredictor:
         bounds: list[tuple[float, float]] = []
         for var in self._search_space.variables:
             if var.name not in self._numeric_var_names:
-                continue
-            if var.variable_type not in (VariableType.CONTINUOUS, VariableType.INTEGER):
                 continue
             lower = var.lower if var.lower is not None else 0.0
             upper = var.upper if var.upper is not None else 1.0

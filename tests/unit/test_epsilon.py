@@ -218,6 +218,23 @@ class TestComputeEpsilon:
         eps = compute_epsilon(data, bounds, n_current=200, n_max=100)
         assert eps == pytest.approx(0.5)
 
+    def test_data_outside_bounds(self) -> None:
+        """Data outside domain bounds can give coverage > 1; epsilon is clamped."""
+        # Data extends to 1.5 but domain is [0, 1]
+        data = np.array(
+            [
+                [0.0, 0.0],
+                [1.5, 0.0],
+                [0.0, 1.5],
+            ]
+        )
+        bounds = [(0.0, 1.0), (0.0, 1.0)]
+        # Hull area = 0.5 * 1.5 * 1.5 = 1.125, domain area = 1.0
+        # coverage = 1.125, rescale = 50/100 = 0.5
+        # epsilon = 1.125 / 0.5 = 2.25, clamped to 1.0
+        eps = compute_epsilon(data, bounds, n_current=50, n_max=100)
+        assert eps == pytest.approx(1.0)
+
 
 # ---------------------------------------------------------------------------
 # should_observe tests
@@ -313,8 +330,8 @@ class TestOffPolicyPredictorEpsilonMode:
         predictor = OffPolicyPredictor(epsilon_mode=True, n_max=100)
         assert predictor.should_run_experiment({"x": 0.5, "y": 0.5}) is True
 
-    def test_epsilon_mode_calls_compute_epsilon(self) -> None:
-        """Verify compute_epsilon is called when in epsilon mode."""
+    def test_epsilon_mode_computes_epsilon_at_fit_time(self) -> None:
+        """Verify compute_epsilon is called during fit() when in epsilon mode."""
         from causal_optimizer.types import ExperimentLog, ExperimentResult, ExperimentStatus
 
         predictor = OffPolicyPredictor(epsilon_mode=True, n_max=100)
@@ -334,13 +351,19 @@ class TestOffPolicyPredictorEpsilonMode:
                     status=ExperimentStatus.KEEP,
                 )
             )
-        predictor.fit(log, search_space, "objective")
 
         with patch("causal_optimizer.predictor.off_policy.compute_epsilon") as mock_compute:
-            mock_compute.return_value = 0.0  # Epsilon=0 -> always intervene
-            result = predictor.should_run_experiment({"x": 0.5, "y": 0.5})
+            mock_compute.return_value = 0.5
+            predictor.fit(log, search_space, "objective")
             mock_compute.assert_called_once()
-            assert result is True
+            assert predictor._cached_epsilon == 0.5
+
+    def test_epsilon_mode_zero_epsilon_always_intervenes(self) -> None:
+        """When cached epsilon is 0, should always intervene."""
+        predictor = OffPolicyPredictor(epsilon_mode=True, n_max=100)
+        predictor._cached_epsilon = 0.0
+        # With epsilon=0, should always return True (intervene)
+        assert predictor.should_run_experiment({"x": 0.5, "y": 0.5}) is True
 
     def test_epsilon_mode_observe_skips_experiment(self) -> None:
         """When epsilon is high and uncertainty is low, skip experiment."""
@@ -364,13 +387,12 @@ class TestOffPolicyPredictorEpsilonMode:
             )
         predictor.fit(log, search_space, "objective")
 
-        # Force observe path: epsilon=1.0 and rng returns 0.0 (< 1.0)
+        # Force observe path: cached epsilon=1.0 and rng returns 0.0 (< 1.0)
+        predictor._cached_epsilon = 1.0
         with patch.object(predictor, "_rng") as mock_rng:
             mock_rng.random.return_value = 0.0
-            with patch("causal_optimizer.predictor.off_policy.compute_epsilon") as mock_eps:
-                mock_eps.return_value = 1.0
-                result = predictor.should_run_experiment({"x": 0.5, "y": 0.5})
-                assert result is False
+            result = predictor.should_run_experiment({"x": 0.5, "y": 0.5})
+            assert result is False
 
     def test_epsilon_mode_observe_high_uncertainty_intervenes(self) -> None:
         """When epsilon says observe but uncertainty is high, intervene anyway."""
@@ -394,14 +416,13 @@ class TestOffPolicyPredictorEpsilonMode:
             )
         predictor.fit(log, search_space, "objective")
 
-        # Force observe path: epsilon=1.0 and rng returns 0.0 (< 1.0)
+        # Force observe path: cached epsilon=1.0 and rng returns 0.0 (< 1.0)
+        predictor._cached_epsilon = 1.0
         with patch.object(predictor, "_rng") as mock_rng:
             mock_rng.random.return_value = 0.0
-            with patch("causal_optimizer.predictor.off_policy.compute_epsilon") as mock_eps:
-                mock_eps.return_value = 1.0
-                # With threshold=0.0, any positive uncertainty triggers intervention
-                result = predictor.should_run_experiment({"x": 0.5, "y": 0.5})
-                assert result is True
+            # With threshold=0.0, any positive uncertainty triggers intervention
+            result = predictor.should_run_experiment({"x": 0.5, "y": 0.5})
+            assert result is True
 
     def test_epsilon_mode_with_mixed_variable_types(self) -> None:
         """Categorical/boolean variables should be excluded from epsilon bounds."""
@@ -478,8 +499,11 @@ class TestOffPolicyPredictorEpsilonMode:
             )
         predictor.fit(log, search_space, "objective")
         assert predictor._model is None  # No model due to min_history
+        assert predictor._cached_features is not None  # But features are cached
+        assert predictor._cached_epsilon > 0.0  # And epsilon is computed
 
-        # Even if epsilon says observe, should intervene because no model
+        # Force observe path and verify it falls back to intervene (no model)
+        predictor._cached_epsilon = 1.0
         with patch.object(predictor, "_rng") as mock_rng:
             mock_rng.random.return_value = 0.0  # Force observe path (random < epsilon)
             result = predictor.should_run_experiment({"x": 0.5, "y": 0.5})
