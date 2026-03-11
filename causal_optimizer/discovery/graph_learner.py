@@ -54,7 +54,14 @@ class GraphLearner:
                 len(experiment_log.results),
                 min_samples,
             )
-            return CausalGraph(edges=[], nodes=[])
+            # Still populate nodes so callers can enumerate variables.
+            df_early = experiment_log.to_dataframe()
+            early_cols = [
+                c
+                for c in df_early.select_dtypes(include=[np.number]).columns
+                if c != "experiment_id"
+            ]
+            return CausalGraph(edges=[], nodes=early_cols)
 
         df = experiment_log.to_dataframe()
         numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()

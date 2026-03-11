@@ -359,6 +359,28 @@ class EffectEstimator:
             method="aipw",
         )
 
+    def _observational_bootstrap_fallback(
+        self,
+        experiment_log: ExperimentLog,
+        treatment_param: str,
+        treatment_value: float,
+        control_value: float,
+        objective_name: str,
+    ) -> EffectEstimate:
+        """Bootstrap fallback when observational estimation fails or is unavailable."""
+        import pandas as pd
+
+        df = experiment_log.to_dataframe()
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError(f"Expected pd.DataFrame, got {type(df).__name__}")
+        treated_arr = df[df[treatment_param] == treatment_value][objective_name].values
+        control_arr = df[df[treatment_param] == control_value][objective_name].values
+        if len(treated_arr) >= 2 and len(control_arr) >= 2:
+            return self._bootstrap_estimate(treated_arr, control_arr)
+        all_vals = df[objective_name].values
+        half = max(1, len(all_vals) // 2)
+        return self._bootstrap_estimate(all_vals[:half], all_vals[half:])
+
     def _observational_estimate(
         self,
         experiment_log: ExperimentLog,
@@ -403,25 +425,15 @@ class EffectEstimator:
             logger.warning(
                 "dowhy not installed, falling back to bootstrap for observational method"
             )
-            df = experiment_log.to_dataframe()
-            treated_arr = df[df[treatment_param] == treatment_value][objective_name].values
-            control_arr = df[df[treatment_param] == control_value][objective_name].values
-            if len(treated_arr) >= 2 and len(control_arr) >= 2:
-                return self._bootstrap_estimate(treated_arr, control_arr)
-            all_vals = df[objective_name].values
-            half = max(1, len(all_vals) // 2)
-            return self._bootstrap_estimate(all_vals[:half], all_vals[half:])
+            return self._observational_bootstrap_fallback(
+                experiment_log, treatment_param, treatment_value, control_value, objective_name
+            )
 
         if not treatment_est.identified or not control_est.identified:
             logger.warning("Effect not identifiable via %s; falling back to bootstrap", self.method)
-            df = experiment_log.to_dataframe()
-            treated_arr = df[df[treatment_param] == treatment_value][objective_name].values
-            control_arr = df[df[treatment_param] == control_value][objective_name].values
-            if len(treated_arr) >= 2 and len(control_arr) >= 2:
-                return self._bootstrap_estimate(treated_arr, control_arr)
-            all_vals = df[objective_name].values
-            half = max(1, len(all_vals) // 2)
-            return self._bootstrap_estimate(all_vals[:half], all_vals[half:])
+            return self._observational_bootstrap_fallback(
+                experiment_log, treatment_param, treatment_value, control_value, objective_name
+            )
 
         point_estimate = treatment_est.expected_outcome - control_est.expected_outcome
         ci_lo = treatment_est.confidence_interval[0] - control_est.confidence_interval[1]
