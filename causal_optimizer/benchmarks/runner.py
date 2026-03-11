@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from causal_optimizer.engine.loop import ExperimentEngine
 from causal_optimizer.types import SearchSpace, VariableType
+
+if TYPE_CHECKING:
+    from causal_optimizer.benchmarks import BenchmarkSCM
 
 
 @dataclass
@@ -62,10 +65,10 @@ class BenchmarkRunner:
 
     def __init__(
         self,
-        benchmark: Any,
+        benchmark: BenchmarkSCM,
         threshold_pct: float = 0.10,
     ) -> None:
-        self.benchmark = benchmark
+        self.benchmark: Any = benchmark
         self.threshold_pct = threshold_pct
 
     def run(
@@ -251,4 +254,7 @@ def _sample_random_params(space: SearchSpace, rng: np.random.Generator) -> dict[
                 msg = f"Variable {var.name!r} is CATEGORICAL but has no choices defined."
                 raise ValueError(msg)
             params[var.name] = choices[int(rng.integers(0, len(choices)))]
+        else:
+            msg = f"Unsupported variable type {var.variable_type!r} for variable {var.name!r}."
+            raise ValueError(msg)
     return params

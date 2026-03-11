@@ -129,6 +129,8 @@ class TestRunnerSmoke:
         assert result.benchmark_name == benchmark_cls.__name__
         assert result.seed == 0
         assert isinstance(result.final_best, float)
+        # final_best must equal the last (and smallest) element of the curve
+        assert result.final_best == result.convergence_curve[-1]
 
 
 class TestConvergenceCurveMonotonicity:
@@ -201,3 +203,27 @@ class TestRunnerEdgeCases:
         assert result.experiments_to_threshold is None or isinstance(
             result.experiments_to_threshold, int
         )
+
+    def test_threshold_step_exact(self) -> None:
+        """Verify threshold step calculation with a known convergence curve."""
+        bench = ToyGraphBenchmark(rng=np.random.default_rng(42))
+        runner = BenchmarkRunner(bench, threshold_pct=0.10)
+        # With known_optimum=1.0 and threshold_pct=0.10: threshold = 0.1
+        # Curve: [5.0, 3.0, 1.05, 0.5] — step 3 has |1.05 - 1.0| = 0.05 <= 0.1
+        step = runner._compute_threshold_step([5.0, 3.0, 1.05, 0.5], known_optimum=1.0)
+        assert step == 3
+
+    def test_threshold_step_never_reached(self) -> None:
+        """Threshold is never reached if all values are far from optimum."""
+        bench = ToyGraphBenchmark(rng=np.random.default_rng(42))
+        runner = BenchmarkRunner(bench, threshold_pct=0.10)
+        step = runner._compute_threshold_step([5.0, 4.0, 3.0], known_optimum=0.0)
+        assert step is None
+
+    def test_threshold_step_zero_optimum(self) -> None:
+        """When optimum is 0.0, fallback scale of 1.0 is used."""
+        bench = ToyGraphBenchmark(rng=np.random.default_rng(42))
+        runner = BenchmarkRunner(bench, threshold_pct=0.10)
+        # threshold = 0.10 * 1.0 = 0.10; |0.05 - 0.0| = 0.05 <= 0.10 → step 2
+        step = runner._compute_threshold_step([5.0, 0.05], known_optimum=0.0)
+        assert step == 2
