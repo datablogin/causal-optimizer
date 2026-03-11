@@ -299,7 +299,8 @@ def test_screening_max_retries_limits_reattempts():
         ),
         patch.object(engine, "_compute_pomis"),
     ):
-        engine.run_loop(n_experiments=50)
+        # 10 → first attempt, 11 → retry 2, 12 → retry 3 (fallback), 13-15 → optimization
+        engine.run_loop(n_experiments=15)
 
     # The real _run_screening increments the counter; verify it hit the max
     assert engine._screening_attempts == engine._max_screening_attempts
