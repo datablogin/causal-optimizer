@@ -63,6 +63,7 @@ class ExperimentEngine:
         minimize: bool = True,
         causal_graph: CausalGraph | None = None,
         max_skips: int = 3,
+        max_screening_attempts: int = 3,
         descriptor_names: list[str] | None = None,
     ) -> None:
         self.search_space = search_space
@@ -78,7 +79,7 @@ class ExperimentEngine:
         self._screened_focus_variables: list[str] | None = None
         self._pomis_sets: list[frozenset[str]] | None = None
         self._screening_attempts: int = 0
-        self._max_screening_attempts: int = 3
+        self._max_screening_attempts: int = max_screening_attempts
         self._descriptor_names = descriptor_names
         self._archive: MAPElites | None = (
             MAPElites(descriptor_names, minimize=minimize) if descriptor_names else None
@@ -115,7 +116,9 @@ class ExperimentEngine:
             and self._descriptor_names
             and status != ExperimentStatus.CRASH
         ):
-            fitness = metrics.get(self.objective_name, float("inf"))
+            fitness = metrics.get(
+                self.objective_name, float("inf") if self.minimize else float("-inf")
+            )
             descriptors = self._extract_descriptors(metrics)
             if descriptors:
                 self._archive.add(result, fitness, descriptors)

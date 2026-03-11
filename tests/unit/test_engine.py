@@ -280,46 +280,52 @@ def test_screening_max_retries_limits_reattempts():
     engine = ExperimentEngine(
         search_space=make_search_space(),
         runner=QuadraticRunner(),
+        max_screening_attempts=3,
     )
-    assert engine._max_screening_attempts == 3
 
-    screening_call_count = 0
+    # Use the real _run_screening but patch ScreeningDesigner to return no important vars
+    from causal_optimizer.designer.screening import ScreeningResult
 
-    def screening_resets_phase() -> None:
-        nonlocal screening_call_count
-        screening_call_count += 1
-        # Simulate what _run_screening does: increment counter, then reset phase
-        engine._screening_attempts += 1
-        engine._phase = "exploration"
-        engine._screened_focus_variables = None
+    empty_result = ScreeningResult(
+        main_effects={},
+        important_variables=[],
+        interactions={},
+    )
 
     with (
-        patch.object(engine, "_run_screening", side_effect=screening_resets_phase),
+        patch(
+            "causal_optimizer.engine.loop.ScreeningDesigner.screen",
+            return_value=empty_result,
+        ),
         patch.object(engine, "_compute_pomis"),
     ):
-        # Run enough experiments to trigger screening multiple times.
-        # Each time screening resets to exploration, the next experiment at n>=10
-        # triggers another attempt. After 3 attempts, it should stop retrying.
         engine.run_loop(n_experiments=50)
 
-    assert screening_call_count == engine._max_screening_attempts
+    # The real _run_screening increments the counter; verify it hit the max
+    assert engine._screening_attempts == engine._max_screening_attempts
 
 
 def test_screening_max_retries_proceeds_to_optimization():
     """After max screening retries, engine proceeds to optimization with all variables."""
+    from causal_optimizer.designer.screening import ScreeningResult
+
     engine = ExperimentEngine(
         search_space=make_search_space(),
         runner=QuadraticRunner(),
+        max_screening_attempts=1,
     )
-    engine._max_screening_attempts = 1
 
-    def screening_resets_phase() -> None:
-        engine._screening_attempts += 1
-        engine._phase = "exploration"
-        engine._screened_focus_variables = None
+    empty_result = ScreeningResult(
+        main_effects={},
+        important_variables=[],
+        interactions={},
+    )
 
     with (
-        patch.object(engine, "_run_screening", side_effect=screening_resets_phase),
+        patch(
+            "causal_optimizer.engine.loop.ScreeningDesigner.screen",
+            return_value=empty_result,
+        ),
         patch.object(engine, "_compute_pomis"),
     ):
         engine.run_loop(n_experiments=20)
