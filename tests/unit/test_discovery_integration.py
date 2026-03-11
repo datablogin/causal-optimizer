@@ -43,18 +43,6 @@ def make_three_var_space() -> SearchSpace:
     )
 
 
-class CorrelatedRunner:
-    """Runner where x and y are strongly correlated via z = x + y."""
-
-    def __init__(self, seed: int = 42) -> None:
-        self._rng = np.random.default_rng(seed)
-
-    def run(self, parameters: dict[str, Any]) -> dict[str, float]:
-        x = parameters.get("x", 0.0)
-        y = parameters.get("y", 0.0)
-        return {"objective": float(x**2 + y**2)}
-
-
 class QuadraticRunner:
     """Simple test runner: f(x, y) = x² + y² (minimum at origin)."""
 
@@ -379,7 +367,8 @@ def test_graph_learner_no_edges_for_uncorrelated_data() -> None:
     """Uncorrelated data should produce no edges with high threshold."""
     from causal_optimizer.discovery.graph_learner import GraphLearner
 
-    learner = GraphLearner(method="correlation", threshold=0.9)
+    # bidir_threshold must be >= threshold
+    learner = GraphLearner(method="correlation", threshold=0.9, bidir_threshold=0.95)
     log = _make_log_no_correlation(n=30)
 
     graph = learner.learn(log, min_samples=5)
