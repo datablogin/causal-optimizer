@@ -450,7 +450,14 @@ class ExperimentEngine:
         )
 
         if self._causal_graph is None:
-            # No prior graph — use the discovered graph going forward
+            # No prior graph — use the discovered graph going forward.
+            # Warn when the discovered graph has no edges: observational
+            # estimation will silently fall back to the RF surrogate.
+            if not discovered.edges:
+                logger.warning(
+                    "Auto-discovery produced an empty graph (no edges); "
+                    "observational estimation will fall back to RF surrogate."
+                )
             self._causal_graph = discovered
             self.causal_graph = discovered
         else:
