@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Protocol
 
 from causal_optimizer.benchmarks.complete_graph import CompleteGraphBenchmark
+from causal_optimizer.benchmarks.high_dimensional import HighDimensionalSparseBenchmark
 from causal_optimizer.benchmarks.interaction import InteractionBenchmark
+from causal_optimizer.benchmarks.runner import BenchmarkResult, BenchmarkRunner
 from causal_optimizer.benchmarks.toy_graph import ToyGraphBenchmark
 
 if TYPE_CHECKING:
@@ -32,8 +34,11 @@ class BenchmarkSCM(Protocol):
 
 
 __all__ = [
+    "BenchmarkResult",
+    "BenchmarkRunner",
     "BenchmarkSCM",
     "CompleteGraphBenchmark",
+    "HighDimensionalSparseBenchmark",
     "InteractionBenchmark",
     "ToyGraphBenchmark",
 ]
