@@ -587,3 +587,36 @@ class TestEffectEstimatorIntegration:
         assert np.isfinite(result.point_estimate)
         assert np.isfinite(result.confidence_interval[0])
         assert np.isfinite(result.confidence_interval[1])
+
+    def test_invalid_obs_method_raises_value_error(self) -> None:
+        """EffectEstimator rejects invalid obs_method at construction time."""
+        from causal_optimizer.estimator.effects import EffectEstimator
+
+        with pytest.raises(ValueError, match="obs_method"):
+            EffectEstimator(method="observational", obs_method="invalid_strategy")
+
+    def test_estimate_improvement_with_observational_method_uses_bootstrap(self) -> None:
+        """estimate_improvement with method='observational' uses bootstrap path, not DoWhy."""
+        from causal_optimizer.estimator.effects import EffectEstimator
+
+        # estimate_improvement doesn't require dowhy — it compares against historical dist
+        estimator = EffectEstimator(method="observational")
+
+        rng = np.random.default_rng(42)
+        log = _make_log_from_scm(rng=rng, n=100)
+
+        # Request with a value clearly better than history (very low for minimize=True)
+        result = estimator.estimate_improvement(
+            experiment_log=log,
+            current_value=-1000.0,
+            objective_name="objective",
+            minimize=True,
+        )
+
+        from causal_optimizer.estimator.effects import EffectEstimate
+
+        assert isinstance(result, EffectEstimate)
+        # Method label should be "bootstrap" since no DoWhy ran
+        assert result.method == "bootstrap"
+        # Very negative value should be clearly significant
+        assert result.is_significant is True

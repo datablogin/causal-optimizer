@@ -30,9 +30,6 @@ logger = logging.getLogger(__name__)
 _MIN_EXPERIMENTS = 5
 _MIN_KEPT = 2
 _MIN_DISCARDED = 2
-_N_BOOTSTRAP = 1000
-_ALPHA_EARLY = 0.1  # permissive threshold for < 20 experiments
-_ALPHA_LATE = 0.05  # stricter threshold for >= 20 experiments
 
 
 class ExperimentRunner(Protocol):

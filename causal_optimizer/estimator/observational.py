@@ -185,7 +185,7 @@ class ObservationalEstimator:
             # Guard against None or NaN estimate values (DoWhy can return NaN
             # for numerically degenerate cases, e.g. singular covariance matrix).
             if estimate.value is None or (
-                isinstance(estimate.value, float) and np.isnan(estimate.value)
+                isinstance(estimate.value, (float, np.floating)) and np.isnan(estimate.value)
             ):
                 logger.warning(
                     "DoWhy returned None/NaN estimate for %s method. Falling back.",

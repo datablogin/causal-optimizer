@@ -76,9 +76,9 @@ class GraphLearner:
         if self.method == "correlation":
             return self._learn_correlation(df[numeric_cols], objective_name=objective_name)
         elif self.method == "pc":
-            return self._learn_pc(df[numeric_cols])
+            return self._learn_pc(df[numeric_cols], objective_name=objective_name)
         elif self.method == "notears":
-            return self._learn_notears(df[numeric_cols])
+            return self._learn_notears(df[numeric_cols], objective_name=objective_name)
         else:
             raise ValueError(f"Unknown method: {self.method}")
 
@@ -114,25 +114,25 @@ class GraphLearner:
 
         return CausalGraph(edges=edges, nodes=cols)
 
-    def _learn_pc(self, df: pd.DataFrame) -> CausalGraph:
+    def _learn_pc(self, df: pd.DataFrame, objective_name: str = "objective") -> CausalGraph:
         """PC algorithm via causal-inference library."""
         try:
             from causal_inference.discovery import PCAlgorithm
         except ImportError:
             logger.warning("causal-inference not installed, falling back to correlation")
-            return self._learn_correlation(df)
+            return self._learn_correlation(df, objective_name=objective_name)
 
         pc = PCAlgorithm(alpha=0.05)
         result = pc.fit(df)
         return CausalGraph(edges=result.edges, nodes=df.columns.tolist())
 
-    def _learn_notears(self, df: pd.DataFrame) -> CausalGraph:
+    def _learn_notears(self, df: pd.DataFrame, objective_name: str = "objective") -> CausalGraph:
         """NOTEARS continuous optimization via causal-inference library."""
         try:
             from causal_inference.discovery import NOTEARS
         except ImportError:
             logger.warning("causal-inference not installed, falling back to correlation")
-            return self._learn_correlation(df)
+            return self._learn_correlation(df, objective_name=objective_name)
 
         notears = NOTEARS(threshold=self.threshold)
         result = notears.fit(df)

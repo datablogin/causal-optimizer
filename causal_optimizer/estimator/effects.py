@@ -278,6 +278,9 @@ class EffectEstimator:
             # Bootstrap CI for the best-so-far in the kept distribution.
             # If current_value falls outside the CI on the improvement side,
             # it is significantly better than any historically kept result.
+            # Note: when method="observational", this path still uses bootstrap
+            # (not DoWhy), because estimate_improvement compares against the
+            # historical distribution, not an ATE between two intervention values.
             rng = np.random.default_rng(42)
             n_iter = 100 if len(kept_arr) < 10 else self.n_bootstrap
             boot_bests = np.empty(n_iter)
@@ -307,12 +310,15 @@ class EffectEstimator:
             ci_lo = float(current_value - ci_best_hi)
             ci_hi = float(current_value - ci_best_lo)
 
+            # When method="observational", label this as bootstrap since no DoWhy
+            # identification ran here (we compare against historical distribution).
+            method_label = "bootstrap" if self.method == "observational" else self.method
             return EffectEstimate(
                 point_estimate=point_estimate,
                 confidence_interval=(ci_lo, ci_hi),
                 p_value=p_value,
                 is_significant=is_significant,
-                method=self.method,
+                method=method_label,
             )
 
         else:
@@ -388,7 +394,10 @@ class EffectEstimator:
                 return self._bootstrap_estimate(treated_arr, control_arr)
         all_vals = df[objective_name].values
         half = max(1, len(all_vals) // 2)
-        return self._bootstrap_estimate(all_vals[:half], all_vals[half:])
+        # Random split to avoid row-order bias (earlier vs later experiments).
+        rng = np.random.default_rng(42)
+        idx = rng.permutation(len(all_vals))
+        return self._bootstrap_estimate(all_vals[idx[:half]], all_vals[idx[half:]])
 
     def _observational_estimate(
         self,
@@ -445,6 +454,10 @@ class EffectEstimator:
             )
 
         point_estimate = treatment_est.expected_outcome - control_est.expected_outcome
+        # CI by subtraction of endpoints — deliberately conservative (widest interval
+        # consistent with independent estimates).  This is an over-approximation when
+        # treatment and control are estimated from the same dataset, but guarantees
+        # valid coverage without requiring joint estimation of the covariance.
         ci_lo = treatment_est.confidence_interval[0] - control_est.confidence_interval[1]
         ci_hi = treatment_est.confidence_interval[1] - control_est.confidence_interval[0]
 
