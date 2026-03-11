@@ -24,7 +24,6 @@ from causal_optimizer.types import (
 
 
 def _make_log_from_scm(
-    rng: np.random.Generator,
     n: int = 300,
     treatment_effect: float = 3.0,
     confound_strength: float = 0.0,
@@ -58,7 +57,6 @@ def _make_log_from_scm(
 
 
 def _make_confounded_log(
-    rng: np.random.Generator,
     n: int = 400,
     seed: int = 42,
 ) -> ExperimentLog:
@@ -195,8 +193,7 @@ class TestObservationalEstimatorBackdoor:
         graph = CausalGraph(edges=[("x", "z"), ("z", "objective")])
         estimator = ObservationalEstimator(causal_graph=graph, method="backdoor")
 
-        rng = np.random.default_rng(42)
-        log = _make_log_from_scm(rng=rng)
+        log = _make_log_from_scm()
 
         result = estimator.estimate_intervention(
             experiment_log=log,
@@ -214,8 +211,7 @@ class TestObservationalEstimatorBackdoor:
         graph = CausalGraph(edges=[("x", "z"), ("z", "objective")])
         estimator = ObservationalEstimator(causal_graph=graph, method="backdoor")
 
-        rng = np.random.default_rng(42)
-        log = _make_log_from_scm(rng=rng)
+        log = _make_log_from_scm()
 
         result = estimator.estimate_intervention(
             experiment_log=log,
@@ -236,8 +232,7 @@ class TestObservationalEstimatorBackdoor:
         graph = CausalGraph(edges=[("x", "z"), ("z", "objective")])
         estimator = ObservationalEstimator(causal_graph=graph, method="backdoor")
 
-        rng = np.random.default_rng(42)
-        log = _make_log_from_scm(rng=rng, n=500, treatment_effect=3.0)
+        log = _make_log_from_scm(n=500, treatment_effect=3.0)
 
         result = estimator.estimate_intervention(
             experiment_log=log,
@@ -256,8 +251,7 @@ class TestObservationalEstimatorBackdoor:
         graph = CausalGraph(edges=[("x", "z"), ("z", "objective")])
         estimator = ObservationalEstimator(causal_graph=graph, method="backdoor")
 
-        rng = np.random.default_rng(42)
-        log = _make_log_from_scm(rng=rng, n=300)
+        log = _make_log_from_scm(n=300)
 
         result = estimator.estimate_intervention(
             experiment_log=log,
@@ -277,8 +271,7 @@ class TestObservationalEstimatorBackdoor:
         graph = CausalGraph(edges=[("x", "z"), ("z", "objective")])
         estimator = ObservationalEstimator(causal_graph=graph, method="backdoor")
 
-        rng = np.random.default_rng(42)
-        log = _make_log_from_scm(rng=rng)
+        log = _make_log_from_scm()
 
         result = estimator.estimate_intervention(
             experiment_log=log,
@@ -300,8 +293,7 @@ class TestConfoundingCorrection:
     @pytest.mark.slow
     def test_naive_correlation_overestimates_in_confounded_graph(self) -> None:
         """Without adjustment, naive regression inflates the estimate."""
-        rng = np.random.default_rng(42)
-        log = _make_confounded_log(rng=rng, n=400)
+        log = _make_confounded_log(n=400)
 
         df = log.to_dataframe()
         # Naive OLS: regress objective on x
@@ -324,8 +316,7 @@ class TestConfoundingCorrection:
         )
         estimator = ObservationalEstimator(causal_graph=graph, method="backdoor")
 
-        rng = np.random.default_rng(42)
-        log = _make_confounded_log(rng=rng, n=200)
+        log = _make_confounded_log(n=200)
 
         result = estimator.estimate_intervention(
             experiment_log=log,
@@ -359,8 +350,7 @@ class TestNonIdentifiable:
         )
         estimator = ObservationalEstimator(causal_graph=graph, method="backdoor")
 
-        rng = np.random.default_rng(42)
-        log = _make_confounded_log(rng=rng, n=200)
+        log = _make_confounded_log(n=200)
 
         result = estimator.estimate_intervention(
             experiment_log=log,
@@ -382,8 +372,7 @@ class TestNonIdentifiable:
         )
         estimator = ObservationalEstimator(causal_graph=graph, method="backdoor")
 
-        rng = np.random.default_rng(42)
-        log = _make_confounded_log(rng=rng, n=200)
+        log = _make_confounded_log(n=200)
 
         result = estimator.estimate_intervention(
             experiment_log=log,
@@ -423,8 +412,7 @@ class TestGracefulDegradation:
             graph = CausalGraph(edges=[("x", "objective")])
             estimator = ObservationalEstimator(causal_graph=graph)
 
-            rng = np.random.default_rng(42)
-            log = _make_log_from_scm(rng=rng, n=50)
+            log = _make_log_from_scm(n=50)
 
             with pytest.raises(ImportError, match="dowhy"):
                 estimator.estimate_intervention(
@@ -452,8 +440,7 @@ class TestEffectEstimatorIntegration:
         from causal_optimizer.estimator.effects import EffectEstimator
 
         estimator = EffectEstimator(method="observational")
-        rng = np.random.default_rng(42)
-        log = _make_log_from_scm(rng=rng, n=100)
+        log = _make_log_from_scm(n=100)
 
         with pytest.raises(ValueError, match="causal_graph"):
             estimator.estimate_effect(
@@ -471,8 +458,7 @@ class TestEffectEstimatorIntegration:
         graph = CausalGraph(edges=[("x", "z"), ("z", "objective")])
         estimator = EffectEstimator(method="observational", causal_graph=graph)
 
-        rng = np.random.default_rng(42)
-        log = _make_log_from_scm(rng=rng, n=200)
+        log = _make_log_from_scm(n=200)
 
         result = estimator.estimate_effect(
             experiment_log=log,
@@ -508,8 +494,7 @@ class TestEffectEstimatorIntegration:
             graph = CausalGraph(edges=[("x", "z"), ("z", "objective")])
             estimator = EffectEstimator(method="observational", causal_graph=graph)
 
-            rng = np.random.default_rng(42)
-            log = _make_log_from_scm(rng=rng, n=100)
+            log = _make_log_from_scm(n=100)
 
             result = estimator.estimate_effect(
                 experiment_log=log,
@@ -543,8 +528,7 @@ class TestEffectEstimatorIntegration:
         graph = CausalGraph(edges=[("x", "z"), ("z", "objective")])
         estimator = EffectEstimator(method="observational", causal_graph=graph)
 
-        rng = np.random.default_rng(42)
-        log = _make_log_from_scm(rng=rng, n=200)
+        log = _make_log_from_scm(n=200)
 
         result = estimator.estimate_effect(
             experiment_log=log,
@@ -571,8 +555,7 @@ class TestEffectEstimatorIntegration:
         # estimate_improvement doesn't require dowhy — it compares against historical dist
         estimator = EffectEstimator(method="observational")
 
-        rng = np.random.default_rng(42)
-        log = _make_log_from_scm(rng=rng, n=100)
+        log = _make_log_from_scm(n=100)
 
         # Request with a value clearly better than history (very low for minimize=True)
         result = estimator.estimate_improvement(
@@ -633,8 +616,7 @@ class TestEffectEstimatorIntegration:
         graph = CausalGraph(edges=[("x", "objective")])
         estimator = ObservationalEstimator(causal_graph=graph, method="backdoor")
 
-        rng = np.random.default_rng(42)
-        log = _make_log_from_scm(rng=rng, n=100)
+        log = _make_log_from_scm(n=100)
 
         # Mock DoWhy to return NaN estimate value
         mock_estimate = MagicMock()
