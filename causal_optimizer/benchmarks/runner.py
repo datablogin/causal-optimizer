@@ -137,8 +137,13 @@ class BenchmarkRunner:
             List of ``BenchmarkResult``, one per (strategy, seed) pair.
 
         Raises:
-            ValueError: If any strategy name is not supported.
+            ValueError: If any strategy name is not supported, or if ``n_seeds``
+                is not a positive integer.
         """
+        if n_seeds <= 0:
+            msg = f"n_seeds must be a positive integer, got {n_seeds!r}."
+            raise ValueError(msg)
+
         for strategy in strategies:
             self._validate_strategy(strategy)
 

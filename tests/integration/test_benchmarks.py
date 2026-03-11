@@ -56,7 +56,7 @@ class TestHighDimensionalBenchmark:
         bench = HighDimensionalSparseBenchmark(rng=np.random.default_rng(42))
         result = bench.run({"x1": 1.0, "x2": 0.5, "x3": 0.1})
         assert "objective" in result
-        assert isinstance(result["objective"], float)
+        assert isinstance(result["objective"], (float, np.floating))
 
     def test_irrelevant_variables_ignored(self) -> None:
         """Changing x4-x20 should not affect the objective (noise aside)."""
@@ -199,6 +199,18 @@ class TestRunnerEdgeCases:
         runner = BenchmarkRunner(bench)
         with pytest.raises(ValueError, match="Unknown strategy"):
             runner.run(strategy="invalid", budget=5)
+
+    def test_zero_n_seeds_raises(self) -> None:
+        bench = ToyGraphBenchmark(rng=np.random.default_rng(42))
+        runner = BenchmarkRunner(bench)
+        with pytest.raises(ValueError, match="n_seeds must be a positive integer"):
+            runner.compare(strategies=["random"], budget=5, n_seeds=0)
+
+    def test_negative_n_seeds_raises(self) -> None:
+        bench = ToyGraphBenchmark(rng=np.random.default_rng(42))
+        runner = BenchmarkRunner(bench)
+        with pytest.raises(ValueError, match="n_seeds must be a positive integer"):
+            runner.compare(strategies=["random"], budget=5, n_seeds=-1)
 
     def test_budget_one(self) -> None:
         bench = ToyGraphBenchmark(rng=np.random.default_rng(42))
