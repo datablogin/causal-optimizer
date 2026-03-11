@@ -182,6 +182,18 @@ class TestCompare:
 class TestRunnerEdgeCases:
     """Edge cases and error handling for BenchmarkRunner."""
 
+    def test_zero_budget_raises(self) -> None:
+        bench = ToyGraphBenchmark(rng=np.random.default_rng(42))
+        runner = BenchmarkRunner(bench)
+        with pytest.raises(ValueError, match="budget must be a positive integer"):
+            runner.run(strategy="random", budget=0)
+
+    def test_negative_budget_raises(self) -> None:
+        bench = ToyGraphBenchmark(rng=np.random.default_rng(42))
+        runner = BenchmarkRunner(bench)
+        with pytest.raises(ValueError, match="budget must be a positive integer"):
+            runner.run(strategy="random", budget=-1)
+
     def test_invalid_strategy_raises(self) -> None:
         bench = ToyGraphBenchmark(rng=np.random.default_rng(42))
         runner = BenchmarkRunner(bench)

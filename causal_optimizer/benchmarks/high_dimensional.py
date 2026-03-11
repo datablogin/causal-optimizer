@@ -71,9 +71,12 @@ class HighDimensionalSparseBenchmark:
         Causal variables not provided follow their structural equations.
         Non-causal variables (x4-x20) are ignored — they have no effect on Y.
 
-        Structural noise draws are guarded so the RNG stream position is
-        stable regardless of which variables are intervened on. This ensures
-        the y-noise draw is always at the same RNG position.
+        Structural noise draws are guarded: RNG draws only occur for
+        variables that follow their structural equations (not intervened on).
+        Note that the RNG stream position still depends on which variables
+        are intervened on — different intervention sets consume different
+        numbers of draws before the y-noise call. This matches the standard
+        partial intervention semantics used by the other benchmarks.
         """
         x1 = parameters["x1"] if "x1" in parameters else self.rng.uniform(-5.0, 5.0)
         x2 = (

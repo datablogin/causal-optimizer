@@ -58,8 +58,10 @@ class BenchmarkRunner:
             Must accept ``noise_scale`` and ``rng`` keyword arguments in ``__init__``
             (all existing benchmarks do, but the Protocol cannot enforce constructors).
         threshold_pct: Percentage tolerance for ``experiments_to_threshold``.
-            A result is "within threshold" when ``|objective - optimum| <= threshold_pct
-            * |optimum|``. Defaults to 10%.
+            A result is "within threshold" when ``objective <= known_optimum +
+            threshold_pct * |optimum|`` (one-sided: at-or-better than the
+            optimum counts, even if the measured value overshoots). Defaults
+            to 10%.
     """
 
     _STRATEGIES = frozenset({"causal", "random", "surrogate_only"})
@@ -105,6 +107,9 @@ class BenchmarkRunner:
             ValueError: If ``strategy`` is not one of the supported strategies.
         """
         self._validate_strategy(strategy)
+        if budget <= 0:
+            msg = f"budget must be a positive integer, got {budget!r}."
+            raise ValueError(msg)
 
         benchmark_name = type(self.benchmark).__name__
 
