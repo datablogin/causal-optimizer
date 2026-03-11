@@ -110,10 +110,140 @@ def test_experiment_log_best():
             ),
         ]
     )
-    best = log.best_result
+    # Default args: minimize=True, objective_name="objective"
+    best = log.best_result()
     assert best is not None
     assert best.experiment_id == "2"
     assert best.metrics["objective"] == 3.0
+
+
+def test_experiment_log_best_result_minimize():
+    """best_result with minimize=True returns the smallest objective."""
+    log = ExperimentLog(
+        results=[
+            ExperimentResult(
+                experiment_id="1",
+                parameters={},
+                metrics={"objective": 10.0},
+                status=ExperimentStatus.KEEP,
+            ),
+            ExperimentResult(
+                experiment_id="2",
+                parameters={},
+                metrics={"objective": 2.0},
+                status=ExperimentStatus.KEEP,
+            ),
+            ExperimentResult(
+                experiment_id="3",
+                parameters={},
+                metrics={"objective": 5.0},
+                status=ExperimentStatus.KEEP,
+            ),
+        ]
+    )
+    best = log.best_result(minimize=True)
+    assert best is not None
+    assert best.experiment_id == "2"
+
+
+def test_experiment_log_best_result_maximize():
+    """best_result with minimize=False returns the largest objective."""
+    log = ExperimentLog(
+        results=[
+            ExperimentResult(
+                experiment_id="1",
+                parameters={},
+                metrics={"objective": 10.0},
+                status=ExperimentStatus.KEEP,
+            ),
+            ExperimentResult(
+                experiment_id="2",
+                parameters={},
+                metrics={"objective": 2.0},
+                status=ExperimentStatus.KEEP,
+            ),
+            ExperimentResult(
+                experiment_id="3",
+                parameters={},
+                metrics={"objective": 5.0},
+                status=ExperimentStatus.KEEP,
+            ),
+        ]
+    )
+    best = log.best_result(minimize=False)
+    assert best is not None
+    assert best.experiment_id == "1"
+
+
+def test_experiment_log_best_result_custom_objective():
+    """best_result with a custom objective_name uses the correct metric."""
+    log = ExperimentLog(
+        results=[
+            ExperimentResult(
+                experiment_id="1",
+                parameters={},
+                metrics={"loss": 0.5, "accuracy": 0.8},
+                status=ExperimentStatus.KEEP,
+            ),
+            ExperimentResult(
+                experiment_id="2",
+                parameters={},
+                metrics={"loss": 0.2, "accuracy": 0.95},
+                status=ExperimentStatus.KEEP,
+            ),
+        ]
+    )
+    best_loss = log.best_result(objective_name="loss", minimize=True)
+    assert best_loss is not None
+    assert best_loss.experiment_id == "2"
+
+    best_acc = log.best_result(objective_name="accuracy", minimize=False)
+    assert best_acc is not None
+    assert best_acc.experiment_id == "2"
+
+
+def test_experiment_log_best_result_no_kept():
+    """best_result returns None when no results have KEEP status."""
+    log = ExperimentLog(
+        results=[
+            ExperimentResult(
+                experiment_id="1",
+                parameters={},
+                metrics={"objective": 1.0},
+                status=ExperimentStatus.DISCARD,
+            ),
+            ExperimentResult(
+                experiment_id="2",
+                parameters={},
+                metrics={"objective": 2.0},
+                status=ExperimentStatus.CRASH,
+            ),
+        ]
+    )
+    assert log.best_result() is None
+
+
+def test_experiment_log_best_result_backward_compat():
+    """Default args match old property behavior: objective_name='objective', minimize=True."""
+    log = ExperimentLog(
+        results=[
+            ExperimentResult(
+                experiment_id="a",
+                parameters={},
+                metrics={"objective": 100.0},
+                status=ExperimentStatus.KEEP,
+            ),
+            ExperimentResult(
+                experiment_id="b",
+                parameters={},
+                metrics={"objective": 1.0},
+                status=ExperimentStatus.KEEP,
+            ),
+        ]
+    )
+    best = log.best_result()
+    assert best is not None
+    assert best.experiment_id == "b"
 
 
 def test_experiment_log_to_dataframe():

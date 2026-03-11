@@ -159,7 +159,7 @@ def _suggest_exploitation(
     if base_parameters is not None:
         params = dict(base_parameters)
     else:
-        best = experiment_log.best_result
+        best = experiment_log.best_result(objective_name, minimize)
         if best is None:
             return _random_sample(search_space)
         params = dict(best.parameters)
@@ -223,7 +223,7 @@ def _suggest_bayesian(
 
     # Determine which variables to optimize vs. fix
     focus_set = set(focus_variables) if focus_variables else None
-    best = experiment_log.best_result
+    best = experiment_log.best_result(objective_name, minimize)
     best_params = dict(best.parameters) if best else {}
 
     # Build Ax parameter list (only focus variables)
@@ -324,7 +324,7 @@ def _suggest_surrogate(
         focus_var_names = all_var_names
 
     # Get best-known values for non-focus variables
-    best = experiment_log.best_result
+    best = experiment_log.best_result(objective_name, minimize)
     best_params = dict(best.parameters) if best else {}
 
     features = (

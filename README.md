@@ -133,7 +133,7 @@ class MyRunner:
 # Run the optimization loop
 engine = ExperimentEngine(search_space=search_space, runner=MyRunner())
 log = engine.run_loop(n_experiments=50)
-print(f"Best: {log.best_result.metrics}")
+print(f"Best: {log.best_result().metrics}")
 ```
 
 See [examples/quickstart.py](examples/quickstart.py) for a complete working example using the Branin benchmark function.

@@ -83,7 +83,7 @@ def test_engine_run_loop():
     )
     log = engine.run_loop(n_experiments=5)
     assert len(log.results) == 5
-    assert log.best_result is not None
+    assert log.best_result() is not None
 
 
 def test_engine_phase_transitions():
@@ -270,3 +270,111 @@ def test_engine_pomis_not_computed_when_screening_resets_phase():
 
     # _compute_pomis should NOT have been called because screening reverted phase
     mock_pomis.assert_not_called()
+
+
+# --- Screening retry guard tests ---
+
+
+def test_screening_max_retries_limits_reattempts():
+    """Screening that finds no important variables should only retry up to max attempts."""
+    engine = ExperimentEngine(
+        search_space=make_search_space(),
+        runner=QuadraticRunner(),
+    )
+    assert engine._max_screening_attempts == 3
+
+    screening_call_count = 0
+
+    def screening_resets_phase() -> None:
+        nonlocal screening_call_count
+        screening_call_count += 1
+        # Simulate what _run_screening does: increment counter, then reset phase
+        engine._screening_attempts += 1
+        engine._phase = "exploration"
+        engine._screened_focus_variables = None
+
+    with (
+        patch.object(engine, "_run_screening", side_effect=screening_resets_phase),
+        patch.object(engine, "_compute_pomis"),
+    ):
+        # Run enough experiments to trigger screening multiple times.
+        # Each time screening resets to exploration, the next experiment at n>=10
+        # triggers another attempt. After 3 attempts, it should stop retrying.
+        engine.run_loop(n_experiments=50)
+
+    assert screening_call_count == engine._max_screening_attempts
+
+
+def test_screening_max_retries_proceeds_to_optimization():
+    """After max screening retries, engine proceeds to optimization with all variables."""
+    engine = ExperimentEngine(
+        search_space=make_search_space(),
+        runner=QuadraticRunner(),
+    )
+    engine._max_screening_attempts = 1
+
+    def screening_resets_phase() -> None:
+        engine._screening_attempts += 1
+        engine._phase = "exploration"
+        engine._screened_focus_variables = None
+
+    with (
+        patch.object(engine, "_run_screening", side_effect=screening_resets_phase),
+        patch.object(engine, "_compute_pomis"),
+    ):
+        engine.run_loop(n_experiments=20)
+
+    # After max retries, focus variables should be set to all variables
+    assert engine._screened_focus_variables == engine.search_space.variable_names
+    # Phase should have progressed past exploration
+    assert engine._phase in ("optimization", "exploitation")
+
+
+def test_screening_increments_attempt_counter():
+    """Each call to _run_screening increments the attempt counter."""
+    engine = ExperimentEngine(
+        search_space=make_search_space(),
+        runner=QuadraticRunner(),
+    )
+    assert engine._screening_attempts == 0
+
+    # Run 10 experiments to trigger the exploration->optimization transition
+    engine.run_loop(n_experiments=10)
+
+    # _run_screening should have been called, incrementing the counter
+    assert engine._screening_attempts >= 1
+
+
+# --- MAP-Elites crash guard tests ---
+
+
+def test_crashed_experiment_not_added_to_archive():
+    """Crashed experiments should not be added to the MAP-Elites archive."""
+    engine = ExperimentEngine(
+        search_space=make_search_space(),
+        runner=CrashingRunner(),
+        descriptor_names=["objective"],
+    )
+    assert engine._archive is not None
+
+    engine.run_experiment({"x": 1.0, "y": 1.0})
+    assert len(engine.log.results) == 1
+    assert engine.log.results[0].status == ExperimentStatus.CRASH
+    # Archive should be empty — crashed experiment must not be added
+    assert len(engine._archive.archive) == 0
+
+
+def test_successful_experiment_added_to_archive():
+    """Successful experiments should still be added to the MAP-Elites archive."""
+    engine = ExperimentEngine(
+        search_space=make_search_space(),
+        runner=QuadraticRunner(),
+        descriptor_names=["objective"],
+    )
+    assert engine._archive is not None
+
+    engine.run_experiment({"x": 1.0, "y": 2.0})
+    assert len(engine.log.results) == 1
+    assert engine.log.results[0].status == ExperimentStatus.KEEP
+    # Archive should have the result
+    assert len(engine._archive.archive) == 1

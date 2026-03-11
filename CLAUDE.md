@@ -71,11 +71,8 @@ This is a hard requirement. No exceptions. PRs that skip any of these steps must
 - Pydantic v2 `BaseModel` for serializable types; `@dataclass` for `CausalGraph` (needs mutable post-init)
 - Ruff: line length 100, rules `E F I N W UP B SIM TCH`
 - mypy strict mode enabled
-- `ExperimentLog.best_result` currently hardcodes `"objective"` as metric key and always minimizes — known bug, needs parameterization
+- `ExperimentLog.best_result()` accepts `objective_name` and `minimize` parameters (defaults preserve backward compatibility)
 
 ## Known issues
 
-- `ExperimentLog.best_result` ignores configurable `objective_name` and `minimize` flag
-- Screening can re-trigger indefinitely if no important variables found (no max retry guard)
-- Crashed experiments can enter MAP-Elites archive (no status guard)
 - `EffectEstimator` exists but is not wired into the engine loop (ad-hoc bootstrap used instead)

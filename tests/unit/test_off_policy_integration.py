@@ -199,4 +199,4 @@ class TestIntegrationStepLoop:
         )
         log = engine.run_loop(n_experiments=8)
         assert len(log.results) == 8
-        assert log.best_result is not None
+        assert log.best_result() is not None
