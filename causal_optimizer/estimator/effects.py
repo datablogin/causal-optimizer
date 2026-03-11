@@ -56,10 +56,12 @@ class EffectEstimator:
         method: str = "bootstrap",
         confidence_level: float = 0.95,
         n_bootstrap: int = 1000,
+        seed: int | None = None,
     ) -> None:
         self.method = method
         self.confidence_level = confidence_level
         self.n_bootstrap = n_bootstrap
+        self._rng = np.random.default_rng(seed)
 
     def estimate_effect(
         self,
@@ -130,14 +132,13 @@ class EffectEstimator:
             small_sample: When True (or when total n < 10), uses 100 bootstrap
                 samples instead of ``self.n_bootstrap`` for efficiency.
         """
-        rng = np.random.default_rng()
         n_total = len(treated) + len(control)
         n_iter = 100 if (small_sample or n_total < 10) else self.n_bootstrap
         effects = np.empty(n_iter)
 
         for i in range(n_iter):
-            t_boot = rng.choice(treated, size=len(treated), replace=True)
-            c_boot = rng.choice(control, size=len(control), replace=True)
+            t_boot = self._rng.choice(treated, size=len(treated), replace=True)
+            c_boot = self._rng.choice(control, size=len(control), replace=True)
             effects[i] = np.mean(t_boot) - np.mean(c_boot)
 
         point_estimate = float(np.mean(treated) - np.mean(control))
@@ -284,11 +285,10 @@ class EffectEstimator:
         and the test degenerates to the greedy check.  Instead we bootstrap
         the *mean* of the kept distribution so the CI is meaningful.
         """
-        rng = np.random.default_rng()
         n_iter = 100 if len(kept_arr) < 10 else self.n_bootstrap
         boot_means = np.empty(n_iter)
         for i in range(n_iter):
-            boot = rng.choice(kept_arr, size=len(kept_arr), replace=True)
+            boot = self._rng.choice(kept_arr, size=len(kept_arr), replace=True)
             boot_means[i] = float(np.mean(boot))
 
         point_estimate = current_value - best

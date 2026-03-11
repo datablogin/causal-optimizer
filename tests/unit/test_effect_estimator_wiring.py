@@ -153,20 +153,20 @@ def test_engine_keeps_clear_improvement() -> None:
     engine = ExperimentEngine(
         search_space=make_search_space(),
         runner=QuadraticRunner(),
+        seed=42,  # Seed for deterministic bootstrap
     )
 
-    # Simulate history: 5 kept experiments all with high values
+    # 5 KEEP + 2 DISCARD satisfies both thresholds (_MIN_KEPT=5, _MIN_DISCARDED=2)
     engine.log = make_log_with_results(
-        objective_values=[50.0, 48.0, 46.0, 44.0, 42.0],
-        statuses=[ExperimentStatus.KEEP] * 5,
+        objective_values=[50.0, 48.0, 46.0, 44.0, 42.0, 90.0, 85.0],
+        statuses=[ExperimentStatus.KEEP] * 5 + [ExperimentStatus.DISCARD] * 2,
     )
 
     # A dramatic improvement (value = 1.0 vs best = 42.0) should be KEEP
     # For minimization: lower is better, so 1.0 << 42.0 is clearly better
     result = engine._is_improvement_significant(current_objective=1.0)
-    # Either significant=True or None (too few samples) — both lead to KEEP
-    # The key test: it should not return False for such a large improvement
-    assert result is not False
+    # The statistical test should confirm this is significant (True)
+    assert result is True
 
 
 @pytest.mark.slow

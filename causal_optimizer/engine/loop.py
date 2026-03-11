@@ -76,10 +76,9 @@ class ExperimentEngine:
         """Initialize the experiment engine.
 
         Args:
-            seed: Seed for the epsilon controller's RNG only. Controls
-                reproducibility of observe/intervene decisions in
-                ``OffPolicyPredictor``. Does **not** seed other random
-                sources in the engine (MAP-Elites sampling, bootstrap CI).
+            seed: Seed for reproducibility of random operations in
+                ``OffPolicyPredictor`` and ``EffectEstimator`` bootstrap
+                sampling.  Does **not** seed MAP-Elites archive sampling.
             effect_method: Method used by :class:`EffectEstimator` to assess
                 statistical significance in keep/discard decisions.  Valid
                 values are ``"difference"`` and ``"bootstrap"`` (default).
@@ -112,6 +111,7 @@ class ExperimentEngine:
             method=effect_method,
             confidence_level=confidence_level,
             n_bootstrap=n_bootstrap,
+            seed=seed,
         )
         self._predictor = OffPolicyPredictor(epsilon_mode=epsilon_mode, n_max=n_max, seed=seed)
         self._max_skips = max_skips
