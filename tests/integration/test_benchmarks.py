@@ -209,7 +209,8 @@ class TestRunnerEdgeCases:
         bench = ToyGraphBenchmark(rng=np.random.default_rng(42))
         runner = BenchmarkRunner(bench, threshold_pct=0.10)
         # With known_optimum=1.0 and threshold_pct=0.10: threshold = 0.1
-        # Curve: [5.0, 3.0, 1.05, 0.5] — step 3 has |1.05 - 1.0| = 0.05 <= 0.1
+        # One-sided check: val <= optimum + threshold = 1.1
+        # Curve: [5.0, 3.0, 1.05, 0.5] — step 3 has 1.05 <= 1.1
         step = runner._compute_threshold_step([5.0, 3.0, 1.05, 0.5], known_optimum=1.0)
         assert step == 3
 
@@ -220,10 +221,19 @@ class TestRunnerEdgeCases:
         step = runner._compute_threshold_step([5.0, 4.0, 3.0], known_optimum=0.0)
         assert step is None
 
+    def test_threshold_step_overshoot(self) -> None:
+        """Values better than optimum should still count as converged."""
+        bench = ToyGraphBenchmark(rng=np.random.default_rng(42))
+        runner = BenchmarkRunner(bench, threshold_pct=0.10)
+        # known_optimum=-1.0, threshold=0.10. One-sided: val <= -1.0 + 0.10 = -0.90
+        # Step 2 has -1.5 <= -0.90, so it counts as converged.
+        step = runner._compute_threshold_step([5.0, -1.5], known_optimum=-1.0)
+        assert step == 2
+
     def test_threshold_step_zero_optimum(self) -> None:
         """When optimum is 0.0, fallback scale of 1.0 is used."""
         bench = ToyGraphBenchmark(rng=np.random.default_rng(42))
         runner = BenchmarkRunner(bench, threshold_pct=0.10)
-        # threshold = 0.10 * 1.0 = 0.10; |0.05 - 0.0| = 0.05 <= 0.10 → step 2
+        # threshold = 0.10 * 1.0 = 0.10; 0.05 <= 0.0 + 0.10 → step 2
         step = runner._compute_threshold_step([5.0, 0.05], known_optimum=0.0)
         assert step == 2

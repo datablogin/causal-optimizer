@@ -70,12 +70,22 @@ class HighDimensionalSparseBenchmark:
 
         Causal variables not provided follow their structural equations.
         Non-causal variables (x4-x20) are ignored — they have no effect on Y.
+
+        Structural noise draws are guarded so the RNG stream position is
+        stable regardless of which variables are intervened on. This ensures
+        the y-noise draw is always at the same RNG position.
         """
-        x1 = parameters.get("x1", self.rng.uniform(-5.0, 5.0))
-        x2_structural = np.sin(x1) + self.rng.normal(0, self.noise_scale)
-        x2 = parameters.get("x2", x2_structural)
-        x3_structural = x2**2 / 10 + self.rng.normal(0, self.noise_scale)
-        x3 = parameters.get("x3", x3_structural)
+        x1 = parameters["x1"] if "x1" in parameters else self.rng.uniform(-5.0, 5.0)
+        x2 = (
+            parameters["x2"]
+            if "x2" in parameters
+            else np.sin(x1) + self.rng.normal(0, self.noise_scale)
+        )
+        x3 = (
+            parameters["x3"]
+            if "x3" in parameters
+            else x2**2 / 10 + self.rng.normal(0, self.noise_scale)
+        )
 
         y = np.cos(x3) - x3 / 5 + self.rng.normal(0, self.noise_scale)
         return {"objective": -y}

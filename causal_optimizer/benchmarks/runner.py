@@ -251,7 +251,10 @@ class BenchmarkRunner:
         threshold = self.threshold_pct * abs_optimum
 
         for i, val in enumerate(convergence_curve):
-            if abs(val - known_optimum) <= threshold:
+            # One-sided check: value at-or-better than (optimum + threshold) counts
+            # as converged. This correctly handles noisy overshoot where the
+            # objective goes below the optimum (for minimization).
+            if val <= known_optimum + threshold:
                 return i + 1  # 1-indexed step count
         return None
 
