@@ -27,6 +27,7 @@ def suggest_parameters(
     objective_name: str = "objective",
     screened_variables: list[str] | None = None,
     base_parameters: dict[str, Any] | None = None,
+    pomis_sets: list[frozenset[str]] | None = None,
 ) -> dict[str, Any]:
     """Suggest next experiment parameters based on current phase and history.
 
@@ -35,6 +36,8 @@ def suggest_parameters(
             Complements graph-based focus variables (intersection if both available).
         base_parameters: Base parameters to perturb from (e.g., from MAP-Elites elite).
             Used in exploitation phase instead of the overall best.
+        pomis_sets: POMIS intervention sets from causal graph analysis.
+            When provided, constrains optimization to intervene on POMIS members.
     """
     if phase == "exploration":
         return _suggest_exploration(search_space, experiment_log)
@@ -46,6 +49,7 @@ def suggest_parameters(
             minimize,
             objective_name,
             screened_variables=screened_variables,
+            pomis_sets=pomis_sets,
         )
     elif phase == "exploitation":
         focus_variables = _get_focus_variables(search_space, causal_graph, objective_name)
@@ -79,12 +83,17 @@ def _suggest_optimization(
     minimize: bool,
     objective_name: str,
     screened_variables: list[str] | None = None,
+    pomis_sets: list[frozenset[str]] | None = None,
 ) -> dict[str, Any]:
     """Optimization: Bayesian optimization with optional causal guidance.
 
     If a causal graph is available, uses it to identify which variables
     to prioritize (ancestors of the objective in the DAG). Screening results
     complement the graph-based focus.
+
+    If POMIS sets are provided (from graphs with confounders), the optimizer
+    selects the least-explored POMIS set and constrains suggestions to those
+    variables.
     """
     df = experiment_log.to_dataframe()
     if len(df) < 3:
@@ -104,6 +113,17 @@ def _suggest_optimization(
         focus_variables = screened_variables
     else:
         focus_variables = graph_focus
+
+    # If POMIS sets available, use them to constrain intervention variables
+    if pomis_sets is not None and len(pomis_sets) > 0:
+        chosen_set = _select_pomis_set(pomis_sets, experiment_log)
+        if chosen_set is not None:
+            pomis_focus = [v for v in search_space.variable_names if v in chosen_set]
+            if pomis_focus:
+                # Intersect with existing focus (graph + screening)
+                intersected = [v for v in pomis_focus if v in focus_variables]
+                focus_variables = intersected if intersected else pomis_focus
+                logger.info("POMIS constraining focus to: %s", focus_variables)
 
     # Try Bayesian optimization via Ax
     try:
@@ -364,6 +384,24 @@ def _get_focus_variables(
     # Intersect with search space variables
     focus = [v for v in search_space.variable_names if v in ancestors]
     return focus if focus else search_space.variable_names
+
+
+def _select_pomis_set(
+    pomis_sets: list[frozenset[str]],
+    experiment_log: ExperimentLog,
+) -> frozenset[str] | None:
+    """Select which POMIS set to explore next (round-robin strategy).
+
+    Uses a deterministic round-robin based on experiment count to ensure
+    each POMIS set gets equal exploration over time.
+    """
+    if not pomis_sets:
+        return None
+
+    # Count only optimization-phase experiments for balanced round-robin
+    opt_count = sum(1 for r in experiment_log.results if r.metadata.get("phase") == "optimization")
+    idx = opt_count % len(pomis_sets)
+    return pomis_sets[idx]
 
 
 def _random_sample(search_space: SearchSpace) -> dict[str, Any]:

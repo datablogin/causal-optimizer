@@ -76,6 +76,7 @@ class ExperimentEngine:
         self._max_skips = max_skips
         self._screening_result: ScreeningResult | None = None
         self._screened_focus_variables: list[str] | None = None
+        self._pomis_sets: list[frozenset[str]] | None = None
         self._descriptor_names = descriptor_names
         self._archive: MAPElites | None = (
             MAPElites(descriptor_names, minimize=minimize) if descriptor_names else None
@@ -143,6 +144,8 @@ class ExperimentEngine:
                         base_parameters=elite.parameters,
                     )
 
+        # Only pass pomis_sets during optimization phase (not used in exploitation)
+        pomis_sets = self._pomis_sets if self._phase == "optimization" else None
         return suggest_parameters(
             search_space=self.search_space,
             experiment_log=self.log,
@@ -151,6 +154,7 @@ class ExperimentEngine:
             minimize=self.minimize,
             objective_name=self.objective_name,
             screened_variables=self._screened_focus_variables,
+            pomis_sets=pomis_sets,
         )
 
     def step(self) -> ExperimentResult:
@@ -323,9 +327,11 @@ class ExperimentEngine:
         else:
             self._phase = "exploitation"
 
-        # Run screening when transitioning from exploration to optimization
+        # Run screening and POMIS when transitioning from exploration to optimization
         if old_phase == "exploration" and self._phase == "optimization":
             self._run_screening()
+            if self._phase == "optimization":  # screening may have reverted to exploration
+                self._compute_pomis()
 
     def _run_screening(self) -> None:
         """Run screening analysis to identify important variables."""
@@ -355,6 +361,22 @@ class ExperimentEngine:
             )
 
         logger.info("Screening summary:\n%s", result.summary)
+
+    def _compute_pomis(self) -> None:
+        """Compute POMIS sets if the causal graph has confounders."""
+        if self.causal_graph is None or not self.causal_graph.has_confounders:
+            return
+
+        try:
+            from causal_optimizer.optimizer.pomis import compute_pomis
+
+            self._pomis_sets = compute_pomis(self.causal_graph, self.objective_name)
+            logger.info("POMIS sets: %s", self._pomis_sets)
+        except Exception:
+            logger.warning(
+                "POMIS computation failed or unavailable, continuing without", exc_info=True
+            )
+            self._pomis_sets = None
 
     def _extract_descriptors(self, metrics: dict[str, float]) -> dict[str, float]:
         """Extract descriptor values from metrics for MAP-Elites."""
