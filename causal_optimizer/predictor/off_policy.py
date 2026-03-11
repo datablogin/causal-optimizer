@@ -14,7 +14,8 @@ import numpy as np
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import cross_val_score
 
-from causal_optimizer.predictor.epsilon import compute_epsilon, should_observe
+from causal_optimizer.predictor.epsilon import compute_epsilon
+from causal_optimizer.types import VariableType
 
 if TYPE_CHECKING:
     from causal_optimizer.types import ExperimentLog, SearchSpace
@@ -67,18 +68,17 @@ class OffPolicyPredictor:
     ) -> None:
         """Fit the surrogate model on experiment history.
 
-        Note: when ``epsilon_mode`` is enabled, this method stores a reference
-        to the (mutable) ``experiment_log``. The epsilon controller intentionally
-        reads the latest log state at decision time so the convex hull grows as
-        experiments are appended between ``fit()`` calls.
+        When ``epsilon_mode`` is enabled, this method also caches the numeric
+        feature matrix for the epsilon controller. The cache is a point-in-time
+        snapshot that updates each time ``fit()`` is called. Since the engine
+        calls ``fit()`` after every experiment (see ``run_experiment`` in
+        ``loop.py``), the cache stays current.
         """
         self._search_space = search_space
         df = experiment_log.to_dataframe()
         self._var_names = [v.name for v in search_space.variables if v.name in df.columns]
 
         # Track which variables are numeric (continuous/integer) for epsilon mode
-        from causal_optimizer.types import VariableType
-
         self._numeric_var_names = [
             v.name
             for v in search_space.variables
@@ -194,14 +194,21 @@ class OffPolicyPredictor:
         n_current = observed_data.shape[0]
         epsilon = compute_epsilon(observed_data, domain_bounds, n_current, self.n_max)
 
-        # Use the shared should_observe function for the stochastic decision
-        observe = should_observe(observed_data, domain_bounds, n_current, self.n_max, rng=self._rng)
-
-        if observe:
+        # With probability epsilon, observe (skip experiment); otherwise intervene
+        if self._rng.random() < epsilon:
             # Even when the epsilon controller says observe, check if
-            # uncertainty is too high — if so, fall back to intervening
+            # uncertainty is too high — if so, fall back to intervening.
+            # Also intervene if there's no model (prediction is None),
+            # since we can't trust a nonexistent surrogate.
             prediction = self.predict(parameters)
-            if prediction is not None and prediction.uncertainty > self.uncertainty_threshold:
+            if prediction is None:
+                logger.debug(
+                    "Epsilon controller chose observe (epsilon=%.3f), but no model "
+                    "available; intervening instead",
+                    epsilon,
+                )
+                return True
+            if prediction.uncertainty > self.uncertainty_threshold:
                 logger.debug(
                     "Epsilon controller chose observe (epsilon=%.3f), but uncertainty "
                     "too high (%.3f > %.3f); intervening instead",
@@ -249,8 +256,6 @@ class OffPolicyPredictor:
         """
         if self._search_space is None:
             return None
-
-        from causal_optimizer.types import VariableType
 
         bounds: list[tuple[float, float]] = []
         for var in self._search_space.variables:

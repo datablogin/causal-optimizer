@@ -46,6 +46,11 @@ def compute_epsilon(
     Returns:
         Epsilon in [0, 1]. Higher epsilon means more trust in the surrogate
         (more likely to observe rather than intervene).
+
+    Note:
+        ``ConvexHull`` complexity grows exponentially with dimensionality.
+        For search spaces with more than ~10 continuous variables, consider
+        reducing dimensionality or using a simpler coverage estimate.
     """
     if n_current <= 0 or n_max <= 0:
         return 0.0

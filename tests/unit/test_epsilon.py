@@ -313,8 +313,8 @@ class TestOffPolicyPredictorEpsilonMode:
         predictor = OffPolicyPredictor(epsilon_mode=True, n_max=100)
         assert predictor.should_run_experiment({"x": 0.5, "y": 0.5}) is True
 
-    def test_epsilon_mode_calls_should_observe(self) -> None:
-        """Verify should_observe is called when in epsilon mode."""
+    def test_epsilon_mode_calls_compute_epsilon(self) -> None:
+        """Verify compute_epsilon is called when in epsilon mode."""
         from causal_optimizer.types import ExperimentLog, ExperimentResult, ExperimentStatus
 
         predictor = OffPolicyPredictor(epsilon_mode=True, n_max=100)
@@ -336,14 +336,14 @@ class TestOffPolicyPredictorEpsilonMode:
             )
         predictor.fit(log, search_space, "objective")
 
-        with patch("causal_optimizer.predictor.off_policy.should_observe") as mock_observe:
-            mock_observe.return_value = False  # Don't observe -> intervene
+        with patch("causal_optimizer.predictor.off_policy.compute_epsilon") as mock_compute:
+            mock_compute.return_value = 0.0  # Epsilon=0 -> always intervene
             result = predictor.should_run_experiment({"x": 0.5, "y": 0.5})
-            mock_observe.assert_called_once()
+            mock_compute.assert_called_once()
             assert result is True
 
     def test_epsilon_mode_observe_skips_experiment(self) -> None:
-        """When should_observe returns True and uncertainty is low, skip experiment."""
+        """When epsilon is high and uncertainty is low, skip experiment."""
         from causal_optimizer.types import ExperimentLog, ExperimentResult, ExperimentStatus
 
         predictor = OffPolicyPredictor(epsilon_mode=True, n_max=100)
@@ -364,14 +364,16 @@ class TestOffPolicyPredictorEpsilonMode:
             )
         predictor.fit(log, search_space, "objective")
 
-        with patch("causal_optimizer.predictor.off_policy.should_observe") as mock_observe:
-            mock_observe.return_value = True  # Observe -> try to skip
-            # With low uncertainty, should actually skip (return False)
-            result = predictor.should_run_experiment({"x": 0.5, "y": 0.5})
-            assert result is False
+        # Force observe path: epsilon=1.0 and rng returns 0.0 (< 1.0)
+        with patch.object(predictor, "_rng") as mock_rng:
+            mock_rng.random.return_value = 0.0
+            with patch("causal_optimizer.predictor.off_policy.compute_epsilon") as mock_eps:
+                mock_eps.return_value = 1.0
+                result = predictor.should_run_experiment({"x": 0.5, "y": 0.5})
+                assert result is False
 
     def test_epsilon_mode_observe_high_uncertainty_intervenes(self) -> None:
-        """When should_observe says observe but uncertainty is high, intervene anyway."""
+        """When epsilon says observe but uncertainty is high, intervene anyway."""
         from causal_optimizer.types import ExperimentLog, ExperimentResult, ExperimentStatus
 
         predictor = OffPolicyPredictor(epsilon_mode=True, n_max=100, uncertainty_threshold=0.0)
@@ -392,11 +394,14 @@ class TestOffPolicyPredictorEpsilonMode:
             )
         predictor.fit(log, search_space, "objective")
 
-        with patch("causal_optimizer.predictor.off_policy.should_observe") as mock_observe:
-            mock_observe.return_value = True  # Observe -> try to skip
-            # With threshold=0.0, any positive uncertainty will trigger intervention
-            result = predictor.should_run_experiment({"x": 0.5, "y": 0.5})
-            assert result is True
+        # Force observe path: epsilon=1.0 and rng returns 0.0 (< 1.0)
+        with patch.object(predictor, "_rng") as mock_rng:
+            mock_rng.random.return_value = 0.0
+            with patch("causal_optimizer.predictor.off_policy.compute_epsilon") as mock_eps:
+                mock_eps.return_value = 1.0
+                # With threshold=0.0, any positive uncertainty triggers intervention
+                result = predictor.should_run_experiment({"x": 0.5, "y": 0.5})
+                assert result is True
 
     def test_epsilon_mode_with_mixed_variable_types(self) -> None:
         """Categorical/boolean variables should be excluded from epsilon bounds."""
@@ -449,6 +454,49 @@ class TestOffPolicyPredictorEpsilonMode:
         bounds = predictor._get_domain_bounds()
         assert bounds is not None
         assert len(bounds) == 2
+
+    def test_epsilon_mode_no_model_intervenes_when_observing(self) -> None:
+        """When epsilon says observe but no surrogate model exists, intervene."""
+        from causal_optimizer.types import ExperimentLog, ExperimentResult, ExperimentStatus
+
+        # min_history=20 means no model will be fitted with only 5 experiments,
+        # but we have enough data for epsilon computation (>= 3 rows)
+        predictor = OffPolicyPredictor(epsilon_mode=True, n_max=100, min_history=20)
+        log = ExperimentLog()
+        search_space = make_search_space()
+        rng = np.random.default_rng(42)
+        for i in range(5):
+            x_val = float(rng.random())
+            y_val = float(rng.random())
+            log.results.append(
+                ExperimentResult(
+                    experiment_id=str(i),
+                    parameters={"x": x_val, "y": y_val},
+                    metrics={"objective": x_val**2 + y_val**2},
+                    status=ExperimentStatus.KEEP,
+                )
+            )
+        predictor.fit(log, search_space, "objective")
+        assert predictor._model is None  # No model due to min_history
+
+        # Even if epsilon says observe, should intervene because no model
+        with patch.object(predictor, "_rng") as mock_rng:
+            mock_rng.random.return_value = 0.0  # Force observe path (random < epsilon)
+            result = predictor.should_run_experiment({"x": 0.5, "y": 0.5})
+            assert result is True  # Must intervene since no model
+
+    def test_compute_epsilon_duplicate_points(self) -> None:
+        """Duplicate points should produce zero-volume hull."""
+        data = np.array(
+            [
+                [0.5, 0.5],
+                [0.5, 0.5],
+                [0.5, 0.5],
+            ]
+        )
+        bounds = [(0.0, 1.0), (0.0, 1.0)]
+        eps = compute_epsilon(data, bounds, n_current=3, n_max=100)
+        assert eps == 0.0
 
 
 # ---------------------------------------------------------------------------
