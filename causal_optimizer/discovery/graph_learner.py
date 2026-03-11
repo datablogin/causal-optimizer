@@ -53,8 +53,8 @@ class GraphLearner:
         if bidir_threshold < threshold:
             raise ValueError(
                 f"bidir_threshold ({bidir_threshold!r}) must be >= threshold ({threshold!r}); "
-                "when bidir_threshold < threshold every correlated non-outcome pair becomes "
-                "a bidirected edge, making directed edges unreachable dead code"
+                "when bidir_threshold < threshold, no pairs can ever exceed bidir_threshold "
+                "(since they must first exceed threshold), making bidirected edges unreachable"
             )
         self.method = method
         self.threshold = threshold

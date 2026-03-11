@@ -103,6 +103,12 @@ class ExperimentEngine:
                 f"discovery_method={discovery_method!r} is not valid; "
                 f"choose one of {sorted(self._VALID_DISCOVERY_METHODS)} or None"
             )
+        if discovery_bidir_threshold < discovery_threshold:
+            raise ValueError(
+                f"discovery_bidir_threshold ({discovery_bidir_threshold!r}) must be >= "
+                f"discovery_threshold ({discovery_threshold!r}); "
+                "when bidir_threshold < threshold, bidirected edges are unreachable"
+            )
 
         self.search_space = search_space
         self.runner = runner
@@ -453,7 +459,10 @@ class ExperimentEngine:
         )
         try:
             discovered = learner.learn(self.log, objective_name=self.objective_name)
-        except Exception as exc:
+        except (ValueError, ImportError, RuntimeError) as exc:
+            # Gracefully degrade on expected failures (bad data, missing dep,
+            # algorithm convergence issues).  Other exceptions propagate so
+            # programming errors are not silently swallowed.
             logger.error(
                 "Auto-discovery failed (%s: %s), continuing without causal graph",
                 type(exc).__name__,
