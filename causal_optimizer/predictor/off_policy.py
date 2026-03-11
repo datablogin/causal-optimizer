@@ -14,6 +14,9 @@ import numpy as np
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import cross_val_score
 
+from causal_optimizer.predictor.epsilon import compute_epsilon
+from causal_optimizer.types import VariableType
+
 if TYPE_CHECKING:
     from causal_optimizer.types import ExperimentLog, SearchSpace
 
@@ -42,12 +45,31 @@ class OffPolicyPredictor:
         self,
         uncertainty_threshold: float = 0.5,
         min_history: int = 5,
+        epsilon_mode: bool = False,
+        n_max: int = 100,
+        seed: int | None = None,
     ) -> None:
+        """Initialize the off-policy predictor.
+
+        Args:
+            seed: Seed for the epsilon controller's internal RNG. Controls
+                reproducibility of observe/intervene coin flips in
+                ``_should_run_epsilon``. Has no effect when
+                ``epsilon_mode=False``.
+        """
         self.uncertainty_threshold = uncertainty_threshold
         self.min_history = min_history
+        self.epsilon_mode = epsilon_mode
+        self.n_max = n_max
         self._model: RandomForestRegressor | None = None
         self._var_names: list[str] = []
+        self._numeric_var_names: list[str] = []
         self._model_quality: float = 0.0
+        self._cached_features: np.ndarray | None = None
+        self._cached_epsilon: float = 0.0
+        self._search_space: SearchSpace | None = None
+        self._rng: np.random.Generator = np.random.default_rng(seed)
+        self._warned_unbound_vars: set[str] = set()
 
     def fit(
         self,
@@ -55,9 +77,55 @@ class OffPolicyPredictor:
         search_space: SearchSpace,
         objective_name: str = "objective",
     ) -> None:
-        """Fit the surrogate model on experiment history."""
+        """Fit the surrogate model on experiment history.
+
+        When ``epsilon_mode`` is enabled, this method also caches the numeric
+        feature matrix for the epsilon controller. The cache is a point-in-time
+        snapshot that updates each time ``fit()`` is called. Since the engine
+        calls ``fit()`` after every experiment (see ``run_experiment`` in
+        ``loop.py``), the cache stays current.
+        """
+        self._search_space = search_space
         df = experiment_log.to_dataframe()
         self._var_names = [v.name for v in search_space.variables if v.name in df.columns]
+
+        # Epsilon mode: track numeric variables, cache features, precompute epsilon
+        if self.epsilon_mode:
+            self._numeric_var_names = [
+                v.name
+                for v in search_space.variables
+                if v.name in df.columns
+                and v.variable_type in (VariableType.CONTINUOUS, VariableType.INTEGER)
+            ]
+
+            # Cache numeric features (even before min_history, since the
+            # convex hull only needs 3+ rows, not min_history rows).
+            # Drop rows with NaN rather than imputing 0.0 — imputing can
+            # place points outside domain bounds and inflate hull coverage.
+            if self._numeric_var_names and len(df) >= 1:
+                numeric_df = df[self._numeric_var_names].dropna()
+                if len(numeric_df) >= 1:
+                    self._cached_features = numeric_df.to_numpy(dtype=np.float64)
+                else:
+                    self._cached_features = None
+            else:
+                self._cached_features = None
+
+            # Precompute epsilon to avoid repeated ConvexHull work
+            domain_bounds = self._get_domain_bounds()
+            if self._cached_features is not None and domain_bounds is not None:
+                # Use total experiment count for budget progress (not the
+                # NaN-dropped row count used for the hull data).
+                n_current = len(df)
+                self._cached_epsilon = compute_epsilon(
+                    self._cached_features, domain_bounds, n_current, self.n_max
+                )
+            else:
+                self._cached_epsilon = 0.0
+        else:
+            self._numeric_var_names = []
+            self._cached_features = None
+            self._cached_epsilon = 0.0
 
         if len(df) < self.min_history or not self._var_names:
             self._model = None
@@ -116,10 +184,23 @@ class OffPolicyPredictor:
     def should_run_experiment(self, parameters: dict[str, Any]) -> bool:
         """Decide whether to run the experiment or trust the prediction.
 
-        This implements the observation-intervention tradeoff from CBO:
-        - Low uncertainty + good model → trust prediction, skip experiment
-        - High uncertainty or poor model → run the experiment
+        When epsilon_mode is False (default), uses the original heuristic:
+        - Low uncertainty + good model -> trust prediction, skip experiment
+        - High uncertainty or poor model -> run the experiment
+
+        When epsilon_mode is True, uses the CBO epsilon controller:
+        - Compute epsilon from coverage of the search space
+        - With probability epsilon: OBSERVE (skip experiment, trust surrogate)
+        - With probability 1-epsilon: INTERVENE (run experiment)
+        - Even when observing, fall back to intervening if uncertainty is high
         """
+        if self.epsilon_mode:
+            return self._should_run_epsilon(parameters)
+
+        return self._should_run_heuristic(parameters)
+
+    def _should_run_heuristic(self, parameters: dict[str, Any]) -> bool:
+        """Original heuristic-based decision logic."""
         prediction = self.predict(parameters)
         if prediction is None:
             return True  # No model, must run
@@ -128,3 +209,92 @@ class OffPolicyPredictor:
             return True  # Model too poor to trust
 
         return prediction.uncertainty > self.uncertainty_threshold
+
+    def _should_run_epsilon(self, parameters: dict[str, Any]) -> bool:
+        """Epsilon controller decision logic from CBO (Aglietti et al.).
+
+        Uses the epsilon value cached during the last ``fit()`` call to avoid
+        recomputing the ConvexHull on every decision.
+
+        Note:
+            The epsilon controller is effectively dormant until model quality
+            exceeds 0.3 (requires >= 10 experiments for cross-validation).
+            During experiments 5--9 the model exists but has quality 0.0, so
+            the model-quality guard always forces intervention.
+        """
+        epsilon = self._cached_epsilon
+        if epsilon <= 0.0:
+            return True  # No coverage data or zero epsilon, must run
+
+        # With probability epsilon, observe (skip experiment); otherwise intervene
+        if self._rng.random() < epsilon:
+            # Check model availability and quality cheaply before running
+            # RF inference — avoids redundant predict() calls when the model
+            # is known to be unreliable (e.g., experiments 5–9 where
+            # model_quality is 0.0 because cross-validation hasn't run yet).
+            if self._model is None or self._model_quality < 0.3:
+                logger.debug(
+                    "Epsilon controller chose observe (epsilon=%.3f), but model "
+                    "unavailable or quality too low (%.3f); intervening instead",
+                    epsilon,
+                    self._model_quality,
+                )
+                return True
+            prediction = self.predict(parameters)
+            if prediction is None:
+                logger.debug(
+                    "Epsilon controller chose observe (epsilon=%.3f), but predict() "
+                    "returned None; intervening instead",
+                    epsilon,
+                )
+                return True
+            if prediction.uncertainty > self.uncertainty_threshold:
+                logger.debug(
+                    "Epsilon controller chose observe (epsilon=%.3f), but uncertainty "
+                    "too high (%.3f > %.3f); intervening instead",
+                    epsilon,
+                    prediction.uncertainty,
+                    self.uncertainty_threshold,
+                )
+                return True
+            logger.debug(
+                "Epsilon controller chose observe (epsilon=%.3f); skipping experiment",
+                epsilon,
+            )
+            return False
+
+        # With probability 1-epsilon, intervene (run experiment)
+        return True
+
+    def _get_domain_bounds(self) -> list[tuple[float, float]] | None:
+        """Extract bounds from the search space for numeric variables only.
+
+        Only includes continuous and integer variables (not categorical or
+        boolean).
+
+        Returns:
+            List of (lower, upper) tuples for each numeric variable, or None
+            if the search space is not available or has no numeric variables.
+        """
+        if self._search_space is None:
+            return None
+
+        bounds: list[tuple[float, float]] = []
+        for var in self._search_space.variables:
+            if var.name not in self._numeric_var_names:
+                continue
+            if (
+                var.lower is None or var.upper is None
+            ) and var.name not in self._warned_unbound_vars:
+                logger.warning(
+                    "Variable '%s' has no bounds; defaulting to [0.0, 1.0] for "
+                    "epsilon coverage estimate. Set explicit bounds for accurate "
+                    "results.",
+                    var.name,
+                )
+                self._warned_unbound_vars.add(var.name)
+            lower = var.lower if var.lower is not None else 0.0
+            upper = var.upper if var.upper is not None else 1.0
+            bounds.append((lower, upper))
+
+        return bounds if bounds else None

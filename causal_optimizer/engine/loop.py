@@ -65,7 +65,18 @@ class ExperimentEngine:
         max_skips: int = 3,
         max_screening_attempts: int = 3,
         descriptor_names: list[str] | None = None,
+        epsilon_mode: bool = False,
+        n_max: int = 100,
+        seed: int | None = None,
     ) -> None:
+        """Initialize the experiment engine.
+
+        Args:
+            seed: Seed for the epsilon controller's RNG only. Controls
+                reproducibility of observe/intervene decisions in
+                ``OffPolicyPredictor``. Does **not** seed other random
+                sources in the engine (MAP-Elites sampling, bootstrap CI).
+        """
         self.search_space = search_space
         self.runner = runner
         self.objective_name = objective_name
@@ -73,7 +84,7 @@ class ExperimentEngine:
         self.causal_graph = causal_graph
         self.log = ExperimentLog()
         self._phase: str = "exploration"
-        self._predictor = OffPolicyPredictor()
+        self._predictor = OffPolicyPredictor(epsilon_mode=epsilon_mode, n_max=n_max, seed=seed)
         self._max_skips = max_skips
         self._screening_result: ScreeningResult | None = None
         self._screened_focus_variables: list[str] | None = None
@@ -200,6 +211,13 @@ class ExperimentEngine:
 
     def run_loop(self, n_experiments: int) -> ExperimentLog:
         """Run the full optimization loop for n experiments."""
+        if self._predictor.epsilon_mode and n_experiments != self._predictor.n_max:
+            logger.warning(
+                "epsilon_mode is enabled with n_max=%d but run_loop was called with "
+                "n_experiments=%d. For best results, set n_max equal to n_experiments.",
+                self._predictor.n_max,
+                n_experiments,
+            )
         for i in range(n_experiments):
             result = self.step()
             best = self.log.best_result(self.objective_name, self.minimize)
