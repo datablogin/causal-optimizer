@@ -125,7 +125,7 @@ class TestComputeEpsilon:
         assert eps == 0.0
 
     def test_partial_coverage(self) -> None:
-        """Partial coverage of the domain should give intermediate epsilon."""
+        """Half-domain coverage at 50% budget should saturate epsilon to 1.0."""
         # Triangle covering half the unit square
         data = np.array(
             [

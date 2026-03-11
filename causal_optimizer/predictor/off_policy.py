@@ -215,6 +215,12 @@ class OffPolicyPredictor:
 
         Uses the epsilon value cached during the last ``fit()`` call to avoid
         recomputing the ConvexHull on every decision.
+
+        Note:
+            The epsilon controller is effectively dormant until model quality
+            exceeds 0.3 (requires >= 10 experiments for cross-validation).
+            During experiments 5--9 the model exists but has quality 0.0, so
+            the model-quality guard always forces intervention.
         """
         epsilon = self._cached_epsilon
         if epsilon <= 0.0:
@@ -222,24 +228,24 @@ class OffPolicyPredictor:
 
         # With probability epsilon, observe (skip experiment); otherwise intervene
         if self._rng.random() < epsilon:
-            # Even when the epsilon controller says observe, check if
-            # uncertainty is too high — if so, fall back to intervening.
-            # Also intervene if there's no model (prediction is None),
-            # since we can't trust a nonexistent surrogate.
+            # Check model availability and quality cheaply before running
+            # RF inference — avoids redundant predict() calls when the model
+            # is known to be unreliable (e.g., experiments 5–9 where
+            # model_quality is 0.0 because cross-validation hasn't run yet).
+            if self._model is None or self._model_quality < 0.3:
+                logger.debug(
+                    "Epsilon controller chose observe (epsilon=%.3f), but model "
+                    "unavailable or quality too low (%.3f); intervening instead",
+                    epsilon,
+                    self._model_quality,
+                )
+                return True
             prediction = self.predict(parameters)
             if prediction is None:
                 logger.debug(
-                    "Epsilon controller chose observe (epsilon=%.3f), but no model "
-                    "available; intervening instead",
+                    "Epsilon controller chose observe (epsilon=%.3f), but predict() "
+                    "returned None; intervening instead",
                     epsilon,
-                )
-                return True
-            if prediction.model_quality < 0.3:
-                logger.debug(
-                    "Epsilon controller chose observe (epsilon=%.3f), but model quality "
-                    "too low (%.3f < 0.3); intervening instead",
-                    epsilon,
-                    prediction.model_quality,
                 )
                 return True
             if prediction.uncertainty > self.uncertainty_threshold:
