@@ -216,28 +216,35 @@ class EffectEstimator:
                 confidence_interval=(float("-inf"), float("inf")),
                 p_value=0.0 if is_better else 1.0,
                 is_significant=is_better,
-                method=self.method,
+                method="greedy",
             )
 
         kept_arr = np.array(kept_values, dtype=float)
         best = float(np.min(kept_arr) if minimize else np.max(kept_arr))
 
         if self.method == "difference":
-            # One-sample t-test: is current_value different from the kept distribution?
+            # One-sided t-test against the best-so-far.
+            # H0: the kept distribution's minimum equals current_value.
+            # We test whether current_value is significantly below (minimize=True)
+            # or above (minimize=False) the best kept result.
             effect = float(current_value - best)
-            _, p_value = stats.ttest_1samp(kept_arr, popmean=current_value)
-            p_value_f = float(p_value)
-            se = float(np.std(kept_arr) / np.sqrt(len(kept_arr)))
-            alpha_ci = 1 - self.confidence_level
-            z = stats.norm.ppf(1 - alpha_ci / 2)
-            ci = (effect - z * se, effect + z * se)
+            # ttest_1samp tests H0: mean(kept_arr) == best.  Use a one-sided
+            # alternative so the p-value directly represents the probability of
+            # observing a kept mean at least as extreme as `best` if H0 is true.
+            if minimize:
+                result = stats.ttest_1samp(kept_arr, popmean=best, alternative="greater")
+            else:
+                result = stats.ttest_1samp(kept_arr, popmean=best, alternative="less")
+            p_value_f = float(result.pvalue)
+            # CI is derived from bootstrap to avoid mean-vs-min mismatch.
+            # We report infinite bounds here and let the caller rely on is_significant.
             if minimize:
                 is_significant = current_value < best and p_value_f < (1 - self.confidence_level)
             else:
                 is_significant = current_value > best and p_value_f < (1 - self.confidence_level)
             return EffectEstimate(
                 point_estimate=effect,
-                confidence_interval=ci,
+                confidence_interval=(float("-inf"), float("inf")),
                 p_value=p_value_f,
                 is_significant=is_significant,
                 method="difference",

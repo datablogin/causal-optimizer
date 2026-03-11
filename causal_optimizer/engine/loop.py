@@ -83,6 +83,13 @@ class ExperimentEngine:
                 values are ``"difference"``, ``"bootstrap"`` (default), and
                 ``"aipw"``.
         """
+        _valid_effect_methods = {"difference", "bootstrap", "aipw"}
+        if effect_method not in _valid_effect_methods:
+            raise ValueError(
+                f"Invalid effect_method {effect_method!r}. "
+                f"Must be one of {sorted(_valid_effect_methods)}."
+            )
+
         self.search_space = search_space
         self.runner = runner
         self.objective_name = objective_name
