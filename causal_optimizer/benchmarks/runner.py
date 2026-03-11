@@ -105,8 +105,7 @@ class BenchmarkRunner:
         benchmark_name = type(self.benchmark).__name__
 
         if strategy == "random":
-            rng = np.random.default_rng(seed)
-            return self._run_random(budget, seed, rng, benchmark_name, known_optimum)
+            return self._run_random(budget, seed, benchmark_name, known_optimum)
 
         return self._run_engine(strategy, budget, seed, benchmark_name, known_optimum)
 
@@ -193,15 +192,16 @@ class BenchmarkRunner:
         self,
         budget: int,
         seed: int,
-        rng: np.random.Generator,
         benchmark_name: str,
         known_optimum: float | None,
     ) -> BenchmarkResult:
         """Run uniform random sampling from the search space."""
         # Use SeedSequence.spawn() for proper RNG stream splitting:
-        # one stream for benchmark structural noise, one for parameter sampling.
+        # stream 0 = benchmark structural noise, stream 1 = parameter sampling.
         ss = np.random.SeedSequence(seed)
-        noise_rng = np.random.default_rng(ss.spawn(1)[0])
+        child_seeds = ss.spawn(2)
+        noise_rng = np.random.default_rng(child_seeds[0])
+        sample_rng = np.random.default_rng(child_seeds[1])
         # Cast to Any because Protocol cannot enforce constructor signatures
         benchmark_type: Any = type(self.benchmark)
         bench = benchmark_type(
@@ -214,7 +214,7 @@ class BenchmarkRunner:
         best_so_far = float("inf")
 
         for _ in range(budget):
-            params = _sample_random_params(space, rng)
+            params = _sample_random_params(space, sample_rng)
             metrics = bench.run(params)
             # TODO: hardcodes "objective" key and min(); see engine TODO above
             obj = metrics.get("objective", float("inf"))
