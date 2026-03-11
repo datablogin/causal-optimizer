@@ -55,6 +55,9 @@ class ExperimentEngine:
         7. Validate — sensitivity analysis on findings
     """
 
+    #: Valid values for the ``discovery_method`` parameter.
+    _VALID_DISCOVERY_METHODS: frozenset[str] = frozenset({"correlation", "pc", "notears"})
+
     def __init__(
         self,
         search_space: SearchSpace,
@@ -68,6 +71,7 @@ class ExperimentEngine:
         epsilon_mode: bool = False,
         n_max: int = 100,
         seed: int | None = None,
+        discovery_method: str | None = None,
     ) -> None:
         """Initialize the experiment engine.
 
@@ -76,12 +80,28 @@ class ExperimentEngine:
                 reproducibility of observe/intervene decisions in
                 ``OffPolicyPredictor``. Does **not** seed other random
                 sources in the engine (MAP-Elites sampling, bootstrap CI).
+            discovery_method: Algorithm used to learn a causal graph from
+                experiment data at the exploration→optimization phase
+                transition.  Valid values are ``"correlation"``, ``"pc"``,
+                and ``"notears"``.  Set to ``None`` (default) to disable
+                auto-discovery (backward-compatible).  When a *causal_graph*
+                is also provided the discovered graph is logged but the prior
+                graph is **not** replaced (hybrid mode).
         """
+        if discovery_method is not None and discovery_method not in self._VALID_DISCOVERY_METHODS:
+            raise ValueError(
+                f"discovery_method={discovery_method!r} is not valid; "
+                f"choose one of {sorted(self._VALID_DISCOVERY_METHODS)} or None"
+            )
+
         self.search_space = search_space
         self.runner = runner
         self.objective_name = objective_name
         self.minimize = minimize
         self.causal_graph = causal_graph
+        self._causal_graph: CausalGraph | None = causal_graph
+        self._discovery_method: str | None = discovery_method
+        self._discovered_graph: CausalGraph | None = None
         self.log = ExperimentLog()
         self._phase: str = "exploration"
         self._predictor = OffPolicyPredictor(epsilon_mode=epsilon_mode, n_max=n_max, seed=seed)
@@ -156,7 +176,7 @@ class ExperimentEngine:
                     return suggest_parameters(
                         search_space=self.search_space,
                         experiment_log=self.log,
-                        causal_graph=self.causal_graph,
+                        causal_graph=self._causal_graph,
                         phase=self._phase,
                         minimize=self.minimize,
                         objective_name=self.objective_name,
@@ -169,7 +189,7 @@ class ExperimentEngine:
         return suggest_parameters(
             search_space=self.search_space,
             experiment_log=self.log,
-            causal_graph=self.causal_graph,
+            causal_graph=self._causal_graph,
             phase=self._phase,
             minimize=self.minimize,
             objective_name=self.objective_name,
@@ -359,6 +379,9 @@ class ExperimentEngine:
         # Run screening and POMIS when transitioning from exploration to optimization
         # (also covers direct exploration → exploitation if max_screening_attempts is large)
         if old_phase == "exploration" and self._phase in ("optimization", "exploitation"):
+            # Auto-discover causal graph from data before screening
+            self._run_auto_discovery()
+
             if self._screening_attempts < self._max_screening_attempts:
                 self._run_screening()
             else:
@@ -371,6 +394,52 @@ class ExperimentEngine:
                 self._screened_focus_variables = self.search_space.variable_names
             if self._phase == "optimization":  # screening may have reverted to exploration
                 self._compute_pomis()
+
+    def _run_auto_discovery(self) -> None:
+        """Discover a causal graph from experiment data if ``discovery_method`` is set.
+
+        Two operating modes:
+
+        - **No prior graph** (``self._causal_graph is None``): the discovered
+          graph becomes the active graph used for optimization.
+        - **Hybrid mode** (prior graph already set): the discovered graph is
+          computed and logged for informational purposes, but the prior graph is
+          *not* replaced.
+        """
+        if self._discovery_method is None:
+            return
+
+        from causal_optimizer.discovery.graph_learner import GraphLearner
+
+        learner = GraphLearner(method=self._discovery_method)
+        try:
+            discovered = learner.learn(self.log, objective_name=self.objective_name)
+        except Exception:
+            logger.warning("Auto-discovery failed, continuing without", exc_info=True)
+            return
+
+        self._discovered_graph = discovered
+
+        n_nodes = len(discovered.nodes)
+        n_edges = len(discovered.edges)
+        n_bidir = len(discovered.bidirected_edges)
+        logger.info(
+            "Discovered causal graph with %d nodes, %d edges (%d bidirected)",
+            n_nodes,
+            n_edges,
+            n_bidir,
+        )
+
+        if self._causal_graph is None:
+            # No prior graph — use the discovered graph going forward
+            self._causal_graph = discovered
+            self.causal_graph = discovered
+        else:
+            # Hybrid mode: prior graph is preserved; discovered graph is informational only
+            logger.info(
+                "Hybrid mode: prior causal graph retained; "
+                "discovered graph logged but not applied"
+            )
 
     def _run_screening(self) -> None:
         """Run screening analysis to identify important variables."""
@@ -406,13 +475,13 @@ class ExperimentEngine:
 
     def _compute_pomis(self) -> None:
         """Compute POMIS sets if the causal graph has confounders."""
-        if self.causal_graph is None or not self.causal_graph.has_confounders:
+        if self._causal_graph is None or not self._causal_graph.has_confounders:
             return
 
         try:
             from causal_optimizer.optimizer.pomis import compute_pomis
 
-            self._pomis_sets = compute_pomis(self.causal_graph, self.objective_name)
+            self._pomis_sets = compute_pomis(self._causal_graph, self.objective_name)
             logger.info("POMIS sets: %s", self._pomis_sets)
         except Exception:
             logger.warning(
