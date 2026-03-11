@@ -120,7 +120,8 @@ class ExperimentEngine:
         self._discovered_graph: CausalGraph | None = None
         self.log = ExperimentLog()
         self._phase: str = "exploration"
-        self._effect_estimator = EffectEstimator(method=effect_method)
+        self._effect_method = effect_method
+        self._effect_estimator = EffectEstimator(method=effect_method, causal_graph=causal_graph)
         self._predictor = OffPolicyPredictor(epsilon_mode=epsilon_mode, n_max=n_max, seed=seed)
         self._max_skips = max_skips
         self._screening_result: ScreeningResult | None = None
@@ -456,6 +457,17 @@ class ExperimentEngine:
             # Hybrid mode: prior graph is preserved; discovered graph is informational only
             logger.info(
                 "Hybrid mode: prior causal graph retained; discovered graph logged but not applied"
+            )
+
+        # Rebuild the effect estimator with the active causal graph so that
+        # effect_method="observational" gets a real DoWhy-backed graph rather
+        # than falling back to bootstrap.
+        if self._effect_method == "observational" and self._causal_graph is not None:
+            from causal_optimizer.estimator.effects import EffectEstimator
+
+            self._effect_estimator = EffectEstimator(
+                method=self._effect_method,
+                causal_graph=self._causal_graph,
             )
 
     def _run_screening(self) -> None:
