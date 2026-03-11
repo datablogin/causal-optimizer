@@ -13,6 +13,7 @@ from typing import Any, Protocol
 import numpy as np
 
 from causal_optimizer.designer.screening import ScreeningDesigner, ScreeningResult
+from causal_optimizer.estimator.effects import EffectEstimator
 from causal_optimizer.evolution.map_elites import MAPElites
 from causal_optimizer.predictor.off_policy import OffPolicyPredictor
 from causal_optimizer.types import (
@@ -55,6 +56,9 @@ class ExperimentEngine:
         7. Validate — sensitivity analysis on findings
     """
 
+    #: Valid values for the ``discovery_method`` parameter.
+    _VALID_DISCOVERY_METHODS: frozenset[str] = frozenset({"correlation", "pc", "notears"})
+
     def __init__(
         self,
         search_space: SearchSpace,
@@ -68,6 +72,8 @@ class ExperimentEngine:
         epsilon_mode: bool = False,
         n_max: int = 100,
         seed: int | None = None,
+        discovery_method: str | None = None,
+        effect_method: str = "bootstrap",
     ) -> None:
         """Initialize the experiment engine.
 
@@ -76,14 +82,35 @@ class ExperimentEngine:
                 reproducibility of observe/intervene decisions in
                 ``OffPolicyPredictor``. Does **not** seed other random
                 sources in the engine (MAP-Elites sampling, bootstrap CI).
+            discovery_method: Algorithm used to learn a causal graph from
+                experiment data at the exploration→optimization phase
+                transition.  Valid values are ``"correlation"``, ``"pc"``,
+                and ``"notears"``.  Set to ``None`` (default) to disable
+                auto-discovery (backward-compatible).  When a *causal_graph*
+                is also provided the discovered graph is logged but the prior
+                graph is **not** replaced (hybrid mode).
+            effect_method: Method used by :class:`EffectEstimator` to assess
+                statistical significance in keep/discard decisions.  Valid
+                values are ``"difference"``, ``"bootstrap"`` (default), and
+                ``"aipw"``.
         """
+        if discovery_method is not None and discovery_method not in self._VALID_DISCOVERY_METHODS:
+            raise ValueError(
+                f"discovery_method={discovery_method!r} is not valid; "
+                f"choose one of {sorted(self._VALID_DISCOVERY_METHODS)} or None"
+            )
+
         self.search_space = search_space
         self.runner = runner
         self.objective_name = objective_name
         self.minimize = minimize
         self.causal_graph = causal_graph
+        self._causal_graph: CausalGraph | None = causal_graph
+        self._discovery_method: str | None = discovery_method
+        self._discovered_graph: CausalGraph | None = None
         self.log = ExperimentLog()
         self._phase: str = "exploration"
+        self._effect_estimator = EffectEstimator(method=effect_method)
         self._predictor = OffPolicyPredictor(epsilon_mode=epsilon_mode, n_max=n_max, seed=seed)
         self._max_skips = max_skips
         self._screening_result: ScreeningResult | None = None
@@ -156,7 +183,7 @@ class ExperimentEngine:
                     return suggest_parameters(
                         search_space=self.search_space,
                         experiment_log=self.log,
-                        causal_graph=self.causal_graph,
+                        causal_graph=self._causal_graph,
                         phase=self._phase,
                         minimize=self.minimize,
                         objective_name=self.objective_name,
@@ -169,7 +196,7 @@ class ExperimentEngine:
         return suggest_parameters(
             search_space=self.search_space,
             experiment_log=self.log,
-            causal_graph=self.causal_graph,
+            causal_graph=self._causal_graph,
             phase=self._phase,
             minimize=self.minimize,
             objective_name=self.objective_name,
@@ -182,19 +209,33 @@ class ExperimentEngine:
 
         Uses the off-policy predictor to skip experiments that are predicted
         to have poor outcomes (with high confidence). If an experiment is
-        skipped, a new suggestion is generated, up to max_skips times.
+        skipped, the prediction is noted (but NOT added to the experiment log)
+        and a new suggestion is generated, up to max_skips times.
         """
         skips = 0
         while True:
             parameters = self.suggest_next()
 
-            # Check if the predictor recommends skipping this experiment
+            # Check if the predictor recommends observing (not running) this experiment
             if skips < self._max_skips and not self._predictor.should_run_experiment(parameters):
                 skips += 1
-                logger.info(
-                    f"Off-policy predictor recommends skipping experiment "
-                    f"(skip {skips}/{self._max_skips}), suggesting new parameters"
-                )
+                # Get predicted outcome for logging purposes (not logged to experiment log)
+                prediction = self._predictor.predict(parameters)
+                if prediction is not None:
+                    logger.info(
+                        "Observation (predicted): objective=%.4f "
+                        "(skip %d/%d), suggesting new parameters",
+                        prediction.expected_value,
+                        skips,
+                        self._max_skips,
+                    )
+                else:
+                    logger.info(
+                        "Off-policy predictor recommends skipping experiment "
+                        "(skip %d/%d), suggesting new parameters",
+                        skips,
+                        self._max_skips,
+                    )
                 continue
 
             if skips >= self._max_skips:
@@ -233,8 +274,10 @@ class ExperimentEngine:
     def _is_improvement_significant(self, current_objective: float) -> bool | None:
         """Check if the current objective is a statistically significant improvement.
 
-        Uses bootstrap confidence intervals on the distribution of kept objectives
-        to determine if the current value represents a real improvement over noise.
+        Delegates to :attr:`_effect_estimator` via
+        :meth:`~causal_optimizer.estimator.effects.EffectEstimator.estimate_improvement`,
+        which compares *current_objective* against the distribution of kept
+        experiments in the log.
 
         Returns:
             True if improvement is statistically significant.
@@ -254,46 +297,31 @@ class ExperimentEngine:
             and r.metrics.get(self.objective_name) is not None
         ]
 
-        # Not enough history for statistical evaluation
+        # Not enough history for statistical evaluation — fall back to greedy
         if n_total < _MIN_EXPERIMENTS or len(kept) < _MIN_KEPT or len(discarded) < _MIN_DISCARDED:
             return None
 
-        kept_arr = np.array(kept)
-        best_objective = float(np.min(kept_arr) if self.minimize else np.max(kept_arr))
-
-        # Bootstrap the difference: current_objective - best_objective
-        # For minimization, a negative difference means improvement
-        observed_diff = current_objective - best_objective
-
-        rng = np.random.default_rng(seed=None)
-        bootstrap_diffs = np.empty(_N_BOOTSTRAP)
-        for i in range(_N_BOOTSTRAP):
-            boot_sample = rng.choice(kept_arr, size=len(kept_arr), replace=True)
-            boot_best = float(np.min(boot_sample) if self.minimize else np.max(boot_sample))
-            bootstrap_diffs[i] = current_objective - boot_best
-
-        # Adaptive alpha: permissive early, stricter later
-        alpha = _ALPHA_EARLY if n_total < 20 else _ALPHA_LATE
-
-        if self.minimize:
-            # For minimization: improvement means current < best (negative diff)
-            # Check if the observed diff is significantly negative
-            # (below the lower bound of the bootstrap CI)
-            threshold = float(np.percentile(bootstrap_diffs, 100 * alpha))
-            is_significant = observed_diff < threshold
-        else:
-            # For maximization: improvement means current > best (positive diff)
-            # Check if the observed diff is significantly positive
-            # (above the upper bound of the bootstrap CI)
-            threshold = float(np.percentile(bootstrap_diffs, 100 * (1 - alpha)))
-            is_significant = observed_diff > threshold
-
-        logger.debug(
-            f"Statistical evaluation: diff={observed_diff:.6f}, "
-            f"threshold={threshold:.6f}, alpha={alpha}, significant={is_significant}"
+        estimate = self._effect_estimator.estimate_improvement(
+            experiment_log=self.log,
+            current_value=current_objective,
+            objective_name=self.objective_name,
+            minimize=self.minimize,
         )
 
-        return is_significant
+        logger.debug(
+            "Statistical evaluation via %s: %s",
+            estimate.method,
+            estimate.summary,
+        )
+
+        # estimate_improvement returns is_significant=True when too few kept samples —
+        # that case is already guarded above, so we can trust the result here.
+        # Return None only when the estimator itself couldn't determine significance
+        # (e.g. insufficient_data method).
+        if estimate.method == "insufficient_data":
+            return None
+
+        return estimate.is_significant
 
     def _evaluate_status(self, metrics: dict[str, float]) -> ExperimentStatus:
         """Determine if this result should be kept.
@@ -359,6 +387,9 @@ class ExperimentEngine:
         # Run screening and POMIS when transitioning from exploration to optimization
         # (also covers direct exploration → exploitation if max_screening_attempts is large)
         if old_phase == "exploration" and self._phase in ("optimization", "exploitation"):
+            # Auto-discover causal graph from data before screening
+            self._run_auto_discovery()
+
             if self._screening_attempts < self._max_screening_attempts:
                 self._run_screening()
             else:
@@ -371,6 +402,51 @@ class ExperimentEngine:
                 self._screened_focus_variables = self.search_space.variable_names
             if self._phase == "optimization":  # screening may have reverted to exploration
                 self._compute_pomis()
+
+    def _run_auto_discovery(self) -> None:
+        """Discover a causal graph from experiment data if ``discovery_method`` is set.
+
+        Two operating modes:
+
+        - **No prior graph** (``self._causal_graph is None``): the discovered
+          graph becomes the active graph used for optimization.
+        - **Hybrid mode** (prior graph already set): the discovered graph is
+          computed and logged for informational purposes, but the prior graph is
+          *not* replaced.
+        """
+        if self._discovery_method is None:
+            return
+
+        from causal_optimizer.discovery.graph_learner import GraphLearner
+
+        learner = GraphLearner(method=self._discovery_method)
+        try:
+            discovered = learner.learn(self.log, objective_name=self.objective_name)
+        except Exception:
+            logger.warning("Auto-discovery failed, continuing without", exc_info=True)
+            return
+
+        self._discovered_graph = discovered
+
+        n_nodes = len(discovered.nodes)
+        n_edges = len(discovered.edges)
+        n_bidir = len(discovered.bidirected_edges)
+        logger.info(
+            "Discovered causal graph with %d nodes, %d edges (%d bidirected)",
+            n_nodes,
+            n_edges,
+            n_bidir,
+        )
+
+        if self._causal_graph is None:
+            # No prior graph — use the discovered graph going forward
+            self._causal_graph = discovered
+            self.causal_graph = discovered
+        else:
+            # Hybrid mode: prior graph is preserved; discovered graph is informational only
+            logger.info(
+                "Hybrid mode: prior causal graph retained; discovered graph logged but not applied"
+            )
 
     def _run_screening(self) -> None:
         """Run screening analysis to identify important variables."""
@@ -406,13 +482,13 @@ class ExperimentEngine:
 
     def _compute_pomis(self) -> None:
         """Compute POMIS sets if the causal graph has confounders."""
-        if self.causal_graph is None or not self.causal_graph.has_confounders:
+        if self._causal_graph is None or not self._causal_graph.has_confounders:
             return
 
         try:
             from causal_optimizer.optimizer.pomis import compute_pomis
 
-            self._pomis_sets = compute_pomis(self.causal_graph, self.objective_name)
+            self._pomis_sets = compute_pomis(self._causal_graph, self.objective_name)
             logger.info("POMIS sets: %s", self._pomis_sets)
         except Exception:
             logger.warning(

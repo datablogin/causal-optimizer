@@ -12,7 +12,7 @@ Tests cover:
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -27,7 +27,6 @@ from causal_optimizer.types import (
     Variable,
     VariableType,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -68,7 +67,7 @@ def make_log_with_results(
 ) -> ExperimentLog:
     """Build an ExperimentLog from parallel lists of objectives and statuses."""
     log = ExperimentLog()
-    for i, (val, status) in enumerate(zip(objective_values, statuses)):
+    for i, (val, status) in enumerate(zip(objective_values, statuses, strict=True)):
         log.results.append(
             ExperimentResult(
                 experiment_id=f"test-{i:04d}",
@@ -169,16 +168,19 @@ def test_engine_keeps_clear_improvement() -> None:
 
 @pytest.mark.slow
 def test_engine_discards_no_improvement() -> None:
-    """With enough history and stable objectives, a worse result should be DISCARD."""
+    """With enough kept history, a clearly worse result should not be significant."""
     engine = ExperimentEngine(
         search_space=make_search_space(),
         runner=QuadraticRunner(),
     )
 
-    # Simulate stable history: 3 kept + 2 discarded, best = 5.0
+    # Simulate stable history: 5 kept + 2 discarded, best = 5.0
+    # Need >= 5 kept experiments for the statistical test to run (not permissive)
     engine.log = make_log_with_results(
-        objective_values=[10.0, 7.0, 5.0, 8.0, 9.0],
+        objective_values=[10.0, 7.0, 5.0, 6.0, 8.0, 9.0, 11.0],
         statuses=[
+            ExperimentStatus.KEEP,
+            ExperimentStatus.KEEP,
             ExperimentStatus.KEEP,
             ExperimentStatus.KEEP,
             ExperimentStatus.KEEP,
@@ -187,8 +189,8 @@ def test_engine_discards_no_improvement() -> None:
         ],
     )
 
-    # A clearly worse result (20.0 vs best = 5.0) should NOT be significant improvement
-    result = engine._is_improvement_significant(current_objective=20.0)
+    # A clearly worse result (100.0 vs best = 5.0) should NOT be significant improvement
+    result = engine._is_improvement_significant(current_objective=100.0)
     # With enough history, a clearly worse result should be False (not significant)
     # or None (greedy fallback will handle it) — it must NOT be True
     assert result is not True
@@ -470,9 +472,7 @@ def test_observe_path_logs_prediction_without_adding_to_log() -> None:
     # Patch predictor: first call returns False (observe), second returns True (run)
     side_effects = [False, True]
 
-    with patch.object(
-        engine._predictor, "should_run_experiment", side_effect=side_effects
-    ):
+    with patch.object(engine._predictor, "should_run_experiment", side_effect=side_effects):
         result = engine.step()
 
     # One real experiment was run — log grows by exactly 1
@@ -497,9 +497,7 @@ def test_observe_prediction_metadata_flag() -> None:
 
     # Verify the engine can handle the "observe" decision gracefully
     # by tracking that _handle_observation is called when predictor returns False
-    with patch.object(
-        engine._predictor, "should_run_experiment", return_value=False
-    ) as mock_pred:
+    with patch.object(engine._predictor, "should_run_experiment", return_value=False) as mock_pred:
         # With max_skips=2, engine will try 2 times to skip, then force run
         result = engine.step()
 
