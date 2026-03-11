@@ -223,21 +223,22 @@ class EffectEstimator:
         best = float(np.min(kept_arr) if minimize else np.max(kept_arr))
 
         if self.method == "difference":
-            # One-sided t-test against the best-so-far.
-            # H0: the kept distribution's minimum equals current_value.
-            # We test whether current_value is significantly below (minimize=True)
-            # or above (minimize=False) the best kept result.
+            # One-sided t-test: test whether current_value is significantly
+            # better than the kept distribution.
+            # H0: mean(kept_arr) == current_value.
+            # For minimize=True, "better" means current_value < mean(kept),
+            # so we use alternative="greater" (kept mean > current_value).
+            # For minimize=False, alternative="less" (kept mean < current_value).
+            # Combined with the directional guard (current_value < best / > best),
+            # this gives a coherent one-sided significance test.
             effect = float(current_value - best)
-            # ttest_1samp tests H0: mean(kept_arr) == best.  Use a one-sided
-            # alternative so the p-value directly represents the probability of
-            # observing a kept mean at least as extreme as `best` if H0 is true.
             if minimize:
-                result = stats.ttest_1samp(kept_arr, popmean=best, alternative="greater")
+                result = stats.ttest_1samp(kept_arr, popmean=current_value, alternative="greater")
             else:
-                result = stats.ttest_1samp(kept_arr, popmean=best, alternative="less")
+                result = stats.ttest_1samp(kept_arr, popmean=current_value, alternative="less")
             p_value_f = float(result.pvalue)
-            # CI is derived from bootstrap to avoid mean-vs-min mismatch.
-            # We report infinite bounds here and let the caller rely on is_significant.
+            # Infinite CI bounds: the CI for min(kept_arr) requires bootstrap;
+            # callers should rely on is_significant rather than CI bounds.
             if minimize:
                 is_significant = current_value < best and p_value_f < (1 - self.confidence_level)
             else:
