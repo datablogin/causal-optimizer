@@ -99,7 +99,7 @@ def test_suggest_surrogate_focus_variables_only_vary_focus():
     """Surrogate should only vary focus variables; non-focus held at best values."""
     ss = _make_search_space()
     log = _make_experiment_log(n=5)
-    best = log.best_result
+    best = log.best_result()
     assert best is not None
 
     result = _suggest_surrogate(
@@ -133,7 +133,7 @@ def test_suggest_exploitation_focus_variables():
     """Exploitation should only perturb focus variables."""
     ss = _make_search_space()
     log = _make_experiment_log(n=5)
-    best = log.best_result
+    best = log.best_result()
     assert best is not None
 
     # Run exploitation many times; z should never change from best
@@ -157,7 +157,7 @@ def test_suggest_exploitation_no_focus_perturbs_any():
     """Without focus_variables, exploitation can perturb any variable."""
     ss = _make_search_space()
     log = _make_experiment_log(n=5)
-    best = log.best_result
+    best = log.best_result()
     assert best is not None
 
     result = _suggest_exploitation(

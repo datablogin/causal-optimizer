@@ -210,12 +210,24 @@ class ExperimentLog(BaseModel):
 
     results: list[ExperimentResult] = Field(default_factory=list)
 
-    @property
-    def best_result(self) -> ExperimentResult | None:
+    def best_result(
+        self,
+        objective_name: str = "objective",
+        minimize: bool = True,
+    ) -> ExperimentResult | None:
+        """Return the best kept result by the given objective.
+
+        Args:
+            objective_name: Metric key to compare results on.
+            minimize: If ``True`` return the result with the smallest value,
+                otherwise return the result with the largest value.
+        """
         kept = [r for r in self.results if r.status == ExperimentStatus.KEEP]
         if not kept:
             return None
-        return min(kept, key=lambda r: r.metrics.get("objective", float("inf")))
+        if minimize:
+            return min(kept, key=lambda r: r.metrics.get(objective_name, float("inf")))
+        return max(kept, key=lambda r: r.metrics.get(objective_name, float("-inf")))
 
     def to_dataframe(self) -> pd.DataFrame:
         rows = []

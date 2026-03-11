@@ -63,6 +63,7 @@ class ExperimentEngine:
         minimize: bool = True,
         causal_graph: CausalGraph | None = None,
         max_skips: int = 3,
+        max_screening_attempts: int = 3,
         descriptor_names: list[str] | None = None,
     ) -> None:
         self.search_space = search_space
@@ -77,6 +78,8 @@ class ExperimentEngine:
         self._screening_result: ScreeningResult | None = None
         self._screened_focus_variables: list[str] | None = None
         self._pomis_sets: list[frozenset[str]] | None = None
+        self._screening_attempts: int = 0
+        self._max_screening_attempts: int = max_screening_attempts
         self._descriptor_names = descriptor_names
         self._archive: MAPElites | None = (
             MAPElites(descriptor_names, minimize=minimize) if descriptor_names else None
@@ -107,9 +110,15 @@ class ExperimentEngine:
         # Fit the off-policy predictor with updated history
         self._predictor.fit(self.log, self.search_space, self.objective_name)
 
-        # Add to MAP-Elites archive if configured
-        if self._archive is not None and self._descriptor_names:
-            fitness = metrics.get(self.objective_name, float("inf"))
+        # Add to MAP-Elites archive if configured (skip crashed experiments)
+        if (
+            self._archive is not None
+            and self._descriptor_names
+            and status != ExperimentStatus.CRASH
+        ):
+            fitness = metrics.get(
+                self.objective_name, float("inf") if self.minimize else float("-inf")
+            )
             descriptors = self._extract_descriptors(metrics)
             if descriptors:
                 self._archive.add(result, fitness, descriptors)
@@ -193,7 +202,7 @@ class ExperimentEngine:
         """Run the full optimization loop for n experiments."""
         for i in range(n_experiments):
             result = self.step()
-            best = self.log.best_result
+            best = self.log.best_result(self.objective_name, self.minimize)
             best_val = best.metrics.get(self.objective_name) if best else None
             logger.info(
                 f"[{i + 1}/{n_experiments}] "
@@ -278,7 +287,7 @@ class ExperimentEngine:
         if current_objective is None:
             return ExperimentStatus.CRASH
 
-        best = self.log.best_result
+        best = self.log.best_result(self.objective_name, self.minimize)
         if best is None:
             return ExperimentStatus.KEEP
 
@@ -291,7 +300,8 @@ class ExperimentEngine:
             else:
                 # Not statistically significant, but still check greedy
                 # (the statistical test may be conservative)
-                best_objective = best.metrics.get(self.objective_name, float("inf"))
+                fallback = float("inf") if self.minimize else float("-inf")
+                best_objective = best.metrics.get(self.objective_name, fallback)
                 is_better = (
                     current_objective < best_objective
                     if self.minimize
@@ -308,7 +318,8 @@ class ExperimentEngine:
                     return ExperimentStatus.DISCARD
 
         # Fall back to greedy comparison when insufficient data
-        best_objective = best.metrics.get(self.objective_name, float("inf"))
+        fallback = float("inf") if self.minimize else float("-inf")
+        best_objective = best.metrics.get(self.objective_name, fallback)
         if self.minimize:
             is_better = current_objective < best_objective
         else:
@@ -328,19 +339,32 @@ class ExperimentEngine:
             self._phase = "exploitation"
 
         # Run screening and POMIS when transitioning from exploration to optimization
-        if old_phase == "exploration" and self._phase == "optimization":
-            self._run_screening()
+        # (also covers direct exploration → exploitation if max_screening_attempts is large)
+        if old_phase == "exploration" and self._phase in ("optimization", "exploitation"):
+            if self._screening_attempts < self._max_screening_attempts:
+                self._run_screening()
+            else:
+                # Max screening retries exceeded — proceed with all variables
+                logger.warning(
+                    "Max screening attempts (%d) reached with no important variables; "
+                    "proceeding with all variables",
+                    self._max_screening_attempts,
+                )
+                self._screened_focus_variables = self.search_space.variable_names
             if self._phase == "optimization":  # screening may have reverted to exploration
                 self._compute_pomis()
 
     def _run_screening(self) -> None:
         """Run screening analysis to identify important variables."""
+        self._screening_attempts += 1
         designer = ScreeningDesigner(self.search_space)
         result = designer.screen(self.log, self.objective_name)
         self._screening_result = result
 
         if result.important_variables:
             self._screened_focus_variables = result.important_variables
+            # Reset counter on success so future transitions can screen again
+            self._screening_attempts = 0
             logger.info(
                 "Screening identified important variables: %s",
                 result.important_variables,

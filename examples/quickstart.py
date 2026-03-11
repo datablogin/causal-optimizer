@@ -64,7 +64,7 @@ def main() -> None:
     log = engine.run_loop(n_experiments=30)
 
     # Report results
-    best = log.best_result
+    best = log.best_result("objective", minimize=True)
     if best:
         print(f"\nBest result: objective={best.metrics['objective']:.6f}")
         print(f"Parameters: {best.parameters}")

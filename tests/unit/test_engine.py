@@ -83,7 +83,7 @@ def test_engine_run_loop():
     )
     log = engine.run_loop(n_experiments=5)
     assert len(log.results) == 5
-    assert log.best_result is not None
+    assert log.best_result() is not None
 
 
 def test_engine_phase_transitions():
@@ -270,3 +270,172 @@ def test_engine_pomis_not_computed_when_screening_resets_phase():
 
     # _compute_pomis should NOT have been called because screening reverted phase
     mock_pomis.assert_not_called()
+
+
+# --- Screening retry guard tests ---
+
+
+def test_screening_max_retries_limits_reattempts():
+    """Screening that finds no important variables should only retry up to max attempts."""
+    engine = ExperimentEngine(
+        search_space=make_search_space(),
+        runner=QuadraticRunner(),
+        max_screening_attempts=3,
+    )
+
+    # Use the real _run_screening but patch ScreeningDesigner to return no important vars
+    from causal_optimizer.designer.screening import ScreeningResult
+
+    empty_result = ScreeningResult(
+        main_effects={},
+        important_variables=[],
+        interactions={},
+    )
+
+    with (
+        patch(
+            "causal_optimizer.engine.loop.ScreeningDesigner.screen",
+            return_value=empty_result,
+        ),
+        patch.object(engine, "_compute_pomis"),
+    ):
+        # 10 → first attempt, 11 → retry 2, 12 → retry 3 (fallback), 13-15 → optimization
+        engine.run_loop(n_experiments=15)
+
+    # The real _run_screening increments the counter; verify it hit the max
+    assert engine._screening_attempts == engine._max_screening_attempts
+
+
+def test_screening_max_retries_proceeds_to_optimization():
+    """After max screening retries, engine proceeds to optimization with all variables."""
+    from causal_optimizer.designer.screening import ScreeningResult
+
+    engine = ExperimentEngine(
+        search_space=make_search_space(),
+        runner=QuadraticRunner(),
+        max_screening_attempts=1,
+    )
+
+    empty_result = ScreeningResult(
+        main_effects={},
+        important_variables=[],
+        interactions={},
+    )
+
+    with (
+        patch(
+            "causal_optimizer.engine.loop.ScreeningDesigner.screen",
+            return_value=empty_result,
+        ),
+        patch.object(engine, "_compute_pomis"),
+    ):
+        engine.run_loop(n_experiments=20)
+
+    # After max retries, focus variables should be set to all variables
+    assert engine._screened_focus_variables == engine.search_space.variable_names
+    # Phase should have progressed past exploration
+    assert engine._phase in ("optimization", "exploitation")
+
+
+def test_screening_resets_counter_on_success():
+    """Successful screening resets the attempt counter to allow future re-screening."""
+    from causal_optimizer.designer.screening import ScreeningResult
+
+    engine = ExperimentEngine(
+        search_space=make_search_space(),
+        runner=QuadraticRunner(),
+    )
+    assert engine._screening_attempts == 0
+
+    success_result = ScreeningResult(
+        main_effects={"x": 1.0, "y": 1.0},
+        important_variables=["x", "y"],
+        interactions={},
+    )
+
+    with (
+        patch(
+            "causal_optimizer.engine.loop.ScreeningDesigner.screen",
+            return_value=success_result,
+        ),
+        patch.object(engine, "_compute_pomis"),
+    ):
+        engine.run_loop(n_experiments=10)
+
+    # Screening succeeded, so counter resets to 0
+    assert engine._screening_result is not None
+    assert engine._screening_attempts == 0
+
+
+# --- MAP-Elites crash guard tests ---
+
+
+def test_crashed_experiment_not_added_to_archive():
+    """Crashed experiments should not be added to the MAP-Elites archive."""
+    engine = ExperimentEngine(
+        search_space=make_search_space(),
+        runner=CrashingRunner(),
+        descriptor_names=["objective"],
+    )
+    assert engine._archive is not None
+
+    engine.run_experiment({"x": 1.0, "y": 1.0})
+    assert len(engine.log.results) == 1
+    assert engine.log.results[0].status == ExperimentStatus.CRASH
+    # Archive should be empty — crashed experiment must not be added
+    assert len(engine._archive.archive) == 0
+
+
+def test_successful_experiment_added_to_archive():
+    """Successful experiments should still be added to the MAP-Elites archive."""
+    engine = ExperimentEngine(
+        search_space=make_search_space(),
+        runner=QuadraticRunner(),
+        descriptor_names=["objective"],
+    )
+    assert engine._archive is not None
+
+    engine.run_experiment({"x": 1.0, "y": 2.0})
+    assert len(engine.log.results) == 1
+    assert engine.log.results[0].status == ExperimentStatus.KEEP
+    # Archive should have the result
+    assert len(engine._archive.archive) == 1
+
+
+# --- Maximize engine tests ---
+
+
+class MaximizeRunner:
+    """Runner where higher values are better: f(x, y) = -(x^2 + y^2)."""
+
+    def run(self, parameters: dict[str, Any]) -> dict[str, float]:
+        x = parameters.get("x", 0.0)
+        y = parameters.get("y", 0.0)
+        return {"objective": -(x**2 + y**2)}
+
+
+def test_evaluate_status_maximize_keeps_better():
+    """With minimize=False, a higher objective should be KEEP."""
+    engine = ExperimentEngine(
+        search_space=make_search_space(),
+        runner=MaximizeRunner(),
+        minimize=False,
+    )
+    # First experiment: far from optimum (large negative value)
+    r1 = engine.run_experiment({"x": 3.0, "y": 4.0})
+    assert r1.status == ExperimentStatus.KEEP
+    assert r1.metrics["objective"] == -25.0
+
+    # Second experiment: closer to optimum (less negative = higher value)
+    r2 = engine.run_experiment({"x": 1.0, "y": 1.0})
+    assert r2.status == ExperimentStatus.KEEP
+    assert r2.metrics["objective"] == -2.0
+
+    # Third experiment: worse (more negative = lower value)
+    r3 = engine.run_experiment({"x": 4.0, "y": 4.0})
+    assert r3.status == ExperimentStatus.DISCARD
+
+    # best_result should return the highest value (closest to 0)
+    best = engine.log.best_result("objective", minimize=False)
+    assert best is not None
+    assert best.metrics["objective"] == -2.0
