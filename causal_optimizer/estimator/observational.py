@@ -182,9 +182,13 @@ class ObservationalEstimator:
                 method_name=dowhy_method,
             )
 
-            if estimate.value is None:
+            # Guard against None or NaN estimate values (DoWhy can return NaN
+            # for numerically degenerate cases, e.g. singular covariance matrix).
+            if estimate.value is None or (
+                isinstance(estimate.value, float) and np.isnan(estimate.value)
+            ):
                 logger.warning(
-                    "DoWhy returned None estimate for %s method. Falling back.",
+                    "DoWhy returned None/NaN estimate for %s method. Falling back.",
                     self.method,
                 )
                 return self._rf_fallback(df, treatment_var, treatment_value, objective_name)

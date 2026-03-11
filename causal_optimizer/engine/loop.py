@@ -460,12 +460,12 @@ class ExperimentEngine:
             )
 
         # Rebuild the effect estimator with the active causal graph whenever
-        # a graph becomes available from auto-discovery.  This ensures that
-        # effect_method="observational" gets a real DoWhy-backed graph, and
-        # that other methods have access to the graph if they need it later.
+        # a graph with edges becomes available from auto-discovery.  Skip empty
+        # graphs (0 edges) since they provide no structural information and
+        # would silently disable DoWhy's causal identification for observational.
         # Preserve all non-graph settings from the existing estimator so that
         # any future parameters added to EffectEstimator are not silently dropped.
-        if self._causal_graph is not None:
+        if self._causal_graph is not None and len(self._causal_graph.edges) > 0:
             self._effect_estimator = EffectEstimator(
                 method=self._effect_method,
                 causal_graph=self._causal_graph,
