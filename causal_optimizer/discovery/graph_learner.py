@@ -90,7 +90,9 @@ class GraphLearner:
         corr = df.corr().abs()
         edges: list[tuple[str, str]] = []
         cols = df.columns.tolist()
-        non_obj = [c for c in cols if c != objective_name]
+        # Sort alphabetically so edge orientation matches the documented heuristic:
+        # the variable that comes first alphabetically causes the second.
+        non_obj = sorted(c for c in cols if c != objective_name)
 
         for i, c1 in enumerate(non_obj):
             for c2 in non_obj[i + 1 :]:

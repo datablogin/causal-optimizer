@@ -195,9 +195,13 @@ class EffectEstimator:
 
         Returns:
             :class:`EffectEstimate` with ``is_significant`` indicating whether
-            the improvement is statistically meaningful.  When fewer than 5
-            kept experiments are available, returns a permissive estimate
-            (``is_significant=True``) to avoid premature pruning.
+            the improvement is statistically meaningful.
+
+            - Fewer than 2 kept experiments: permissive fallback
+              (``is_significant=True``) — no comparison is possible.
+            - 2–4 kept experiments: greedy comparison — ``is_significant=True``
+              only when the current value strictly beats the best-so-far.
+            - 5+ kept experiments: full statistical test (bootstrap or t-test).
         """
         from causal_optimizer.types import ExperimentStatus
 
