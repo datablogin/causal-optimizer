@@ -31,11 +31,13 @@ def compute_epsilon(
     volume, rescaled by budget progress (n_current / n_max), to determine
     how much to trust the surrogate model.
 
-    The formula ``epsilon = coverage_ratio / (n_current / n_max)`` requires
-    that coverage grows at least proportionally to budget consumption. Early
-    in the budget (small n_current/n_max), the denominator is small so high
-    coverage is needed to reach epsilon=1. As the budget is consumed, the
-    bar for trusting the surrogate lowers proportionally.
+    The formula ``epsilon = coverage_ratio / (n_current / n_max)`` divides
+    spatial coverage by budget progress. Early in the budget (small
+    n_current/n_max), the denominator is small, so even low coverage can
+    produce a high epsilon (trusting the surrogate). As the budget is
+    consumed the denominator grows, requiring proportionally higher coverage
+    to maintain the same epsilon. This means the bar for trusting the
+    surrogate **rises** over time.
 
     Args:
         observed_data: Array of shape (n_samples, n_dims) with observed points.

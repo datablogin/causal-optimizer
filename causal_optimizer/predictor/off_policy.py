@@ -69,6 +69,7 @@ class OffPolicyPredictor:
         self._cached_epsilon: float = 0.0
         self._search_space: SearchSpace | None = None
         self._rng: np.random.Generator = np.random.default_rng(seed)
+        self._warned_unbound_vars: set[str] = set()
 
     def fit(
         self,
@@ -276,12 +277,16 @@ class OffPolicyPredictor:
         for var in self._search_space.variables:
             if var.name not in self._numeric_var_names:
                 continue
-            if var.lower is None or var.upper is None:
+            if (
+                var.lower is None or var.upper is None
+            ) and var.name not in self._warned_unbound_vars:
                 logger.warning(
-                    "Variable '%s' has no bounds; defaulting to [0.0, 1.0] for epsilon "
-                    "coverage estimate. Set explicit bounds for accurate results.",
+                    "Variable '%s' has no bounds; defaulting to [0.0, 1.0] for "
+                    "epsilon coverage estimate. Set explicit bounds for accurate "
+                    "results.",
                     var.name,
                 )
+                self._warned_unbound_vars.add(var.name)
             lower = var.lower if var.lower is not None else 0.0
             upper = var.upper if var.upper is not None else 1.0
             bounds.append((lower, upper))

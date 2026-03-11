@@ -369,7 +369,10 @@ class TestOffPolicyPredictorEpsilonMode:
         """When epsilon is high, model quality is good, and uncertainty is low, skip."""
         from causal_optimizer.types import ExperimentLog, ExperimentResult, ExperimentStatus
 
-        predictor = OffPolicyPredictor(epsilon_mode=True, n_max=100)
+        # Use inf threshold so the test doesn't depend on RF uncertainty values
+        predictor = OffPolicyPredictor(
+            epsilon_mode=True, n_max=100, uncertainty_threshold=float("inf")
+        )
 
         log = ExperimentLog()
         search_space = make_search_space()
