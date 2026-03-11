@@ -243,42 +243,63 @@ class EffectEstimator:
                 method="difference",
             )
 
-        elif self.method in ("bootstrap", "aipw"):
-            # Bootstrap CI for the best-so-far in the kept distribution.
-            # If current_value falls outside the CI on the improvement side,
-            # it is significantly better than any historically kept result.
-            rng = np.random.default_rng(42)
-            n_iter = 100 if len(kept_arr) < 10 else self.n_bootstrap
-            boot_bests = np.empty(n_iter)
-            for i in range(n_iter):
-                boot = rng.choice(kept_arr, size=len(kept_arr), replace=True)
-                boot_bests[i] = float(np.min(boot) if minimize else np.max(boot))
+        elif self.method == "bootstrap":
+            return self._bootstrap_improvement(kept_arr, current_value, best, minimize)
 
-            point_estimate = current_value - best
-            alpha = 1 - self.confidence_level
-            ci_best_lo = float(np.percentile(boot_bests, 100 * alpha / 2))
-            ci_best_hi = float(np.percentile(boot_bests, 100 * (1 - alpha / 2)))
-
-            if minimize:
-                is_significant = current_value < ci_best_lo
-                p_value = float(np.mean(boot_bests <= current_value))
-            else:
-                is_significant = current_value > ci_best_hi
-                p_value = float(np.mean(boot_bests >= current_value))
-
-            ci_lo = float(current_value - ci_best_hi)
-            ci_hi = float(current_value - ci_best_lo)
-
-            return EffectEstimate(
-                point_estimate=point_estimate,
-                confidence_interval=(ci_lo, ci_hi),
-                p_value=p_value,
-                is_significant=is_significant,
-                method=self.method,
+        elif self.method == "aipw":
+            # AIPW (augmented IPW) requires a treatment/control split that is not
+            # available in the improvement context — fall back to bootstrap and warn.
+            logger.warning(
+                "estimate_improvement does not support 'aipw'; falling back to bootstrap"
             )
+            return self._bootstrap_improvement(kept_arr, current_value, best, minimize)
 
         else:
             raise ValueError(f"Unknown method: {self.method}")
+
+    def _bootstrap_improvement(
+        self,
+        kept_arr: np.ndarray,
+        current_value: float,
+        best: float,
+        minimize: bool,
+    ) -> EffectEstimate:
+        """Bootstrap CI for improvement significance.
+
+        Builds a bootstrap CI for the best-so-far in *kept_arr*.  If
+        *current_value* falls outside the CI on the improvement side it is
+        considered significantly better than any historically kept result.
+        Uses an unseeded RNG so each call produces independent samples.
+        """
+        rng = np.random.default_rng()
+        n_iter = 100 if len(kept_arr) < 10 else self.n_bootstrap
+        boot_bests = np.empty(n_iter)
+        for i in range(n_iter):
+            boot = rng.choice(kept_arr, size=len(kept_arr), replace=True)
+            boot_bests[i] = float(np.min(boot) if minimize else np.max(boot))
+
+        point_estimate = current_value - best
+        alpha = 1 - self.confidence_level
+        ci_best_lo = float(np.percentile(boot_bests, 100 * alpha / 2))
+        ci_best_hi = float(np.percentile(boot_bests, 100 * (1 - alpha / 2)))
+
+        if minimize:
+            is_significant = current_value < ci_best_lo
+            p_value = float(np.mean(boot_bests <= current_value))
+        else:
+            is_significant = current_value > ci_best_hi
+            p_value = float(np.mean(boot_bests >= current_value))
+
+        ci_lo = float(current_value - ci_best_hi)
+        ci_hi = float(current_value - ci_best_lo)
+
+        return EffectEstimate(
+            point_estimate=point_estimate,
+            confidence_interval=(ci_lo, ci_hi),
+            p_value=p_value,
+            is_significant=is_significant,
+            method="bootstrap",
+        )
 
     def _aipw_estimate(
         self,

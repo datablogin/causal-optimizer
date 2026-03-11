@@ -294,8 +294,11 @@ class ExperimentEngine:
             estimate.summary,
         )
 
-        # Return None only when the estimator itself couldn't determine significance
-        # (e.g. insufficient_data method — too few kept experiments).
+        # The guard above ensures len(kept) >= _MIN_KEPT (2), which matches the
+        # estimator's own "insufficient_data" threshold (< 2 kept).  In practice
+        # estimate_improvement will never return "insufficient_data" here, but the
+        # check is kept as an explicit safety net for future callers who may bypass
+        # the guard or change _MIN_KEPT without updating the estimator threshold.
         if estimate.method == "insufficient_data":
             return None
 
