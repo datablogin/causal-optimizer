@@ -91,7 +91,7 @@ class BenchmarkRunner:
         if strategy == "random":
             return self._run_random(budget, seed, rng, benchmark_name, known_optimum)
 
-        return self._run_engine(strategy, budget, seed, rng, benchmark_name, known_optimum)
+        return self._run_engine(strategy, budget, seed, benchmark_name, known_optimum)
 
     def compare(
         self,
@@ -123,7 +123,6 @@ class BenchmarkRunner:
         strategy: str,
         budget: int,
         seed: int,
-        rng: np.random.Generator,
         benchmark_name: str,
         known_optimum: float | None,
     ) -> BenchmarkResult:
@@ -234,6 +233,8 @@ def _sample_random_params(space: SearchSpace, rng: np.random.Generator) -> dict[
             params[var.name] = bool(rng.choice([True, False]))
         elif var.variable_type == VariableType.CATEGORICAL:
             choices = var.choices or []
-            if choices:
-                params[var.name] = choices[int(rng.integers(0, len(choices)))]
+            if not choices:
+                msg = f"Variable {var.name!r} is CATEGORICAL but has no choices defined."
+                raise ValueError(msg)
+            params[var.name] = choices[int(rng.integers(0, len(choices)))]
     return params
