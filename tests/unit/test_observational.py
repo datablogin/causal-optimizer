@@ -152,6 +152,7 @@ class TestCausalGraphConversion:
 
     def test_graph_roundtrip_identification(self) -> None:
         """DoWhy can identify effects using our converted graph."""
+        pytest.importorskip("dowhy")
         from causal_optimizer.estimator.observational import (
             causal_graph_to_dowhy_str,
         )
@@ -185,6 +186,7 @@ class TestObservationalEstimatorBackdoor:
     """Tests for backdoor adjustment estimation."""
 
     def test_estimate_returns_observational_estimate(self) -> None:
+        pytest.importorskip("dowhy")
         from causal_optimizer.estimator.observational import (
             ObservationalEstimate,
             ObservationalEstimator,
@@ -205,6 +207,7 @@ class TestObservationalEstimatorBackdoor:
         assert isinstance(result, ObservationalEstimate)
 
     def test_identified_true_for_backdoor_adjustable_graph(self) -> None:
+        pytest.importorskip("dowhy")
         from causal_optimizer.estimator.observational import ObservationalEstimator
 
         # X -> Z -> Y: Z effect on Y is identifiable (X is adjustment set)
@@ -225,6 +228,7 @@ class TestObservationalEstimatorBackdoor:
     @pytest.mark.slow
     def test_backdoor_estimate_close_to_true_effect(self) -> None:
         """Backdoor-adjusted estimate should be close to the analytical solution."""
+        pytest.importorskip("dowhy")
         from causal_optimizer.estimator.observational import ObservationalEstimator
 
         # X -> Z -> Y with Y = 3*Z + noise
@@ -246,6 +250,7 @@ class TestObservationalEstimatorBackdoor:
         assert abs(result.expected_outcome - 6.0) < 1.5
 
     def test_confidence_interval_is_finite(self) -> None:
+        pytest.importorskip("dowhy")
         from causal_optimizer.estimator.observational import ObservationalEstimator
 
         graph = CausalGraph(edges=[("x", "z"), ("z", "objective")])
@@ -266,6 +271,7 @@ class TestObservationalEstimatorBackdoor:
         assert lo < hi
 
     def test_method_field_reports_backdoor(self) -> None:
+        pytest.importorskip("dowhy")
         from causal_optimizer.estimator.observational import ObservationalEstimator
 
         graph = CausalGraph(edges=[("x", "z"), ("z", "objective")])
@@ -308,6 +314,7 @@ class TestConfoundingCorrection:
     @pytest.mark.slow
     def test_identified_false_for_unidentifiable_confounded_graph(self) -> None:
         """When X <-> Y (confounder) and no observed backdoor set, identified=False."""
+        pytest.importorskip("dowhy")
         from causal_optimizer.estimator.observational import ObservationalEstimator
 
         # X <-> Y (bidirected only, no other observed variable to block path)
@@ -339,6 +346,7 @@ class TestNonIdentifiable:
     """Tests for graceful handling of non-identifiable effects."""
 
     def test_identified_false_is_returned(self) -> None:
+        pytest.importorskip("dowhy")
         from causal_optimizer.estimator.observational import (
             ObservationalEstimate,
             ObservationalEstimator,
@@ -365,6 +373,7 @@ class TestNonIdentifiable:
 
     def test_fallback_returns_finite_value(self) -> None:
         """Even when not identified, a finite fallback estimate is returned."""
+        pytest.importorskip("dowhy")
         from causal_optimizer.estimator.observational import ObservationalEstimator
 
         graph = CausalGraph(
@@ -456,6 +465,7 @@ class TestEffectEstimatorIntegration:
             )
 
     def test_observational_method_delegates_to_observational_estimator(self) -> None:
+        pytest.importorskip("dowhy")
         from causal_optimizer.estimator.effects import EffectEstimator
 
         graph = CausalGraph(edges=[("x", "z"), ("z", "objective")])
@@ -558,6 +568,7 @@ class TestEffectEstimatorIntegration:
             )
 
     def test_observational_point_estimate_is_finite(self) -> None:
+        pytest.importorskip("dowhy")
         from causal_optimizer.estimator.effects import EffectEstimator
 
         graph = CausalGraph(edges=[("x", "z"), ("z", "objective")])

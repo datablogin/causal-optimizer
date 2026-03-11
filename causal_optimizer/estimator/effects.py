@@ -48,6 +48,10 @@ class EffectEstimator:
     - 'bootstrap': bootstrap confidence intervals
     - 'aipw': augmented IPW via causal-inference library
     - 'observational': DoWhy backdoor/frontdoor/IV adjustment (requires causal_graph)
+
+    When ``method='observational'``, the ``obs_method`` parameter controls
+    which DoWhy identification strategy is used (``"backdoor"``, ``"frontdoor"``,
+    or ``"iv"``).
     """
 
     def __init__(
@@ -56,11 +60,13 @@ class EffectEstimator:
         confidence_level: float = 0.95,
         n_bootstrap: int = 1000,
         causal_graph: CausalGraph | None = None,
+        obs_method: str = "backdoor",
     ) -> None:
         self.method = method
         self.confidence_level = confidence_level
         self.n_bootstrap = n_bootstrap
         self.causal_graph = causal_graph
+        self.obs_method = obs_method
 
     def estimate_effect(
         self,
@@ -256,7 +262,7 @@ class EffectEstimator:
                 method="difference",
             )
 
-        elif self.method in ("bootstrap", "aipw"):
+        elif self.method in ("bootstrap", "aipw", "observational"):
             # Bootstrap CI for the best-so-far in the kept distribution.
             # If current_value falls outside the CI on the improvement side,
             # it is significantly better than any historically kept result.
@@ -364,7 +370,7 @@ class EffectEstimator:
 
         obs_estimator = ObservationalEstimator(
             causal_graph=self.causal_graph,
-            method="backdoor",
+            method=self.obs_method,
             confidence_level=self.confidence_level,
         )
 
@@ -394,7 +400,7 @@ class EffectEstimator:
             half = max(1, len(all_vals) // 2)
             return self._bootstrap_estimate(all_vals[:half], all_vals[half:])
 
-        if not treatment_est.identified:
+        if not treatment_est.identified or not control_est.identified:
             logger.warning("Effect not identifiable via %s; falling back to bootstrap", self.method)
             df = experiment_log.to_dataframe()
             treated_arr = df[df[treatment_param] == treatment_value][objective_name].values
@@ -409,9 +415,11 @@ class EffectEstimator:
         ci_lo = treatment_est.confidence_interval[0] - control_est.confidence_interval[1]
         ci_hi = treatment_est.confidence_interval[1] - control_est.confidence_interval[0]
 
-        # Approximate p-value from the CI width
+        # Approximate p-value from the CI width using the configured confidence level
+        alpha = 1.0 - self.confidence_level
+        z_crit = float(stats.norm.ppf(1.0 - alpha / 2.0))
         ci_width = ci_hi - ci_lo
-        se = ci_width / (2 * 1.96) if ci_width > 0 else 1.0
+        se = ci_width / (2 * z_crit) if ci_width > 0 else 1.0
         z_stat = abs(point_estimate) / se if se > 0 else 0.0
         p_value = float(2 * stats.norm.sf(z_stat))
 

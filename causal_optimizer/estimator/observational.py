@@ -44,9 +44,10 @@ def causal_graph_to_dowhy_str(graph: CausalGraph) -> str:
         lines.append(f'    "{src}" -> "{dst}";')
 
     # Bidirected edges → latent common cause nodes
+    # DoWhy identifies unobserved nodes via the `observed="no"` attribute.
     for i, (u, v) in enumerate(graph.bidirected_edges):
         latent = f"{_LATENT_PREFIX}{i}_{u}_{v}"
-        lines.append(f'    "{latent}" [label="Unobserved Confounders"];')
+        lines.append(f'    "{latent}" [label="Unobserved Confounders", observed="no"];')
         lines.append(f'    "{latent}" -> "{u}";')
         lines.append(f'    "{latent}" -> "{v}";')
 
@@ -196,13 +197,16 @@ class ObservationalEstimator:
                     ci_lo, ci_hi = ci_hi, ci_lo
                 ci: tuple[float, float] = (ci_lo, ci_hi)
             except Exception:
-                # Fall back to SE-based CI
+                # Fall back to SE-based CI using the configured confidence level
                 try:
                     se_arr = estimate.get_standard_error()
                     se = float(np.ravel(se_arr)[0]) if se_arr is not None else 0.0
                 except Exception:
                     se = 0.0
-                z = float(np.abs(np.array([1.96])[0]))  # ~95% CI
+                from scipy import stats as scipy_stats
+
+                alpha = 1.0 - self.confidence_level
+                z = float(scipy_stats.norm.ppf(1.0 - alpha / 2.0))
                 ate = float(estimate.value)
                 ci = (
                     (intercept + (ate - z * se) * treatment_value),
@@ -239,7 +243,8 @@ class ObservationalEstimator:
         import pandas as pd
         from sklearn.ensemble import RandomForestRegressor
 
-        assert isinstance(df, pd.DataFrame)
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError(f"Expected pd.DataFrame, got {type(df).__name__}")
 
         feature_cols = [c for c in df.columns if c != objective_name]
         features_df = df[feature_cols].select_dtypes(include=[np.number]).fillna(0.0)

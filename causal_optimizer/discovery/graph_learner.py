@@ -89,7 +89,6 @@ class GraphLearner:
         """
         corr = df.corr().abs()
         edges: list[tuple[str, str]] = []
-        bidirected: list[tuple[str, str]] = []
         cols = df.columns.tolist()
         non_obj = [c for c in cols if c != objective_name]
 
@@ -104,7 +103,7 @@ class GraphLearner:
                 if corr.loc[c, objective_name] > self.threshold:
                     edges.append((c, objective_name))
 
-        return CausalGraph(edges=edges, bidirected_edges=bidirected, nodes=cols)
+        return CausalGraph(edges=edges, nodes=cols)
 
     def _learn_pc(self, df: pd.DataFrame) -> CausalGraph:
         """PC algorithm via causal-inference library."""
