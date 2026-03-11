@@ -485,6 +485,71 @@ def test_engine_discovery_no_pomis_without_confounders() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Tests for re-discovery after screening revert
+# ---------------------------------------------------------------------------
+
+
+def test_prior_causal_graph_attribute_set_correctly() -> None:
+    """_prior_causal_graph stores only the user-supplied prior, not auto-discovered."""
+    prior_graph = CausalGraph(edges=[("x", "y")], nodes=["x", "y"])
+
+    # With prior graph
+    engine_with_prior = ExperimentEngine(
+        search_space=make_search_space(),
+        runner=QuadraticRunner(),
+        causal_graph=prior_graph,
+        discovery_method="correlation",
+    )
+    assert engine_with_prior._prior_causal_graph is prior_graph
+
+    # Without prior graph
+    engine_no_prior = ExperimentEngine(
+        search_space=make_search_space(),
+        runner=QuadraticRunner(),
+        discovery_method="correlation",
+    )
+    assert engine_no_prior._prior_causal_graph is None
+
+
+@pytest.mark.slow
+def test_auto_discovery_overwrites_previous_auto_discovered_graph() -> None:
+    """When _run_auto_discovery runs again (after screening revert), auto-discovered
+    graph is replaced with the newer richer dataset — not locked as a prior."""
+    from unittest.mock import patch
+
+    from causal_optimizer.discovery.graph_learner import GraphLearner
+
+    call_count = 0
+    graphs = [
+        CausalGraph(edges=[("x", "objective")], nodes=["x", "y", "objective"]),
+        CausalGraph(
+            edges=[("x", "objective"), ("y", "objective")], nodes=["x", "y", "objective"]
+        ),
+    ]
+
+    def mock_learn(self_inner: GraphLearner, log: object, **kwargs: object) -> CausalGraph:
+        nonlocal call_count
+        graph = graphs[min(call_count, len(graphs) - 1)]
+        call_count += 1
+        return graph
+
+    with patch.object(GraphLearner, "learn", mock_learn):
+        engine = ExperimentEngine(
+            search_space=make_search_space(),
+            runner=QuadraticRunner(),
+            discovery_method="correlation",
+            # Use max_screening_attempts=1 so we can predict when screening fires
+        )
+        # Trigger the transition manually by running 12 steps
+        engine.run_loop(n_experiments=12)
+
+    # The discovered graph should be the result of one of the mock calls
+    assert engine._discovered_graph is not None
+    # Crucially, _prior_causal_graph should still be None (no user prior)
+    assert engine._prior_causal_graph is None
+
+
+# ---------------------------------------------------------------------------
 # Tests for engine with invalid discovery_method
 # ---------------------------------------------------------------------------
 

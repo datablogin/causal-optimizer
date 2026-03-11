@@ -100,6 +100,13 @@ class ExperimentEngine:
         self.minimize = minimize
         self.causal_graph = causal_graph
         self._causal_graph: CausalGraph | None = causal_graph
+        # Separate reference to the user-supplied prior so _run_auto_discovery can
+        # distinguish "no prior was given" from "auto-discovery already ran once".
+        # This is important when _run_screening reverts the phase to exploration and
+        # _run_auto_discovery is called again: without this distinction, the
+        # auto-discovered graph from the first call would be treated as a user prior
+        # and block re-discovery from the richer dataset.
+        self._prior_causal_graph: CausalGraph | None = causal_graph
         self._discovery_method: str | None = discovery_method
         self._discovered_graph: CausalGraph | None = None
         self.log = ExperimentLog()
@@ -400,9 +407,11 @@ class ExperimentEngine:
 
         Two operating modes:
 
-        - **No prior graph** (``self._causal_graph is None``): the discovered
-          graph becomes the active graph used for optimization.
-        - **Hybrid mode** (prior graph already set): the discovered graph is
+        - **No user prior** (``self._prior_causal_graph is None``): the discovered
+          graph becomes the active graph used for optimization.  If discovery runs
+          again after a screening-induced phase revert, the previously auto-discovered
+          graph is overwritten with the richer dataset.
+        - **Hybrid mode** (user supplied a prior graph): the discovered graph is
           computed and logged for informational purposes, but the prior graph is
           *not* replaced.
         """
@@ -414,8 +423,13 @@ class ExperimentEngine:
         learner = GraphLearner(method=self._discovery_method)
         try:
             discovered = learner.learn(self.log, objective_name=self.objective_name)
-        except Exception:
-            logger.warning("Auto-discovery failed, continuing without", exc_info=True)
+        except Exception as exc:
+            logger.error(
+                "Auto-discovery failed (%s: %s), continuing without causal graph",
+                type(exc).__name__,
+                exc,
+                exc_info=True,
+            )
             return
 
         self._discovered_graph = discovered
@@ -430,12 +444,14 @@ class ExperimentEngine:
             n_bidir,
         )
 
-        if self._causal_graph is None:
-            # No prior graph — use the discovered graph going forward
+        if self._prior_causal_graph is None:
+            # No user-supplied prior — use the discovered graph going forward.
+            # This also handles the re-discovery case after a screening revert:
+            # the new graph (with more samples) replaces the old auto-discovered one.
             self._causal_graph = discovered
             self.causal_graph = discovered
         else:
-            # Hybrid mode: prior graph is preserved; discovered graph is informational only
+            # Hybrid mode: user-supplied prior is preserved; discovered graph is informational only
             logger.info(
                 "Hybrid mode: prior causal graph retained; discovered graph logged but not applied"
             )
