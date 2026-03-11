@@ -578,3 +578,61 @@ def test_engine_invalid_bidir_threshold_raises() -> None:
             discovery_threshold=0.8,
             discovery_bidir_threshold=0.5,
         )
+
+
+def test_graph_learner_independent_vars_no_bidirected_edge() -> None:
+    """For independent x and y, the learner should not add a bidirected edge between them."""
+    from causal_optimizer.discovery.graph_learner import GraphLearner
+
+    # Build a log where x and y are independent (different seeds for each)
+    rng = np.random.default_rng(0)
+    log = ExperimentLog()
+    for i in range(30):
+        x = float(rng.uniform(-5, 5))
+        y = float(rng.uniform(-5, 5))  # independent of x
+        log.results.append(
+            ExperimentResult(
+                experiment_id=f"ind-{i:03d}",
+                parameters={"x": x, "y": y},
+                metrics={"objective": float(x**2 + y**2)},
+                status=ExperimentStatus.KEEP,
+            )
+        )
+
+    learner = GraphLearner(method="correlation", threshold=0.3, bidir_threshold=0.7)
+    graph = learner.learn(log, min_samples=10, objective_name="objective")
+
+    # Independent x and y should not get a bidirected edge between them —
+    # the key invariant is that uncorrelated pairs don't get confounding edges.
+    assert ("x", "y") not in graph.bidirected_edges
+    assert ("y", "x") not in graph.bidirected_edges
+
+
+def test_engine_cyclic_graph_is_discarded(caplog: pytest.LogCaptureFixture) -> None:
+    """If discovery produces a cyclic graph, it should be discarded with an error log."""
+    from unittest.mock import patch
+
+    from causal_optimizer.discovery.graph_learner import GraphLearner
+
+    cyclic_graph = CausalGraph(
+        nodes=["x", "y", "objective"],
+        edges=[("x", "y"), ("y", "x"), ("x", "objective")],
+    )
+
+    engine = ExperimentEngine(
+        search_space=make_search_space(),
+        runner=QuadraticRunner(),
+        discovery_method="correlation",
+    )
+
+    with (
+        patch.object(GraphLearner, "learn", return_value=cyclic_graph),
+        caplog.at_level(logging.ERROR, logger="causal_optimizer.engine.loop"),
+    ):
+        engine.run_loop(n_experiments=12)
+
+    # Cyclic graph should be discarded
+    assert engine._causal_graph is None
+    assert engine._discovered_graph is None
+    error_messages = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
+    assert any("cycle" in msg.lower() for msg in error_messages)

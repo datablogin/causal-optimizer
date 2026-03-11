@@ -477,6 +477,16 @@ class ExperimentEngine:
             )
             return
 
+        # Validate that the directed-edge subgraph is a DAG (no cycles).
+        # Cycles can occur with heuristic discovery methods; a cyclic graph
+        # breaks topological ordering used by POMIS computation.
+        if self._has_directed_cycle(discovered):
+            logger.error(
+                "Discovered graph contains directed cycles; discarding to avoid breaking "
+                "topological ordering in downstream POMIS computation"
+            )
+            return
+
         self._discovered_graph = discovered
 
         n_nodes = len(discovered.nodes)
@@ -503,6 +513,34 @@ class ExperimentEngine:
             logger.info(
                 "Hybrid mode: prior causal graph retained; discovered graph logged but not applied"
             )
+
+    @staticmethod
+    def _has_directed_cycle(graph: CausalGraph) -> bool:
+        """Return True if the directed-edge subgraph contains a cycle.
+
+        Uses iterative DFS with a grey/black colouring scheme (Kahn's algorithm
+        would also work; DFS is simpler to implement without external libraries).
+        Bidirected edges are ignored — only ``graph.edges`` are checked.
+        """
+        adjacency: dict[str, list[str]] = {n: [] for n in graph.nodes}
+        for u, v in graph.edges:
+            if u in adjacency:
+                adjacency[u].append(v)
+
+        # 0 = unvisited, 1 = in-stack (grey), 2 = done (black)
+        color: dict[str, int] = {n: 0 for n in graph.nodes}
+
+        def dfs(node: str) -> bool:
+            color[node] = 1
+            for nbr in adjacency.get(node, []):
+                if color[nbr] == 1:
+                    return True  # back-edge → cycle
+                if color[nbr] == 0 and dfs(nbr):
+                    return True
+            color[node] = 2
+            return False
+
+        return any(dfs(n) for n in graph.nodes if color[n] == 0)
 
     def _run_screening(self) -> None:
         """Run screening analysis to identify important variables."""

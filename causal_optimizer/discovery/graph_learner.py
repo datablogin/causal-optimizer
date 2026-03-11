@@ -21,6 +21,13 @@ logger = logging.getLogger(__name__)
 # Default threshold above which a non-outcome pair gets a bidirected edge
 # instead of a directed-by-index-order edge.  Must be ≥ `threshold` to have
 # any effect.  Exposed as a default so callers can override per instance.
+#
+# The value 0.7 is a heuristic: correlations above this level in experimental
+# data typically indicate either a direct causal relationship (direction unknown)
+# or a strong common cause (confounder).  Both cases warrant conservative
+# treatment as potential confounders (bidirected edge) to prevent downstream
+# algorithms from making unjustified directional assumptions.  Adjust based on
+# domain knowledge and observed signal-to-noise characteristics.
 _DEFAULT_BIDIR_THRESHOLD = 0.7
 
 
