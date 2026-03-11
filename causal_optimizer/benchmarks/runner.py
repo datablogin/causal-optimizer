@@ -90,7 +90,11 @@ class BenchmarkRunner:
         Args:
             strategy: One of ``"causal"``, ``"random"``, ``"surrogate_only"``.
             budget: Number of experiments to run.
-            seed: Random seed for reproducibility.
+            seed: Random seed for reproducibility. For the ``"random"`` strategy,
+                both sampling and noise RNGs are fully controlled. For engine-based
+                strategies (``"causal"``, ``"surrogate_only"``), only the benchmark
+                noise is seeded; the engine's internal RNG (suggestions, bootstrap)
+                is not controlled, so results may vary across runs.
             known_optimum: Known optimal objective value for threshold calculation.
                 If None, ``experiments_to_threshold`` will be None.
 
