@@ -118,10 +118,13 @@ def test_engine_calls_effect_estimator_for_significance() -> None:
         runner=QuadraticRunner(),
     )
 
-    # Pre-populate the log with enough history for statistical evaluation
+    # Pre-populate the log with enough history for statistical evaluation.
+    # Requires >= 5 KEEP (engine guard) and >= 2 DISCARD.
     engine.log = make_log_with_results(
-        objective_values=[10.0, 8.0, 6.0, 5.0, 4.0],
+        objective_values=[10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 4.0],
         statuses=[
+            ExperimentStatus.KEEP,
+            ExperimentStatus.KEEP,
             ExperimentStatus.KEEP,
             ExperimentStatus.KEEP,
             ExperimentStatus.KEEP,
@@ -266,16 +269,18 @@ def test_evaluate_status_uses_greedy_when_few_experiments() -> None:
 
 
 def test_is_improvement_significant_returns_value_with_enough_experiments() -> None:
-    """With >= 5 experiments (including both kept and discarded), statistical test runs."""
+    """With >= 5 kept + >= 2 discarded experiments, statistical test runs."""
     engine = ExperimentEngine(
         search_space=make_search_space(),
         runner=QuadraticRunner(),
     )
 
-    # 5 experiments with sufficient kept and discarded
+    # 5 KEEP + 2 DISCARD satisfies both thresholds (_MIN_KEPT=5, _MIN_DISCARDED=2)
     engine.log = make_log_with_results(
-        objective_values=[10.0, 8.0, 6.0, 9.0, 11.0],
+        objective_values=[10.0, 8.0, 6.0, 5.0, 4.0, 9.0, 11.0],
         statuses=[
+            ExperimentStatus.KEEP,
+            ExperimentStatus.KEEP,
             ExperimentStatus.KEEP,
             ExperimentStatus.KEEP,
             ExperimentStatus.KEEP,
@@ -285,7 +290,7 @@ def test_is_improvement_significant_returns_value_with_enough_experiments() -> N
     )
 
     # With enough history, should return bool (not None)
-    result = engine._is_improvement_significant(current_objective=4.0)
+    result = engine._is_improvement_significant(current_objective=2.0)
     assert result is not None  # statistical test was run
 
 
@@ -519,10 +524,12 @@ def test_is_improvement_significant_uses_estimate_improvement() -> None:
         runner=QuadraticRunner(),
     )
 
-    # Enough history for statistical evaluation
+    # Enough history for statistical evaluation: requires >= 5 KEEP + >= 2 DISCARD
     engine.log = make_log_with_results(
-        objective_values=[10.0, 9.0, 8.0, 7.0, 6.0],
+        objective_values=[10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 4.0],
         statuses=[
+            ExperimentStatus.KEEP,
+            ExperimentStatus.KEEP,
             ExperimentStatus.KEEP,
             ExperimentStatus.KEEP,
             ExperimentStatus.KEEP,
@@ -550,3 +557,46 @@ def test_is_improvement_significant_uses_estimate_improvement() -> None:
     mock_fn.assert_called_once()
     # Since mock returned is_significant=True, method should return True
     assert sig is True
+
+
+# ---------------------------------------------------------------------------
+# Test: AIPW fallback warning
+# ---------------------------------------------------------------------------
+
+
+def test_estimate_improvement_aipw_warns_and_falls_back(caplog: pytest.LogCaptureFixture) -> None:
+    """AIPW method logs a warning and falls back to bootstrap for estimate_improvement."""
+    import logging
+
+    estimator = EffectEstimator(method="aipw")
+    log = make_log_with_results(
+        objective_values=[10.0, 9.0, 8.0, 7.0, 6.0, 5.0],
+        statuses=[ExperimentStatus.KEEP] * 6,
+    )
+
+    with caplog.at_level(logging.WARNING, logger="causal_optimizer.estimator.effects"):
+        result = estimator.estimate_improvement(
+            experiment_log=log,
+            current_value=1.0,
+            objective_name="objective",
+            minimize=True,
+        )
+
+    assert any("aipw" in record.message.lower() for record in caplog.records)
+    # Falls back to bootstrap (or greedy for small sample), so method != "aipw"
+    assert result.method in ("bootstrap", "greedy")
+
+
+# ---------------------------------------------------------------------------
+# Test: Invalid effect_method raises at construction time
+# ---------------------------------------------------------------------------
+
+
+def test_engine_rejects_invalid_effect_method() -> None:
+    """Engine must reject invalid effect_method at __init__ time."""
+    with pytest.raises(ValueError, match="Invalid effect_method 'invalid'"):
+        ExperimentEngine(
+            search_space=make_search_space(),
+            runner=QuadraticRunner(),
+            effect_method="invalid",
+        )

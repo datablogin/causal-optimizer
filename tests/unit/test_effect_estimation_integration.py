@@ -131,16 +131,16 @@ class TestStatisticalEvaluation:
     """With enough history, statistical evaluation should be used."""
 
     def test_statistical_path_used_with_enough_history(self):
-        """With >= 5 experiments, >= 2 KEEP and >= 2 DISCARD, statistical check fires."""
+        """With >= 5 KEEP and >= 2 DISCARD, statistical check fires."""
         engine = ExperimentEngine(
             search_space=make_search_space(),
             runner=QuadraticRunner(),
         )
 
-        # Seed history: 3 KEEP, 3 DISCARD
+        # Seed history: 5 KEEP, 3 DISCARD (satisfies _MIN_KEPT=5, _MIN_DISCARDED=2)
         _seed_engine_with_history(
             engine,
-            kept_values=[1.0, 2.0, 3.0],
+            kept_values=[1.0, 2.0, 3.0, 4.0, 5.0],
             discarded_values=[10.0, 15.0, 20.0],
         )
 
@@ -227,22 +227,22 @@ class TestStatisticalEvaluation:
         assert status == ExperimentStatus.DISCARD
 
     def test_adaptive_alpha_early(self):
-        """With < 20 experiments, alpha=0.1 (more permissive)."""
+        """With < 20 experiments but enough kept/discarded, statistical test runs."""
         engine = ExperimentEngine(
             search_space=make_search_space(),
             runner=QuadraticRunner(),
             minimize=True,
         )
 
-        # 6 total experiments (< 20) — should use alpha=0.1
+        # 5 KEEP + 3 DISCARD = 8 total (< 20) — satisfies statistical thresholds
         _seed_engine_with_history(
             engine,
-            kept_values=[5.0, 6.0, 7.0],
+            kept_values=[5.0, 6.0, 7.0, 8.0, 9.0],
             discarded_values=[15.0, 18.0, 20.0],
         )
 
         assert len(engine.log.results) < 20
-        # The method should work without errors
+        # The method should work without errors and return a bool
         result = engine._is_improvement_significant(0.1)
         assert isinstance(result, bool)
 

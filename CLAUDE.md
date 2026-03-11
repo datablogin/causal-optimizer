@@ -75,4 +75,4 @@ This is a hard requirement. No exceptions. PRs that skip any of these steps must
 
 ## Known issues
 
-- `EffectEstimator` exists but is not wired into the engine loop (ad-hoc bootstrap used instead)
+None currently tracked.

@@ -26,13 +26,12 @@ from causal_optimizer.types import (
 
 logger = logging.getLogger(__name__)
 
-# Minimum requirements for statistical evaluation
-_MIN_EXPERIMENTS = 5
-_MIN_KEPT = 2
+# Minimum requirements for statistical evaluation.
+# _MIN_KEPT=5 is aligned with estimate_improvement()'s own threshold: with
+# fewer than 5 kept experiments the estimator falls back to a greedy comparison
+# (method="greedy"), so there is no benefit to calling it from the engine.
+_MIN_KEPT = 5
 _MIN_DISCARDED = 2
-_N_BOOTSTRAP = 1000
-_ALPHA_EARLY = 0.1  # permissive threshold for < 20 experiments
-_ALPHA_LATE = 0.05  # stricter threshold for >= 20 experiments
 
 
 class ExperimentRunner(Protocol):
@@ -82,8 +81,10 @@ class ExperimentEngine:
                 sources in the engine (MAP-Elites sampling, bootstrap CI).
             effect_method: Method used by :class:`EffectEstimator` to assess
                 statistical significance in keep/discard decisions.  Valid
-                values are ``"difference"``, ``"bootstrap"`` (default), and
-                ``"aipw"``.
+                values are ``"difference"`` and ``"bootstrap"`` (default).
+                ``"aipw"`` is accepted but falls back to bootstrap for
+                keep/discard decisions (AIPW requires treatment/control
+                splits not available in the improvement context).
             confidence_level: Confidence level for statistical tests (default
                 0.95 → alpha = 0.05).  Passed directly to
                 :class:`~causal_optimizer.estimator.effects.EffectEstimator`.
@@ -283,7 +284,6 @@ class ExperimentEngine:
             False if the change is within noise.
             None if insufficient data for statistical evaluation (fall back to greedy).
         """
-        n_total = len(self.log.results)
         kept = [
             r.metrics.get(self.objective_name)
             for r in self.log.results
@@ -296,8 +296,10 @@ class ExperimentEngine:
             and r.metrics.get(self.objective_name) is not None
         ]
 
-        # Not enough history for statistical evaluation — fall back to greedy
-        if n_total < _MIN_EXPERIMENTS or len(kept) < _MIN_KEPT or len(discarded) < _MIN_DISCARDED:
+        # Not enough history for statistical evaluation — fall back to greedy.
+        # Require at least 5 kept experiments (aligns with estimate_improvement's
+        # own greedy-fallback threshold) and 2 discarded for contrast.
+        if len(kept) < _MIN_KEPT or len(discarded) < _MIN_DISCARDED:
             return None
 
         estimate = self._effect_estimator.estimate_improvement(
