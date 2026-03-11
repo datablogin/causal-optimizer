@@ -450,6 +450,12 @@ class ExperimentEngine:
         if self._discovery_method is None:
             return
 
+        if self._discovery_method == "correlation":
+            logger.info(
+                "Running correlation-based causal discovery (heuristic only; "
+                "not a rigorous causal identification — treat results as approximate guidance)"
+            )
+
         from causal_optimizer.discovery.graph_learner import GraphLearner
 
         learner = GraphLearner(

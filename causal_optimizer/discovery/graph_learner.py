@@ -175,13 +175,16 @@ class GraphLearner:
         """PC algorithm via causal-inference library.
 
         The PC algorithm outputs a CPDAG (completed partially directed acyclic
-        graph) which may contain undirected edges.  Undirected edges indicate
-        that the direction is statistically unidentifiable from the data alone;
-        they are represented as directed edges in index order (u → v) as a
-        conservative default.  They are *not* converted to bidirected edges,
-        because an undirected CPDAG edge means ``u → v`` or ``v → u`` — it does
-        **not** imply a hidden common cause (which is what a bidirected edge
-        X ↔ Y represents in an ADMG).
+        graph) which may contain undirected edges.  An undirected edge ``u -- v``
+        means the data cannot distinguish ``u → v`` from ``v → u``; the true
+        direction is statistically unidentifiable.
+
+        Such edges are represented as bidirected edges (X ↔ Y) — a conservative
+        placeholder that prevents downstream algorithms from making unjustified
+        directional assumptions and signals that confounding *may* exist.  This
+        is distinct from the structural causal meaning of a bidirected edge in a
+        full ADMG, but it is the safest representation available without
+        additional assumptions.
         """
         try:
             from causal_inference.discovery import PCAlgorithm
@@ -199,14 +202,14 @@ class GraphLearner:
             u, v = edge[0], edge[1]
             edge_type = edge[2] if len(edge) > 2 else "directed"
             if edge_type == "undirected":
-                # Direction unidentifiable from CPDAG — use index order as a
-                # conservative default rather than implying confounding.
+                # Direction unidentifiable from CPDAG — use bidirected as a
+                # conservative placeholder so no unjustified direction is assumed.
                 logger.debug(
-                    "PC: undirected edge (%r, %r) — orientation ambiguous, using index order",
+                    "PC: undirected edge (%r, %r) — orientation ambiguous, using bidirected",
                     u,
                     v,
                 )
-                directed_edges.append((u, v))
+                bidirected_edges.append((u, v))
             else:
                 directed_edges.append((u, v))
 

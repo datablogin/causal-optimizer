@@ -538,3 +538,43 @@ def test_engine_invalid_discovery_method_raises() -> None:
             runner=QuadraticRunner(),
             discovery_method="invalid_method",
         )
+
+
+def test_engine_discovery_failure_continues_without_graph(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """When discovery raises an expected exception, engine logs error and continues."""
+    from unittest.mock import patch
+
+    from causal_optimizer.discovery.graph_learner import GraphLearner
+
+    engine = ExperimentEngine(
+        search_space=make_search_space(),
+        runner=QuadraticRunner(),
+        discovery_method="correlation",
+    )
+
+    with (
+        patch.object(GraphLearner, "learn", side_effect=ValueError("mock failure")),
+        caplog.at_level(logging.ERROR, logger="causal_optimizer.engine.loop"),
+    ):
+        engine.run_loop(n_experiments=12)
+
+    # Should log the failure but not crash
+    error_messages = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
+    assert any("Auto-discovery failed" in msg for msg in error_messages)
+    # No graph was set since discovery failed
+    assert engine._causal_graph is None
+    assert engine._discovered_graph is None
+
+
+def test_engine_invalid_bidir_threshold_raises() -> None:
+    """ExperimentEngine should raise ValueError when bidir_threshold < threshold."""
+    with pytest.raises(ValueError, match="discovery_bidir_threshold"):
+        ExperimentEngine(
+            search_space=make_search_space(),
+            runner=QuadraticRunner(),
+            discovery_method="correlation",
+            discovery_threshold=0.8,
+            discovery_bidir_threshold=0.5,
+        )
