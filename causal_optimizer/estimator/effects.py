@@ -296,17 +296,17 @@ class EffectEstimator:
         ci_lo = float(np.percentile(boot_means, 100 * alpha / 2))
         ci_hi = float(np.percentile(boot_means, 100 * (1 - alpha / 2)))
 
-        # p-value: fraction of bootstrap means worse than (on the non-improvement
-        # side of) current_value.  For minimize=True, "worse" means greater than
-        # current_value; a very good candidate has nearly all boot_means above it,
-        # giving a small p-value (strong significance).
+        # p-value: fraction of bootstrap means at least as extreme as current_value
+        # in the improvement direction.  For minimize=True, "at least as extreme"
+        # means ≤ current_value.  A very good candidate (very low value) has almost
+        # no boot_means below it → p_value ≈ 0 (strong significance).
         if minimize:
-            p_value = float(np.mean(boot_means > current_value))
+            p_value = float(np.mean(boot_means <= current_value))
             # Significant if current_value is below the CI lower bound of the
             # kept mean AND is a raw improvement over the best-so-far.
             is_significant = current_value < best and current_value < ci_lo
         else:
-            p_value = float(np.mean(boot_means < current_value))
+            p_value = float(np.mean(boot_means >= current_value))
             is_significant = current_value > best and current_value > ci_hi
 
         return EffectEstimate(
