@@ -105,7 +105,9 @@ class OffPolicyPredictor:
             # Precompute epsilon to avoid repeated ConvexHull work
             domain_bounds = self._get_domain_bounds()
             if self._cached_features is not None and domain_bounds is not None:
-                n_current = self._cached_features.shape[0]
+                # Use total experiment count for budget progress (not the
+                # NaN-dropped row count used for the hull data).
+                n_current = len(df)
                 self._cached_epsilon = compute_epsilon(
                     self._cached_features, domain_bounds, n_current, self.n_max
                 )
