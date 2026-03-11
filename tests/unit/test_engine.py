@@ -183,6 +183,35 @@ def test_engine_pomis_not_computed_without_graph():
     assert engine._pomis_sets is None
 
 
+def test_engine_pomis_success_path():
+    """POMIS success path stores computed sets."""
+    import types
+
+    graph = CausalGraph(
+        edges=[("x", "objective"), ("y", "objective")],
+        bidirected_edges=[("x", "y")],
+    )
+    engine = ExperimentEngine(
+        search_space=make_search_space(),
+        runner=QuadraticRunner(),
+        causal_graph=graph,
+    )
+
+    expected = [frozenset({"x"}), frozenset({"y"})]
+    fake_pomis = types.ModuleType("causal_optimizer.optimizer.pomis")
+    fake_pomis.compute_pomis = lambda *a, **kw: expected  # type: ignore[attr-defined]
+
+    import sys
+
+    sys.modules["causal_optimizer.optimizer.pomis"] = fake_pomis
+    try:
+        engine.run_loop(n_experiments=10)
+    finally:
+        del sys.modules["causal_optimizer.optimizer.pomis"]
+
+    assert engine._pomis_sets == expected
+
+
 def test_engine_pomis_failure_sets_none():
     """If compute_pomis raises, _pomis_sets should be None."""
     import types
