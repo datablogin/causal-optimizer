@@ -1,0 +1,23 @@
+# Codecov configuration for causal-optimizer
+# https://docs.codecov.com/docs/codecov-yaml
+
+coverage:
+  status:
+    project:
+      default:
+        target: 90%
+        threshold: 2%
+    patch:
+      default:
+        target: 95%
+        threshold: 2%
+
+ignore:
+  - "**/__init__.py"
+  - "**/conftest.py"
+  - "thoughts/**"
+
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default
+  require_changes: true
