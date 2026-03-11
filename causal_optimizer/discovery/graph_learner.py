@@ -141,7 +141,7 @@ class GraphLearner:
         statistically unidentifiable from the data alone.
         """
         try:
-            from causal_inference.discovery import PCAlgorithm  # type: ignore[import-untyped]
+            from causal_inference.discovery import PCAlgorithm
         except ImportError:
             logger.warning("causal-inference not installed, falling back to correlation")
             return self._learn_correlation(df, objective_name=objective_name)
@@ -173,7 +173,7 @@ class GraphLearner:
     ) -> CausalGraph:
         """NOTEARS continuous optimization via causal-inference library."""
         try:
-            from causal_inference.discovery import NOTEARS  # type: ignore[import-untyped]
+            from causal_inference.discovery import NOTEARS
         except ImportError:
             logger.warning("causal-inference not installed, falling back to correlation")
             return self._learn_correlation(df, objective_name=objective_name)
