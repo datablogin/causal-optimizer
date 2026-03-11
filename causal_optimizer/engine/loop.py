@@ -459,12 +459,11 @@ class ExperimentEngine:
                 "Hybrid mode: prior causal graph retained; discovered graph logged but not applied"
             )
 
-        # Rebuild the effect estimator with the active causal graph so that
-        # effect_method="observational" gets a real DoWhy-backed graph rather
-        # than falling back to bootstrap.
-        if self._effect_method == "observational" and self._causal_graph is not None:
-            from causal_optimizer.estimator.effects import EffectEstimator
-
+        # Rebuild the effect estimator with the active causal graph whenever
+        # a graph becomes available from auto-discovery.  This ensures that
+        # effect_method="observational" gets a real DoWhy-backed graph, and
+        # that other methods have access to the graph if they need it later.
+        if self._causal_graph is not None:
             self._effect_estimator = EffectEstimator(
                 method=self._effect_method,
                 causal_graph=self._causal_graph,

@@ -54,6 +54,9 @@ class EffectEstimator:
     or ``"iv"``).
     """
 
+    #: Valid values for the ``obs_method`` parameter.
+    _VALID_OBS_METHODS: frozenset[str] = frozenset({"backdoor", "frontdoor", "iv"})
+
     def __init__(
         self,
         method: str = "bootstrap",
@@ -62,6 +65,11 @@ class EffectEstimator:
         causal_graph: CausalGraph | None = None,
         obs_method: str = "backdoor",
     ) -> None:
+        if obs_method not in self._VALID_OBS_METHODS:
+            raise ValueError(
+                f"obs_method={obs_method!r} is not valid; "
+                f"choose one of {sorted(self._VALID_OBS_METHODS)}"
+            )
         self.method = method
         self.confidence_level = confidence_level
         self.n_bootstrap = n_bootstrap
