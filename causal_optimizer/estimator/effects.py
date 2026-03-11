@@ -114,7 +114,7 @@ class EffectEstimator:
             point_estimate=effect,
             confidence_interval=ci,
             p_value=float(p_value),
-            is_significant=p_value < (1 - self.confidence_level),
+            is_significant=float(p_value) < alpha,
             method="difference",
         )
 
@@ -154,7 +154,7 @@ class EffectEstimator:
             point_estimate=point_estimate,
             confidence_interval=ci,
             p_value=p_value,
-            is_significant=p_value < (1 - self.confidence_level),
+            is_significant=p_value < alpha,
             method="bootstrap",
         )
 

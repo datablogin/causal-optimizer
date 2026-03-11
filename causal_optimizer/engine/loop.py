@@ -317,11 +317,11 @@ class ExperimentEngine:
             estimate.summary,
         )
 
-        # The guard above ensures len(kept) >= _MIN_KEPT (2), which matches the
-        # estimator's own "insufficient_data" threshold (< 2 kept).  In practice
-        # estimate_improvement will never return "insufficient_data" here, but the
-        # check is kept as an explicit safety net for future callers who may bypass
-        # the guard or change _MIN_KEPT without updating the estimator threshold.
+        # The guard above ensures len(kept) >= _MIN_KEPT (5), which is stricter
+        # than the estimator's "insufficient_data" threshold (< 2 kept).  With
+        # _MIN_KEPT=5 the estimator always uses a statistical test here, but the
+        # check below is kept as a defensive safety net for future callers who
+        # may bypass the guard or lower _MIN_KEPT without updating this code.
         if estimate.method == "insufficient_data":
             return None
 
