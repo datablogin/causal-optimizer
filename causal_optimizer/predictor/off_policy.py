@@ -53,8 +53,9 @@ class OffPolicyPredictor:
         self.n_max = n_max
         self._model: RandomForestRegressor | None = None
         self._var_names: list[str] = []
+        self._numeric_var_names: list[str] = []
         self._model_quality: float = 0.0
-        self._experiment_log: ExperimentLog | None = None
+        self._cached_features: np.ndarray | None = None
         self._search_space: SearchSpace | None = None
         self._rng: np.random.Generator = np.random.default_rng()
 
@@ -64,14 +65,30 @@ class OffPolicyPredictor:
         search_space: SearchSpace,
         objective_name: str = "objective",
     ) -> None:
-        """Fit the surrogate model on experiment history."""
-        self._experiment_log = experiment_log
+        """Fit the surrogate model on experiment history.
+
+        Note: when ``epsilon_mode`` is enabled, this method stores a reference
+        to the (mutable) ``experiment_log``. The epsilon controller intentionally
+        reads the latest log state at decision time so the convex hull grows as
+        experiments are appended between ``fit()`` calls.
+        """
         self._search_space = search_space
         df = experiment_log.to_dataframe()
         self._var_names = [v.name for v in search_space.variables if v.name in df.columns]
 
+        # Track which variables are numeric (continuous/integer) for epsilon mode
+        from causal_optimizer.types import VariableType
+
+        self._numeric_var_names = [
+            v.name
+            for v in search_space.variables
+            if v.name in df.columns
+            and v.variable_type in (VariableType.CONTINUOUS, VariableType.INTEGER)
+        ]
+
         if len(df) < self.min_history or not self._var_names:
             self._model = None
+            self._cached_features = None
             return
 
         features = (
@@ -82,6 +99,19 @@ class OffPolicyPredictor:
             .fillna(0)
             .values
         )
+
+        # Cache numeric features for epsilon controller
+        if self._numeric_var_names:
+            self._cached_features = np.asarray(
+                df[self._numeric_var_names]
+                .apply(lambda x: x.astype(float, errors="ignore"))
+                .fillna(0)
+                .values,
+                dtype=np.float64,
+            )
+        else:
+            self._cached_features = None
+
         y = df[objective_name].values
 
         self._model = RandomForestRegressor(n_estimators=100, max_depth=8, random_state=42)
@@ -162,6 +192,7 @@ class OffPolicyPredictor:
             return True  # Not enough data, must run
 
         n_current = observed_data.shape[0]
+        epsilon = compute_epsilon(observed_data, domain_bounds, n_current, self.n_max)
 
         # Use the shared should_observe function for the stochastic decision
         observe = should_observe(observed_data, domain_bounds, n_current, self.n_max, rng=self._rng)
@@ -171,15 +202,14 @@ class OffPolicyPredictor:
             # uncertainty is too high — if so, fall back to intervening
             prediction = self.predict(parameters)
             if prediction is not None and prediction.uncertainty > self.uncertainty_threshold:
-                epsilon = compute_epsilon(observed_data, domain_bounds, n_current, self.n_max)
                 logger.debug(
-                    "Epsilon controller chose observe, but uncertainty too high "
-                    "(%.3f > %.3f); intervening instead",
+                    "Epsilon controller chose observe (epsilon=%.3f), but uncertainty "
+                    "too high (%.3f > %.3f); intervening instead",
+                    epsilon,
                     prediction.uncertainty,
                     self.uncertainty_threshold,
                 )
                 return True
-            epsilon = compute_epsilon(observed_data, domain_bounds, n_current, self.n_max)
             logger.debug(
                 "Epsilon controller chose observe (epsilon=%.3f); skipping experiment",
                 epsilon,
@@ -190,39 +220,43 @@ class OffPolicyPredictor:
         return True
 
     def _get_observed_data(self) -> np.ndarray | None:
-        """Extract the feature matrix from experiment history.
+        """Extract the numeric feature matrix cached during ``fit()``.
+
+        Only includes continuous and integer variables (not categorical or
+        boolean), since the convex hull coverage metric is only meaningful
+        for numeric dimensions.
 
         Returns:
-            Array of shape (n_samples, n_dims) or None if insufficient data.
+            Array of shape (n_samples, n_numeric_dims) or None if insufficient data.
         """
-        if self._experiment_log is None or self._search_space is None:
+        if self._cached_features is None:
             return None
 
-        if not self._var_names:
+        if self._cached_features.shape[0] < 3:
             return None
 
-        df = self._experiment_log.to_dataframe()
-        if len(df) < 3:
-            return None
-
-        features = (
-            df[self._var_names].apply(lambda x: x.astype(float, errors="ignore")).fillna(0).values
-        )
-        return np.asarray(features, dtype=np.float64)
+        return self._cached_features
 
     def _get_domain_bounds(self) -> list[tuple[float, float]] | None:
-        """Extract bounds from the search space for numeric variables.
+        """Extract bounds from the search space for numeric variables only.
+
+        Only includes continuous and integer variables (not categorical or
+        boolean), matching the filtering in ``_get_observed_data``.
 
         Returns:
-            List of (lower, upper) tuples for each variable, or None if
-            the search space is not available.
+            List of (lower, upper) tuples for each numeric variable, or None
+            if the search space is not available or has no numeric variables.
         """
         if self._search_space is None:
             return None
 
+        from causal_optimizer.types import VariableType
+
         bounds: list[tuple[float, float]] = []
         for var in self._search_space.variables:
-            if var.name not in self._var_names:
+            if var.name not in self._numeric_var_names:
+                continue
+            if var.variable_type not in (VariableType.CONTINUOUS, VariableType.INTEGER):
                 continue
             lower = var.lower if var.lower is not None else 0.0
             upper = var.upper if var.upper is not None else 1.0

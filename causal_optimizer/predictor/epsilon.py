@@ -85,11 +85,7 @@ def compute_epsilon(
         return 0.0
 
     coverage_ratio = hull_volume / total_volume
-
     rescale = n_current / n_max
-    if rescale <= 0:
-        return 0.0
-
     epsilon = coverage_ratio / rescale
     return float(min(epsilon, 1.0))
 

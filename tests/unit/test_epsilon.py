@@ -181,6 +181,43 @@ class TestComputeEpsilon:
         eps = compute_epsilon(data, bounds, n_current=3, n_max=100)
         assert eps == 0.0
 
+    def test_3d_data(self) -> None:
+        """3D data should produce a valid epsilon via ConvexHull."""
+        # Corners of a unit cube
+        data = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+                [1.0, 1.0, 0.0],
+                [1.0, 0.0, 1.0],
+                [0.0, 1.0, 1.0],
+                [1.0, 1.0, 1.0],
+            ]
+        )
+        bounds = [(0.0, 1.0), (0.0, 1.0), (0.0, 1.0)]
+        # Full cube coverage, rescale = 50/100 = 0.5
+        # epsilon = 1.0 / 0.5 = 2.0, clamped to 1.0
+        eps = compute_epsilon(data, bounds, n_current=50, n_max=100)
+        assert eps == pytest.approx(1.0)
+
+    def test_n_current_exceeds_n_max(self) -> None:
+        """When n_current > n_max, rescale > 1 and epsilon shrinks."""
+        data = np.array(
+            [
+                [0.0, 0.0],
+                [1.0, 0.0],
+                [0.0, 1.0],
+                [1.0, 1.0],
+            ]
+        )
+        bounds = [(0.0, 1.0), (0.0, 1.0)]
+        # coverage = 1.0, rescale = 200/100 = 2.0
+        # epsilon = 1.0 / 2.0 = 0.5
+        eps = compute_epsilon(data, bounds, n_current=200, n_max=100)
+        assert eps == pytest.approx(0.5)
+
 
 # ---------------------------------------------------------------------------
 # should_observe tests
@@ -360,6 +397,58 @@ class TestOffPolicyPredictorEpsilonMode:
             # With threshold=0.0, any positive uncertainty will trigger intervention
             result = predictor.should_run_experiment({"x": 0.5, "y": 0.5})
             assert result is True
+
+    def test_epsilon_mode_with_mixed_variable_types(self) -> None:
+        """Categorical/boolean variables should be excluded from epsilon bounds."""
+        from causal_optimizer.types import ExperimentLog, ExperimentResult, ExperimentStatus
+
+        mixed_space = SearchSpace(
+            variables=[
+                Variable(name="x", variable_type=VariableType.CONTINUOUS, lower=0.0, upper=1.0),
+                Variable(name="y", variable_type=VariableType.CONTINUOUS, lower=0.0, upper=1.0),
+                Variable(
+                    name="color",
+                    variable_type=VariableType.CATEGORICAL,
+                    choices=["red", "blue"],
+                ),
+                Variable(name="flag", variable_type=VariableType.BOOLEAN),
+            ]
+        )
+
+        # Use min_history > len(log) so fit() skips surrogate training
+        # (avoids sklearn error on non-numeric 'color' column) but still
+        # sets up var names and cached features
+        predictor = OffPolicyPredictor(epsilon_mode=True, n_max=100, min_history=20)
+        log = ExperimentLog()
+        rng = np.random.default_rng(42)
+        for i in range(10):
+            x_val = float(rng.random())
+            y_val = float(rng.random())
+            log.results.append(
+                ExperimentResult(
+                    experiment_id=str(i),
+                    parameters={
+                        "x": x_val,
+                        "y": y_val,
+                        "color": "red",
+                        "flag": True,
+                    },
+                    metrics={"objective": x_val**2 + y_val**2},
+                    status=ExperimentStatus.KEEP,
+                )
+            )
+        predictor.fit(log, mixed_space, "objective")
+
+        # Only x and y should be in numeric var names
+        assert predictor._numeric_var_names == ["x", "y"]
+        # All four should be in regular var names
+        assert "color" in predictor._var_names
+        assert "flag" in predictor._var_names
+
+        # Domain bounds should only have 2 entries (x, y), not 4
+        bounds = predictor._get_domain_bounds()
+        assert bounds is not None
+        assert len(bounds) == 2
 
 
 # ---------------------------------------------------------------------------
