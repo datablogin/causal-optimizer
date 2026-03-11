@@ -138,6 +138,10 @@ class ExperimentEngine:
     @causal_graph.setter
     def causal_graph(self, graph: CausalGraph | None) -> None:
         self._causal_graph = graph
+        # Keep _prior_causal_graph in sync so that post-construction assignments
+        # (e.g. engine.causal_graph = domain_graph) are treated as user priors
+        # and protect against being overwritten by _run_auto_discovery.
+        self._prior_causal_graph = graph
 
     def run_experiment(self, parameters: dict[str, Any]) -> ExperimentResult:
         """Execute a single experiment and log the result."""
@@ -464,8 +468,10 @@ class ExperimentEngine:
             # No user-supplied prior — use the discovered graph going forward.
             # This also handles the re-discovery case after a screening revert:
             # the new graph (with more samples) replaces the old auto-discovered one.
+            # Use the property setter (not direct _causal_graph assignment) so that
+            # _prior_causal_graph stays unchanged — the auto-discovered graph should
+            # not be treated as a user prior on subsequent discovery calls.
             self._causal_graph = discovered
-            self.causal_graph = discovered
         else:
             # Hybrid mode: user-supplied prior is preserved; discovered graph is informational only
             logger.info(

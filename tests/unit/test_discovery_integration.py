@@ -162,7 +162,7 @@ def test_engine_auto_discovery_graph_has_nodes() -> None:
 
 @pytest.mark.slow
 def test_engine_auto_discovery_no_prior_graph_required() -> None:
-    """Auto-discovery only fires when no prior causal_graph is provided."""
+    """In hybrid mode, discovery runs even with a prior graph but doesn't override it."""
     prior_graph = CausalGraph(edges=[("x", "y")], nodes=["x", "y"])
     engine = ExperimentEngine(
         search_space=make_search_space(),
