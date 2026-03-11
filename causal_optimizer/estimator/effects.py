@@ -272,34 +272,39 @@ class EffectEstimator:
         best: float,
         minimize: bool,
     ) -> EffectEstimate:
-        """Bootstrap CI for improvement significance.
+        """Bootstrap significance test for improvement over kept distribution.
 
-        Builds a bootstrap CI for the best-so-far in *kept_arr*.  If
-        *current_value* falls outside the CI on the improvement side it is
-        considered significantly better than any historically kept result.
-        Uses an unseeded RNG so each call produces independent samples.
+        Uses a one-sided t-test with a bootstrap-estimated p-value to test
+        whether *current_value* is significantly better than the mean of
+        *kept_arr*, combined with a directional guard against *best*.
+
+        A bootstrap-of-the-minimum approach is *not* used here because the
+        bootstrapped minimum is heavily concentrated at ``min(kept_arr)``
+        (probability ≈ 63% per resample), so ``ci_best_lo ≈ min(kept_arr)``
+        and the test degenerates to the greedy check.  Instead we bootstrap
+        the *mean* of the kept distribution so the CI is meaningful.
         """
         rng = np.random.default_rng()
         n_iter = 100 if len(kept_arr) < 10 else self.n_bootstrap
-        boot_bests = np.empty(n_iter)
+        boot_means = np.empty(n_iter)
         for i in range(n_iter):
             boot = rng.choice(kept_arr, size=len(kept_arr), replace=True)
-            boot_bests[i] = float(np.min(boot) if minimize else np.max(boot))
+            boot_means[i] = float(np.mean(boot))
 
         point_estimate = current_value - best
         alpha = 1 - self.confidence_level
-        ci_best_lo = float(np.percentile(boot_bests, 100 * alpha / 2))
-        ci_best_hi = float(np.percentile(boot_bests, 100 * (1 - alpha / 2)))
+        ci_lo = float(np.percentile(boot_means, 100 * alpha / 2))
+        ci_hi = float(np.percentile(boot_means, 100 * (1 - alpha / 2)))
 
+        # p-value: fraction of bootstrap means on the wrong side of current_value
         if minimize:
-            is_significant = current_value < ci_best_lo
-            p_value = float(np.mean(boot_bests <= current_value))
+            p_value = float(np.mean(boot_means <= current_value))
+            # Significant if current_value is below the CI lower bound of the
+            # kept mean AND is a raw improvement over the best-so-far.
+            is_significant = current_value < best and current_value < ci_lo
         else:
-            is_significant = current_value > ci_best_hi
-            p_value = float(np.mean(boot_bests >= current_value))
-
-        ci_lo = float(current_value - ci_best_hi)
-        ci_hi = float(current_value - ci_best_lo)
+            p_value = float(np.mean(boot_means >= current_value))
+            is_significant = current_value > best and current_value > ci_hi
 
         return EffectEstimate(
             point_estimate=point_estimate,
