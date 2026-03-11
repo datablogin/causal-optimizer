@@ -300,7 +300,8 @@ class ExperimentEngine:
             else:
                 # Not statistically significant, but still check greedy
                 # (the statistical test may be conservative)
-                best_objective = best.metrics.get(self.objective_name, float("inf"))
+                fallback = float("inf") if self.minimize else float("-inf")
+                best_objective = best.metrics.get(self.objective_name, fallback)
                 is_better = (
                     current_objective < best_objective
                     if self.minimize
@@ -317,7 +318,8 @@ class ExperimentEngine:
                     return ExperimentStatus.DISCARD
 
         # Fall back to greedy comparison when insufficient data
-        best_objective = best.metrics.get(self.objective_name, float("inf"))
+        fallback = float("inf") if self.minimize else float("-inf")
+        best_objective = best.metrics.get(self.objective_name, fallback)
         if self.minimize:
             is_better = current_objective < best_objective
         else:
