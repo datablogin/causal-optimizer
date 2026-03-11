@@ -160,7 +160,7 @@ class ObservationalEstimator:
             # Check if the requested identification strategy found a valid estimand
             estimand_key = self.method  # "backdoor", "frontdoor", or "iv"
             estimand_info = identified_estimand.estimands.get(estimand_key)
-            if estimand_info is None:
+            if not estimand_info:
                 logger.warning(
                     "Effect of %s on %s is not identifiable via %s. "
                     "Returning identified=False with RF surrogate.",
