@@ -19,7 +19,6 @@ from causal_optimizer.types import (
     VariableType,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
 # ---------------------------------------------------------------------------
@@ -158,9 +157,7 @@ def test_engine_auto_discovery_graph_has_nodes() -> None:
     # Graph should at least contain the parameter variables
     param_names = {"x", "y"}
     graph_nodes = set(graph.nodes)
-    assert param_names.issubset(graph_nodes), (
-        f"Expected {param_names} in graph nodes {graph_nodes}"
-    )
+    assert param_names.issubset(graph_nodes), f"Expected {param_names} in graph nodes {graph_nodes}"
 
 
 @pytest.mark.slow
@@ -412,8 +409,6 @@ def test_graph_learner_with_toy_graph_benchmark() -> None:
     benchmark = ToyGraphBenchmark(rng=np.random.default_rng(42))
     log = ExperimentLog()
     rng = np.random.default_rng(42)
-    search_space = ToyGraphBenchmark.search_space()
-
     for i in range(20):
         x = float(rng.uniform(-5, 5))
         z = float(rng.uniform(-5, 20))
