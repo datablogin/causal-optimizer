@@ -73,6 +73,7 @@ class ExperimentEngine:
         seed: int | None = None,
         discovery_method: str | None = None,
         discovery_threshold: float = 0.3,
+        discovery_bidir_threshold: float = 0.7,
     ) -> None:
         """Initialize the experiment engine.
 
@@ -92,6 +93,10 @@ class ExperimentEngine:
                 :class:`~causal_optimizer.discovery.graph_learner.GraphLearner`.
                 Variable pairs with |r| ≤ this value are not connected.
                 Defaults to ``0.3`` (the ``GraphLearner`` default).
+            discovery_bidir_threshold: For the correlation method, pairs of
+                non-outcome variables with |r| above *this* value get a
+                bidirected edge (X ↔ Y) rather than a directed edge.  Forwarded
+                to ``GraphLearner(bidir_threshold=...)``.  Defaults to ``0.7``.
         """
         if discovery_method is not None and discovery_method not in self._VALID_DISCOVERY_METHODS:
             raise ValueError(
@@ -115,6 +120,7 @@ class ExperimentEngine:
         self._prior_causal_graph: CausalGraph | None = causal_graph
         self._discovery_method: str | None = discovery_method
         self._discovery_threshold: float = discovery_threshold
+        self._discovery_bidir_threshold: float = discovery_bidir_threshold
         self._discovered_graph: CausalGraph | None = None
         self.log = ExperimentLog()
         self._phase: str = "exploration"
@@ -440,7 +446,11 @@ class ExperimentEngine:
 
         from causal_optimizer.discovery.graph_learner import GraphLearner
 
-        learner = GraphLearner(method=self._discovery_method, threshold=self._discovery_threshold)
+        learner = GraphLearner(
+            method=self._discovery_method,
+            threshold=self._discovery_threshold,
+            bidir_threshold=self._discovery_bidir_threshold,
+        )
         try:
             discovered = learner.learn(self.log, objective_name=self.objective_name)
         except Exception as exc:
@@ -468,9 +478,10 @@ class ExperimentEngine:
             # No user-supplied prior — use the discovered graph going forward.
             # This also handles the re-discovery case after a screening revert:
             # the new graph (with more samples) replaces the old auto-discovered one.
-            # Use the property setter (not direct _causal_graph assignment) so that
-            # _prior_causal_graph stays unchanged — the auto-discovered graph should
-            # not be treated as a user prior on subsequent discovery calls.
+            # Assign directly to _causal_graph (bypassing the property setter) so
+            # that _prior_causal_graph stays None — the auto-discovered graph must
+            # not be promoted to a user prior, otherwise re-discovery after a
+            # screening revert would enter hybrid mode and stop updating the graph.
             self._causal_graph = discovered
         else:
             # Hybrid mode: user-supplied prior is preserved; discovered graph is informational only
