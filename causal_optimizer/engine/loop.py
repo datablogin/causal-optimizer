@@ -26,10 +26,11 @@ from causal_optimizer.types import (
 
 logger = logging.getLogger(__name__)
 
-# Minimum requirements for statistical evaluation.
-# _MIN_KEPT=5 is aligned with estimate_improvement()'s own threshold: with
-# fewer than 5 kept experiments the estimator falls back to a greedy comparison
-# (method="greedy"), so there is no benefit to calling it from the engine.
+# Minimum requirements before calling estimate_improvement() for keep/discard.
+# _MIN_KEPT=5 ensures the estimator uses its full statistical method (bootstrap
+# or difference).  With fewer than 5 kept experiments the estimator falls back
+# to a greedy comparison (method="greedy"), so calling it from the engine would
+# add no statistical value over the engine's own greedy fallback.
 _MIN_KEPT = 5
 _MIN_DISCARDED = 2
 
@@ -82,9 +83,10 @@ class ExperimentEngine:
             effect_method: Method used by :class:`EffectEstimator` to assess
                 statistical significance in keep/discard decisions.  Valid
                 values are ``"difference"`` and ``"bootstrap"`` (default).
-                ``"aipw"`` is accepted but falls back to bootstrap for
-                keep/discard decisions (AIPW requires treatment/control
-                splits not available in the improvement context).
+                ``"aipw"`` is accepted but automatically falls back to
+                ``"bootstrap"`` with a logged warning (AIPW requires
+                treatment/control assignment not available in improvement
+                tests).
             confidence_level: Confidence level for statistical tests (default
                 0.95 → alpha = 0.05).  Passed directly to
                 :class:`~causal_optimizer.estimator.effects.EffectEstimator`.

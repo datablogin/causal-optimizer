@@ -130,7 +130,7 @@ class EffectEstimator:
             small_sample: When True (or when total n < 10), uses 100 bootstrap
                 samples instead of ``self.n_bootstrap`` for efficiency.
         """
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng()
         n_total = len(treated) + len(control)
         n_iter = 100 if (small_sample or n_total < 10) else self.n_bootstrap
         effects = np.empty(n_iter)
