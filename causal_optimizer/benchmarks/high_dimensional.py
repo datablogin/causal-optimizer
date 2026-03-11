@@ -56,16 +56,14 @@ class HighDimensionalSparseBenchmark:
 
     @staticmethod
     def known_pomis() -> list[frozenset[str]]:
-        """Minimal intervention sets on the causal chain."""
-        return [
-            frozenset({"x1"}),
-            frozenset({"x2"}),
-            frozenset({"x3"}),
-            frozenset({"x1", "x2"}),
-            frozenset({"x1", "x3"}),
-            frozenset({"x2", "x3"}),
-            frozenset({"x1", "x2", "x3"}),
-        ]
+        """Minimal intervention sets on the causal chain.
+
+        For a chain x1->x2->x3->objective with no bidirected edges (no
+        confounders), the POMIS algorithm yields only {x3} — the direct
+        parent of the outcome. Intervening on x3 alone controls the
+        entire causal path, so supersets are pruned as non-minimal.
+        """
+        return [frozenset({"x3"})]
 
     def run(self, parameters: dict[str, Any]) -> dict[str, float]:
         """Run the SCM with partial intervention semantics.

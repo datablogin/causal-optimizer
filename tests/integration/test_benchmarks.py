@@ -39,10 +39,18 @@ class TestHighDimensionalBenchmark:
         assert len(graph.edges) == 3
 
     def test_known_pomis(self) -> None:
+        """Chain without confounders: only the direct parent of objective is in POMIS."""
         pomis = HighDimensionalSparseBenchmark.known_pomis()
-        assert len(pomis) == 7
-        assert frozenset({"x1"}) in pomis
-        assert frozenset({"x3"}) in pomis
+        assert pomis == [frozenset({"x3"})]
+
+    def test_known_pomis_matches_algorithm(self) -> None:
+        """Verify hardcoded POMIS matches the POMIS algorithm output."""
+        from causal_optimizer.optimizer.pomis import compute_pomis
+
+        graph = HighDimensionalSparseBenchmark.causal_graph()
+        computed = compute_pomis(graph, "objective")
+        hardcoded = HighDimensionalSparseBenchmark.known_pomis()
+        assert set(computed) == set(hardcoded)
 
     def test_run_returns_objective(self) -> None:
         bench = HighDimensionalSparseBenchmark(rng=np.random.default_rng(42))

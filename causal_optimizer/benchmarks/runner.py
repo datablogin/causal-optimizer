@@ -42,8 +42,17 @@ class BenchmarkRunner:
     - ``"random"``: Uniform random sampling from the search space.
     - ``"surrogate_only"``: ExperimentEngine without a causal graph (RF surrogate only).
 
+    All current benchmarks minimize ``"objective"``; the runner hardcodes
+    ``min()`` and ``"objective"`` accordingly. See known issues in CLAUDE.md.
+
+    Note on seed handling: the ``"random"`` strategy offsets the benchmark's
+    RNG seed by 1,000,000 to decorrelate sampling noise from structural noise.
+    The ``"causal"``/``"surrogate_only"`` strategies delegate RNG to the engine.
+
     Parameters:
         benchmark: A benchmark SCM instance satisfying the ``BenchmarkSCM`` protocol.
+            Must accept ``noise_scale`` and ``rng`` keyword arguments in ``__init__``
+            (all existing benchmarks do, but the Protocol cannot enforce constructors).
         threshold_pct: Percentage tolerance for ``experiments_to_threshold``.
             A result is "within threshold" when ``|objective - optimum| <= threshold_pct
             * |optimum|``. Defaults to 10%.
@@ -147,6 +156,8 @@ class BenchmarkRunner:
 
         for _ in range(budget):
             result = engine.step()
+            # TODO: hardcodes "objective" key and min(); needs parameterization
+            # when ExperimentLog.best_result bug is fixed (see CLAUDE.md known issues)
             obj = result.metrics.get("objective", float("inf"))
             best_so_far = min(best_so_far, obj)
             convergence_curve.append(best_so_far)
@@ -184,6 +195,7 @@ class BenchmarkRunner:
         for _ in range(budget):
             params = _sample_random_params(space, rng)
             metrics = bench.run(params)
+            # TODO: hardcodes "objective" key and min(); see engine TODO above
             obj = metrics.get("objective", float("inf"))
             best_so_far = min(best_so_far, obj)
             convergence_curve.append(best_so_far)
@@ -208,6 +220,8 @@ class BenchmarkRunner:
         if known_optimum is None:
             return None
 
+        # Use |optimum| as the scale factor; fall back to 1.0 when optimum is zero
+        # so that threshold_pct is interpreted as an absolute tolerance.
         abs_optimum = abs(known_optimum) if known_optimum != 0.0 else 1.0
         threshold = self.threshold_pct * abs_optimum
 

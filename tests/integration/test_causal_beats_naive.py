@@ -19,6 +19,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from causal_optimizer.benchmarks.high_dimensional import HighDimensionalSparseBenchmark
 from causal_optimizer.benchmarks.runner import BenchmarkRunner
 from causal_optimizer.benchmarks.toy_graph import ToyGraphBenchmark
 
@@ -62,5 +63,40 @@ class TestCausalBeatsNaive:
         assert avg_causal <= avg_random + 1.0, (
             f"Causal strategy ({avg_causal:.4f}) did not outperform "
             f"random ({avg_random:.4f}) within tolerance. "
+            f"Causal finals: {causal_finals}, Random finals: {random_finals}"
+        )
+
+    def test_causal_vs_random_high_dimensional(self) -> None:
+        """Causal strategy outperforms random on HighDimensionalSparseBenchmark.
+
+        This is the marquee test: 20 variables but only 3 are causal ancestors
+        of the objective. The causal strategy should focus on the 3 relevant
+        variables while random wastes budget exploring all 20.
+
+        Uses a generous tolerance: causal just needs to be no worse than
+        random + 1.0. With 17 distractor variables, the advantage of causal
+        guidance should be pronounced.
+        """
+        n_seeds = 3
+        budget = 30
+
+        bench = HighDimensionalSparseBenchmark(noise_scale=0.1)
+        runner = BenchmarkRunner(bench)
+
+        results = runner.compare(
+            strategies=["causal", "random"],
+            budget=budget,
+            n_seeds=n_seeds,
+        )
+
+        causal_finals = [r.final_best for r in results if r.strategy == "causal"]
+        random_finals = [r.final_best for r in results if r.strategy == "random"]
+
+        avg_causal = np.mean(causal_finals)
+        avg_random = np.mean(random_finals)
+
+        assert avg_causal <= avg_random + 1.0, (
+            f"Causal strategy ({avg_causal:.4f}) did not outperform "
+            f"random ({avg_random:.4f}) within tolerance on high-dimensional benchmark. "
             f"Causal finals: {causal_finals}, Random finals: {random_finals}"
         )
