@@ -82,10 +82,10 @@ class GraphLearner:
     ) -> CausalGraph:
         """Simple correlation-based graph (baseline, not truly causal).
 
-        Variables correlated above ``self.threshold`` with the objective are
-        added as bidirected edges (potential confounders), while pairs of
-        non-objective variables above threshold become directed edges (the
-        first alphabetically causes the second, as a heuristic).
+        Pairs of non-objective variables correlated above ``self.threshold``
+        become directed edges (first alphabetically → second, as a heuristic).
+        Variables strongly correlated with the objective are added as direct
+        causes of the objective (directed edges ``c → objective_name``).
         """
         corr = df.corr().abs()
         edges: list[tuple[str, str]] = []

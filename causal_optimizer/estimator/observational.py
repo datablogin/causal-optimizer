@@ -188,32 +188,31 @@ class ObservationalEstimator:
             expected_outcome = intercept + float(estimate.value) * treatment_value
 
             # Confidence interval from standard error
-            try:
-                ci_arr = estimate.get_confidence_intervals(confidence_level=self.confidence_level)
-                # ci_arr is shape (1, 2) → [[lo, hi]]
-                ci_lo = float(ci_arr[0][0]) * treatment_value + intercept
-                ci_hi = float(ci_arr[0][1]) * treatment_value + intercept
-                if ci_lo > ci_hi:
-                    ci_lo, ci_hi = ci_hi, ci_lo
-                ci: tuple[float, float] = (ci_lo, ci_hi)
-            except Exception:
-                # Fall back to SE-based CI using the configured confidence level
-                try:
-                    se_arr = estimate.get_standard_error()
-                    se = float(np.ravel(se_arr)[0]) if se_arr is not None else 0.0
-                except Exception:
-                    se = 0.0
-                from scipy import stats as scipy_stats
+            # CI on E[Y|do(T=t)] = intercept + coef * t.
+            # We build the CI from the SE of the ATE (slope) and ensure a
+            # minimum non-zero width so the interval is meaningful even when
+            # treatment_value is near zero (where coef * t → 0).
+            from scipy import stats as scipy_stats
 
-                alpha = 1.0 - self.confidence_level
-                z = float(scipy_stats.norm.ppf(1.0 - alpha / 2.0))
-                ate = float(estimate.value)
-                ci = (
-                    (intercept + (ate - z * se) * treatment_value),
-                    (intercept + (ate + z * se) * treatment_value),
-                )
-                if ci[0] > ci[1]:
-                    ci = (ci[1], ci[0])
+            alpha_ci = 1.0 - self.confidence_level
+            z_ci = float(scipy_stats.norm.ppf(1.0 - alpha_ci / 2.0))
+            try:
+                se_arr = estimate.get_standard_error()
+                se_ate = float(np.ravel(se_arr)[0]) if se_arr is not None else 0.0
+            except Exception:
+                se_ate = 0.0
+
+            # SE of predicted outcome at treatment_value:
+            # σ_{ŷ} ≈ |t| * se_ate  +  floor (outcome residual SE / √n)
+            outcome_col = objective_name
+            try:
+                floor_se = float(np.std(df[outcome_col].values)) / max(1.0, float(np.sqrt(len(df))))
+            except Exception:
+                floor_se = 0.0
+            pred_se = abs(treatment_value) * se_ate + floor_se
+            ci_lo_v = expected_outcome - z_ci * pred_se
+            ci_hi_v = expected_outcome + z_ci * pred_se
+            ci: tuple[float, float] = (ci_lo_v, ci_hi_v)
 
             return ObservationalEstimate(
                 expected_outcome=expected_outcome,
@@ -270,10 +269,14 @@ class ObservationalEstimator:
         point_arr = np.array([[point.get(c, 0.0) for c in features_df.columns]])
         pred = float(rf.predict(point_arr)[0])
 
-        # Rough CI: ±1 std of individual tree predictions
+        # Rough CI: ±z std of individual tree predictions (respects confidence_level)
         tree_preds = np.array([t.predict(point_arr)[0] for t in rf.estimators_])
         std = float(np.std(tree_preds))
-        ci: tuple[float, float] = (pred - 1.96 * std, pred + 1.96 * std)
+        from scipy import stats as scipy_stats
+
+        alpha = 1.0 - self.confidence_level
+        z_rf = float(scipy_stats.norm.ppf(1.0 - alpha / 2.0))
+        ci: tuple[float, float] = (pred - z_rf * std, pred + z_rf * std)
 
         return ObservationalEstimate(
             expected_outcome=pred,
