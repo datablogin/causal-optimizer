@@ -6,8 +6,6 @@ implementation is created.
 
 from __future__ import annotations
 
-import importlib
-from typing import Any
 from unittest.mock import patch
 
 import numpy as np
@@ -19,7 +17,6 @@ from causal_optimizer.types import (
     ExperimentResult,
     ExperimentStatus,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -156,7 +153,6 @@ class TestCausalGraphConversion:
     def test_graph_roundtrip_identification(self) -> None:
         """DoWhy can identify effects using our converted graph."""
         from causal_optimizer.estimator.observational import (
-            ObservationalEstimator,
             causal_graph_to_dowhy_str,
         )
 
@@ -298,20 +294,14 @@ class TestConfoundingCorrection:
     @pytest.mark.slow
     def test_naive_correlation_overestimates_in_confounded_graph(self) -> None:
         """Without adjustment, naive regression inflates the estimate."""
-        from causal_optimizer.estimator.observational import ObservationalEstimator
-
         rng = np.random.default_rng(42)
         log = _make_confounded_log(rng=rng, n=400)
 
         df = log.to_dataframe()
         # Naive OLS: regress objective on x
-        import numpy as np
-
         x_vals = df["x"].values
         y_vals = df["objective"].values
-        naive_slope = float(
-            np.cov(x_vals, y_vals)[0, 1] / np.var(x_vals)
-        )
+        naive_slope = float(np.cov(x_vals, y_vals)[0, 1] / np.var(x_vals))
         # Naive estimate should be inflated (true = 1.0, naive > 2.0 due to U)
         assert naive_slope > 1.5, f"Expected naive to be inflated, got {naive_slope}"
 
@@ -408,39 +398,37 @@ class TestGracefulDegradation:
         """ObservationalEstimator raises ImportError with helpful message if dowhy missing."""
         import sys
 
-        # Temporarily remove dowhy from sys.modules to simulate missing install
-        # We need to reload the module with dowhy patched out
-        original_modules = {}
-        for key in list(sys.modules.keys()):
-            if "dowhy" in key:
-                original_modules[key] = sys.modules.pop(key)
+        obs_mod = "causal_optimizer.estimator.observational"
 
-        try:
-            with patch.dict("sys.modules", {"dowhy": None, "dowhy.CausalModel": None}):
-                # Reload the observational module with dowhy blocked
-                if "causal_optimizer.estimator.observational" in sys.modules:
-                    del sys.modules["causal_optimizer.estimator.observational"]
+        # Capture the already-imported observational module (if any) so we can
+        # restore it after the test and avoid poisoning the module cache.
+        original_obs = sys.modules.get(obs_mod)
 
-                from causal_optimizer.estimator.observational import ObservationalEstimator
+        # Patch dowhy as unavailable and force fresh import of observational
+        with patch.dict("sys.modules", {"dowhy": None}):
+            # Remove stale cached version so we get a fresh import under the patch
+            sys.modules.pop(obs_mod, None)
 
-                graph = CausalGraph(edges=[("x", "objective")])
-                estimator = ObservationalEstimator(causal_graph=graph)
+            from causal_optimizer.estimator.observational import ObservationalEstimator
 
-                rng = np.random.default_rng(42)
-                log = _make_log_from_scm(rng=rng, n=50)
+            graph = CausalGraph(edges=[("x", "objective")])
+            estimator = ObservationalEstimator(causal_graph=graph)
 
-                with pytest.raises(ImportError, match="dowhy"):
-                    estimator.estimate_intervention(
-                        experiment_log=log,
-                        treatment_var="x",
-                        treatment_value=1.0,
-                        objective_name="objective",
-                    )
-        finally:
-            # Restore
-            sys.modules.update(original_modules)
-            if "causal_optimizer.estimator.observational" in sys.modules:
-                del sys.modules["causal_optimizer.estimator.observational"]
+            rng = np.random.default_rng(42)
+            log = _make_log_from_scm(rng=rng, n=50)
+
+            with pytest.raises(ImportError, match="dowhy"):
+                estimator.estimate_intervention(
+                    experiment_log=log,
+                    treatment_var="x",
+                    treatment_value=1.0,
+                    objective_name="objective",
+                )
+
+        # Restore original module so dowhy-patched version doesn't leak
+        sys.modules.pop(obs_mod, None)
+        if original_obs is not None:
+            sys.modules[obs_mod] = original_obs
 
 
 # ---------------------------------------------------------------------------
@@ -493,51 +481,72 @@ class TestEffectEstimatorIntegration:
         """When dowhy is not available, falls back to bootstrap."""
         import sys
 
-        original_modules = {}
-        for key in list(sys.modules.keys()):
-            if "dowhy" in key:
-                original_modules[key] = sys.modules.pop(key)
+        obs_mod = "causal_optimizer.estimator.observational"
+        eff_mod = "causal_optimizer.estimator.effects"
 
-        try:
-            with patch.dict("sys.modules", {"dowhy": None}):
-                if "causal_optimizer.estimator.observational" in sys.modules:
-                    del sys.modules["causal_optimizer.estimator.observational"]
-                if "causal_optimizer.estimator.effects" in sys.modules:
-                    del sys.modules["causal_optimizer.estimator.effects"]
+        # Save originals to restore later
+        original_obs = sys.modules.get(obs_mod)
+        original_eff = sys.modules.get(eff_mod)
 
-                from causal_optimizer.estimator.effects import EffectEstimator
-                from causal_optimizer.types import CausalGraph as CG
+        with patch.dict("sys.modules", {"dowhy": None}):
+            # Force fresh re-imports under the patch
+            sys.modules.pop(obs_mod, None)
+            sys.modules.pop(eff_mod, None)
 
-                graph = CG(edges=[("x", "z"), ("z", "objective")])
-                estimator = EffectEstimator(method="observational", causal_graph=graph)
+            from causal_optimizer.estimator.effects import EffectEstimator
 
-                rng = np.random.default_rng(42)
-                log = _make_log_from_scm(rng=rng, n=100)
+            graph = CausalGraph(edges=[("x", "z"), ("z", "objective")])
+            estimator = EffectEstimator(method="observational", causal_graph=graph)
 
-                result = estimator.estimate_effect(
-                    experiment_log=log,
-                    treatment_param="z",
-                    treatment_value=2.0,
-                    control_value=0.0,
-                    objective_name="objective",
-                )
-                # Falls back to bootstrap
-                assert result.method == "bootstrap"
-        finally:
-            sys.modules.update(original_modules)
-            for mod in [
-                "causal_optimizer.estimator.observational",
-                "causal_optimizer.estimator.effects",
-            ]:
-                if mod in sys.modules:
-                    del sys.modules[mod]
+            rng = np.random.default_rng(42)
+            log = _make_log_from_scm(rng=rng, n=100)
+
+            result = estimator.estimate_effect(
+                experiment_log=log,
+                treatment_param="z",
+                treatment_value=2.0,
+                control_value=0.0,
+                objective_name="objective",
+            )
+            # Falls back to bootstrap
+            assert result.method == "bootstrap"
+
+        # Restore originals so patched versions don't leak
+        sys.modules.pop(obs_mod, None)
+        sys.modules.pop(eff_mod, None)
+        if original_obs is not None:
+            sys.modules[obs_mod] = original_obs
+        if original_eff is not None:
+            sys.modules[eff_mod] = original_eff
 
     def test_unknown_method_still_raises(self) -> None:
         from causal_optimizer.estimator.effects import EffectEstimator
+        from causal_optimizer.types import ExperimentLog, ExperimentResult, ExperimentStatus
 
         estimator = EffectEstimator(method="totally_unknown")
-        rng = np.random.default_rng(42)
-        log = _make_log_from_scm(rng=rng, n=100)
+
+        # Build a log with exact treatment/control values so the early-return
+        # for insufficient data is NOT triggered; the unknown-method branch fires.
+        results = []
+        for i in range(5):
+            results.append(
+                ExperimentResult(
+                    experiment_id=f"t-{i}",
+                    parameters={"z": 1.0},
+                    metrics={"objective": float(i)},
+                    status=ExperimentStatus.KEEP,
+                )
+            )
+        for i in range(5):
+            results.append(
+                ExperimentResult(
+                    experiment_id=f"c-{i}",
+                    parameters={"z": 0.0},
+                    metrics={"objective": float(i + 10)},
+                    status=ExperimentStatus.KEEP,
+                )
+            )
+        log = ExperimentLog(results=results)
 
         with pytest.raises(ValueError, match="Unknown method"):
             estimator.estimate_effect(
