@@ -384,3 +384,42 @@ def test_successful_experiment_added_to_archive():
     assert engine.log.results[0].status == ExperimentStatus.KEEP
     # Archive should have the result
     assert len(engine._archive.archive) == 1
+
+
+# --- Maximize engine tests ---
+
+
+class MaximizeRunner:
+    """Runner where higher values are better: f(x, y) = -(x^2 + y^2)."""
+
+    def run(self, parameters: dict[str, Any]) -> dict[str, float]:
+        x = parameters.get("x", 0.0)
+        y = parameters.get("y", 0.0)
+        return {"objective": -(x**2 + y**2)}
+
+
+def test_evaluate_status_maximize_keeps_better():
+    """With minimize=False, a higher objective should be KEEP."""
+    engine = ExperimentEngine(
+        search_space=make_search_space(),
+        runner=MaximizeRunner(),
+        minimize=False,
+    )
+    # First experiment: far from optimum (large negative value)
+    r1 = engine.run_experiment({"x": 3.0, "y": 4.0})
+    assert r1.status == ExperimentStatus.KEEP
+    assert r1.metrics["objective"] == -25.0
+
+    # Second experiment: closer to optimum (less negative = higher value)
+    r2 = engine.run_experiment({"x": 1.0, "y": 1.0})
+    assert r2.status == ExperimentStatus.KEEP
+    assert r2.metrics["objective"] == -2.0
+
+    # Third experiment: worse (more negative = lower value)
+    r3 = engine.run_experiment({"x": 4.0, "y": 4.0})
+    assert r3.status == ExperimentStatus.DISCARD
+
+    # best_result should return the highest value (closest to 0)
+    best = engine.log.best_result("objective", minimize=False)
+    assert best is not None
+    assert best.metrics["objective"] == -2.0
