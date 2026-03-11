@@ -228,7 +228,9 @@ class ObservationalEstimator:
                 floor_se = float(np.std(df[outcome_col].values)) / max(1.0, float(np.sqrt(len(df))))
             except Exception:
                 floor_se = 0.0
-            pred_se = abs(treatment_value) * se_ate + floor_se
+            # Apply a minimum floor to prevent zero-width CIs even when
+            # treatment_value=0 and floor_se is negligibly small.
+            pred_se = max(abs(treatment_value) * se_ate + floor_se, 1e-6)
             ci_lo_v = expected_outcome - z_ci * pred_se
             ci_hi_v = expected_outcome + z_ci * pred_se
             ci: tuple[float, float] = (ci_lo_v, ci_hi_v)
