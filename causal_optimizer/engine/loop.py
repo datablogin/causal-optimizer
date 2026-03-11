@@ -70,6 +70,8 @@ class ExperimentEngine:
         n_max: int = 100,
         seed: int | None = None,
         effect_method: str = "bootstrap",
+        confidence_level: float = 0.95,
+        n_bootstrap: int = 1000,
     ) -> None:
         """Initialize the experiment engine.
 
@@ -82,6 +84,12 @@ class ExperimentEngine:
                 statistical significance in keep/discard decisions.  Valid
                 values are ``"difference"``, ``"bootstrap"`` (default), and
                 ``"aipw"``.
+            confidence_level: Confidence level for statistical tests (default
+                0.95 → alpha = 0.05).  Passed directly to
+                :class:`~causal_optimizer.estimator.effects.EffectEstimator`.
+            n_bootstrap: Number of bootstrap samples used when
+                ``effect_method="bootstrap"`` (default 1000).  Passed to
+                :class:`~causal_optimizer.estimator.effects.EffectEstimator`.
         """
         _valid_effect_methods = {"difference", "bootstrap", "aipw"}
         if effect_method not in _valid_effect_methods:
@@ -97,7 +105,11 @@ class ExperimentEngine:
         self.causal_graph = causal_graph
         self.log = ExperimentLog()
         self._phase: str = "exploration"
-        self._effect_estimator = EffectEstimator(method=effect_method)
+        self._effect_estimator = EffectEstimator(
+            method=effect_method,
+            confidence_level=confidence_level,
+            n_bootstrap=n_bootstrap,
+        )
         self._predictor = OffPolicyPredictor(epsilon_mode=epsilon_mode, n_max=n_max, seed=seed)
         self._max_skips = max_skips
         self._screening_result: ScreeningResult | None = None
