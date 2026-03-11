@@ -64,6 +64,8 @@ class ExperimentEngine:
         causal_graph: CausalGraph | None = None,
         max_skips: int = 3,
         descriptor_names: list[str] | None = None,
+        epsilon_mode: bool = False,
+        n_max: int = 100,
     ) -> None:
         self.search_space = search_space
         self.runner = runner
@@ -72,7 +74,7 @@ class ExperimentEngine:
         self.causal_graph = causal_graph
         self.log = ExperimentLog()
         self._phase: str = "exploration"
-        self._predictor = OffPolicyPredictor()
+        self._predictor = OffPolicyPredictor(epsilon_mode=epsilon_mode, n_max=n_max)
         self._max_skips = max_skips
         self._screening_result: ScreeningResult | None = None
         self._screened_focus_variables: list[str] | None = None
