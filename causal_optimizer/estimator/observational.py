@@ -182,10 +182,22 @@ class ObservationalEstimator:
                 )
                 return self._rf_fallback(df, treatment_var, treatment_value, objective_name)
 
-            # Convert ATE + intercept to E[Y | do(X=x)]
-            # For linear regression: E[Y | do(T=t)] = intercept + coef * t
-            intercept = float(estimate.intercept) if estimate.intercept is not None else 0.0
-            expected_outcome = intercept + float(estimate.value) * treatment_value
+            # Convert estimate to E[Y | do(T=t)].
+            # - backdoor (linear regression): estimate.value is the slope coef;
+            #   E[Y|do(T=t)] = intercept + coef * t.
+            # - frontdoor/iv: estimate.value is the ATE (scalar shift); intercept
+            #   attribute is not set by DoWhy.  Approximate using mean(Y) as
+            #   baseline: E[Y|do(T=t)] ≈ mean(Y) + ATE * (t - mean(T)).
+            intercept_raw = getattr(estimate, "intercept", None)
+            if self.method == "backdoor" and intercept_raw is not None:
+                intercept_val = float(intercept_raw)
+                expected_outcome = intercept_val + float(estimate.value) * treatment_value
+            else:
+                baseline = float(np.mean(df[objective_name].values))
+                t_mean = (
+                    float(np.mean(df[treatment_var].values)) if treatment_var in df.columns else 0.0
+                )
+                expected_outcome = baseline + float(estimate.value) * (treatment_value - t_mean)
 
             # Confidence interval from standard error
             # CI on E[Y|do(T=t)] = intercept + coef * t.

@@ -428,5 +428,5 @@ class EffectEstimator:
             confidence_interval=(ci_lo, ci_hi),
             p_value=p_value,
             is_significant=p_value < (1 - self.confidence_level),
-            method=f"observational/{treatment_est.method}",
+            method=treatment_est.method,
         )

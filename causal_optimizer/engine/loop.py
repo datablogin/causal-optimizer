@@ -59,6 +59,11 @@ class ExperimentEngine:
     #: Valid values for the ``discovery_method`` parameter.
     _VALID_DISCOVERY_METHODS: frozenset[str] = frozenset({"correlation", "pc", "notears"})
 
+    #: Valid values for the ``effect_method`` parameter.
+    _VALID_EFFECT_METHODS: frozenset[str] = frozenset(
+        {"difference", "bootstrap", "aipw", "observational"}
+    )
+
     def __init__(
         self,
         search_space: SearchSpace,
@@ -91,13 +96,18 @@ class ExperimentEngine:
                 graph is **not** replaced (hybrid mode).
             effect_method: Method used by :class:`EffectEstimator` to assess
                 statistical significance in keep/discard decisions.  Valid
-                values are ``"difference"``, ``"bootstrap"`` (default), and
-                ``"aipw"``.
+                values are ``"difference"``, ``"bootstrap"`` (default),
+                ``"aipw"``, and ``"observational"``.
         """
         if discovery_method is not None and discovery_method not in self._VALID_DISCOVERY_METHODS:
             raise ValueError(
                 f"discovery_method={discovery_method!r} is not valid; "
                 f"choose one of {sorted(self._VALID_DISCOVERY_METHODS)} or None"
+            )
+        if effect_method not in self._VALID_EFFECT_METHODS:
+            raise ValueError(
+                f"effect_method={effect_method!r} is not valid; "
+                f"choose one of {sorted(self._VALID_EFFECT_METHODS)}"
             )
 
         self.search_space = search_space
