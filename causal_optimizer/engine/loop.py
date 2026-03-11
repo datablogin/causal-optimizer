@@ -450,11 +450,25 @@ class ExperimentEngine:
         if self._discovery_method is None:
             return
 
-        if self._discovery_method == "correlation":
-            logger.info(
-                "Running correlation-based causal discovery (heuristic only; "
-                "not a rigorous causal identification — treat results as approximate guidance)"
-            )
+        _discovery_caveats = {
+            "correlation": (
+                "heuristic only; bidirected edges are proxies, not identified confounders — "
+                "treat results as approximate guidance"
+            ),
+            "pc": (
+                "assumes causal sufficiency and faithfulness; undirected CPDAG edges are "
+                "represented as bidirected (conservative placeholder, not identified confounders)"
+            ),
+            "notears": (
+                "continuous optimisation method; may not converge on small or noisy samples"
+            ),
+        }
+        caveat = _discovery_caveats.get(self._discovery_method, "")
+        logger.info(
+            "Running %r causal discovery (%s)",
+            self._discovery_method,
+            caveat,
+        )
 
         from causal_optimizer.discovery.graph_learner import GraphLearner
 
@@ -518,14 +532,15 @@ class ExperimentEngine:
     def _has_directed_cycle(graph: CausalGraph) -> bool:
         """Return True if the directed-edge subgraph contains a cycle.
 
-        Uses iterative DFS with a grey/black colouring scheme (Kahn's algorithm
-        would also work; DFS is simpler to implement without external libraries).
-        Bidirected edges are ignored — only ``graph.edges`` are checked.
+        Uses DFS with a grey/black colouring scheme.  Bidirected edges are
+        intentionally ignored because they do not impose causal ordering;
+        only ``graph.edges`` (directed edges) are checked.
         """
         adjacency: dict[str, list[str]] = {n: [] for n in graph.nodes}
         for u, v in graph.edges:
-            if u in adjacency:
-                adjacency[u].append(v)
+            # Unconditionally append; if u is not in nodes, a KeyError is raised
+            # so callers learn about malformed graphs rather than silently skipping.
+            adjacency[u].append(v)
 
         # 0 = unvisited, 1 = in-stack (grey), 2 = done (black)
         color: dict[str, int] = {n: 0 for n in graph.nodes}
