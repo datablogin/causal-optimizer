@@ -111,7 +111,6 @@ class ExperimentEngine:
         self.runner = runner
         self.objective_name = objective_name
         self.minimize = minimize
-        self.causal_graph = causal_graph
         self._causal_graph: CausalGraph | None = causal_graph
         self._discovery_method: str | None = discovery_method
         self._discovered_graph: CausalGraph | None = None
@@ -130,6 +129,11 @@ class ExperimentEngine:
         self._archive: MAPElites | None = (
             MAPElites(descriptor_names, minimize=minimize) if descriptor_names else None
         )
+
+    @property
+    def causal_graph(self) -> CausalGraph | None:
+        """The active causal graph (read-only delegation to ``_causal_graph``)."""
+        return self._causal_graph
 
     def run_experiment(self, parameters: dict[str, Any]) -> ExperimentResult:
         """Execute a single experiment and log the result."""
@@ -456,7 +460,6 @@ class ExperimentEngine:
                     "observational estimation will fall back to RF surrogate."
                 )
             self._causal_graph = discovered
-            self.causal_graph = discovered
         else:
             # Hybrid mode: prior graph is preserved; discovered graph is informational only
             logger.info(

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
+from scipy import stats as scipy_stats
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -220,8 +221,6 @@ class ObservationalEstimator:
             # We build the CI from the SE of the ATE (slope) and ensure a
             # minimum non-zero width so the interval is meaningful even when
             # treatment_value is near zero (where coef * t → 0).
-            from scipy import stats as scipy_stats
-
             alpha_ci = 1.0 - self.confidence_level
             z_ci = float(scipy_stats.norm.ppf(1.0 - alpha_ci / 2.0))
             try:
@@ -232,9 +231,10 @@ class ObservationalEstimator:
 
             # SE of predicted outcome at treatment_value:
             # σ_{ŷ} ≈ |t| * se_ate  +  floor (outcome residual SE / √n)
-            outcome_col = objective_name
             try:
-                floor_se = float(np.std(df[outcome_col].values)) / max(1.0, float(np.sqrt(len(df))))
+                floor_se = float(np.std(df[objective_name].values)) / max(
+                    1.0, float(np.sqrt(len(df)))
+                )
             except Exception:
                 floor_se = 0.0
             # Apply a minimum floor to prevent zero-width CIs even when
@@ -298,8 +298,6 @@ class ObservationalEstimator:
         # Rough CI: ±z std of individual tree predictions (respects confidence_level)
         tree_preds = np.array([t.predict(point_arr)[0] for t in rf.estimators_])
         std = float(np.std(tree_preds))
-        from scipy import stats as scipy_stats
-
         alpha = 1.0 - self.confidence_level
         z_rf = float(scipy_stats.norm.ppf(1.0 - alpha / 2.0))
         ci: tuple[float, float] = (pred - z_rf * std, pred + z_rf * std)
