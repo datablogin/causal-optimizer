@@ -79,35 +79,38 @@ class OffPolicyPredictor:
         df = experiment_log.to_dataframe()
         self._var_names = [v.name for v in search_space.variables if v.name in df.columns]
 
-        # Track which variables are numeric (continuous/integer) for epsilon mode
-        self._numeric_var_names = [
-            v.name
-            for v in search_space.variables
-            if v.name in df.columns
-            and v.variable_type in (VariableType.CONTINUOUS, VariableType.INTEGER)
-        ]
+        # Epsilon mode: track numeric variables, cache features, precompute epsilon
+        if self.epsilon_mode:
+            self._numeric_var_names = [
+                v.name
+                for v in search_space.variables
+                if v.name in df.columns
+                and v.variable_type in (VariableType.CONTINUOUS, VariableType.INTEGER)
+            ]
 
-        # Cache numeric features for epsilon controller (even before min_history,
-        # since the convex hull only needs 3+ rows, not min_history rows)
-        if self._numeric_var_names and len(df) >= 1:
-            self._cached_features = np.asarray(
-                df[self._numeric_var_names]
-                .apply(lambda x: x.astype(float, errors="ignore"))
-                .fillna(0)
-                .values,
-                dtype=np.float64,
-            )
+            # Cache numeric features (even before min_history, since the
+            # convex hull only needs 3+ rows, not min_history rows)
+            if self._numeric_var_names and len(df) >= 1:
+                numeric_df = df[self._numeric_var_names]
+                self._cached_features = np.asarray(
+                    numeric_df.to_numpy(dtype=np.float64, na_value=0.0),
+                    dtype=np.float64,
+                )
+            else:
+                self._cached_features = None
+
+            # Precompute epsilon to avoid repeated ConvexHull work
+            domain_bounds = self._get_domain_bounds()
+            if self._cached_features is not None and domain_bounds is not None:
+                n_current = self._cached_features.shape[0]
+                self._cached_epsilon = compute_epsilon(
+                    self._cached_features, domain_bounds, n_current, self.n_max
+                )
+            else:
+                self._cached_epsilon = 0.0
         else:
+            self._numeric_var_names = []
             self._cached_features = None
-
-        # Precompute epsilon so _should_run_epsilon avoids repeated ConvexHull work
-        domain_bounds = self._get_domain_bounds()
-        if self._cached_features is not None and domain_bounds is not None:
-            n_current = self._cached_features.shape[0]
-            self._cached_epsilon = compute_epsilon(
-                self._cached_features, domain_bounds, n_current, self.n_max
-            )
-        else:
             self._cached_epsilon = 0.0
 
         if len(df) < self.min_history or not self._var_names:
@@ -235,29 +238,11 @@ class OffPolicyPredictor:
         # With probability 1-epsilon, intervene (run experiment)
         return True
 
-    def _get_observed_data(self) -> np.ndarray | None:
-        """Extract the numeric feature matrix cached during ``fit()``.
-
-        Only includes continuous and integer variables (not categorical or
-        boolean), since the convex hull coverage metric is only meaningful
-        for numeric dimensions.
-
-        Returns:
-            Array of shape (n_samples, n_numeric_dims) or None if insufficient data.
-        """
-        if self._cached_features is None:
-            return None
-
-        if self._cached_features.shape[0] < 3:
-            return None
-
-        return self._cached_features
-
     def _get_domain_bounds(self) -> list[tuple[float, float]] | None:
         """Extract bounds from the search space for numeric variables only.
 
         Only includes continuous and integer variables (not categorical or
-        boolean), matching the filtering in ``_get_observed_data``.
+        boolean).
 
         Returns:
             List of (lower, upper) tuples for each numeric variable, or None
