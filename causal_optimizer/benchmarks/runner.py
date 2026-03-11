@@ -48,9 +48,10 @@ class BenchmarkRunner:
     All current benchmarks minimize ``"objective"``; the runner hardcodes
     ``min()`` and ``"objective"`` accordingly. See known issues in CLAUDE.md.
 
-    Note on seed handling: the ``"random"`` strategy offsets the benchmark's
-    RNG seed by 1,000,000 to decorrelate sampling noise from structural noise.
-    The ``"causal"``/``"surrogate_only"`` strategies delegate RNG to the engine.
+    Note on seed handling: the ``"random"`` strategy uses ``SeedSequence.spawn()``
+    to create two independent RNG streams (one for sampling, one for benchmark
+    noise), ensuring proper decorrelation. The ``"causal"``/``"surrogate_only"``
+    strategies delegate RNG to the engine.
 
     Parameters:
         benchmark: A benchmark SCM instance satisfying the ``BenchmarkSCM`` protocol.
@@ -68,8 +69,14 @@ class BenchmarkRunner:
         benchmark: BenchmarkSCM,
         threshold_pct: float = 0.10,
     ) -> None:
-        self.benchmark: Any = benchmark
+        self.benchmark = benchmark
         self.threshold_pct = threshold_pct
+
+    def _validate_strategy(self, strategy: str) -> None:
+        """Raise ValueError if strategy is not supported."""
+        if strategy not in self._STRATEGIES:
+            msg = f"Unknown strategy {strategy!r}. Must be one of {sorted(self._STRATEGIES)}."
+            raise ValueError(msg)
 
     def run(
         self,
@@ -93,14 +100,12 @@ class BenchmarkRunner:
         Raises:
             ValueError: If ``strategy`` is not one of the supported strategies.
         """
-        if strategy not in self._STRATEGIES:
-            msg = f"Unknown strategy {strategy!r}. Must be one of {sorted(self._STRATEGIES)}."
-            raise ValueError(msg)
+        self._validate_strategy(strategy)
 
         benchmark_name = type(self.benchmark).__name__
-        rng = np.random.default_rng(seed)
 
         if strategy == "random":
+            rng = np.random.default_rng(seed)
             return self._run_random(budget, seed, rng, benchmark_name, known_optimum)
 
         return self._run_engine(strategy, budget, seed, benchmark_name, known_optimum)
@@ -122,7 +127,13 @@ class BenchmarkRunner:
 
         Returns:
             List of ``BenchmarkResult``, one per (strategy, seed) pair.
+
+        Raises:
+            ValueError: If any strategy name is not supported.
         """
+        for strategy in strategies:
+            self._validate_strategy(strategy)
+
         results: list[BenchmarkResult] = []
         for strategy in strategies:
             for seed in range(n_seeds):
@@ -139,8 +150,10 @@ class BenchmarkRunner:
         known_optimum: float | None,
     ) -> BenchmarkResult:
         """Run ExperimentEngine with or without a causal graph."""
-        # Create a fresh benchmark instance with the given seed for the runner
-        benchmark_type = type(self.benchmark)
+        # Create a fresh benchmark instance with the given seed for the runner.
+        # Cast to Any because Protocol cannot enforce constructor signatures;
+        # all existing benchmarks accept (noise_scale, rng) kwargs.
+        benchmark_type: Any = type(self.benchmark)
         bench = benchmark_type(
             noise_scale=self.benchmark.noise_scale,
             rng=np.random.default_rng(seed),
@@ -185,10 +198,15 @@ class BenchmarkRunner:
         known_optimum: float | None,
     ) -> BenchmarkResult:
         """Run uniform random sampling from the search space."""
-        benchmark_type = type(self.benchmark)
+        # Use SeedSequence.spawn() for proper RNG stream splitting:
+        # one stream for benchmark structural noise, one for parameter sampling.
+        ss = np.random.SeedSequence(seed)
+        noise_rng = np.random.default_rng(ss.spawn(1)[0])
+        # Cast to Any because Protocol cannot enforce constructor signatures
+        benchmark_type: Any = type(self.benchmark)
         bench = benchmark_type(
             noise_scale=self.benchmark.noise_scale,
-            rng=np.random.default_rng(seed + 1_000_000),
+            rng=noise_rng,
         )
         space = benchmark_type.search_space()
 
