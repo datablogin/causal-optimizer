@@ -522,9 +522,7 @@ def test_auto_discovery_overwrites_previous_auto_discovered_graph() -> None:
     call_count = 0
     graphs = [
         CausalGraph(edges=[("x", "objective")], nodes=["x", "y", "objective"]),
-        CausalGraph(
-            edges=[("x", "objective"), ("y", "objective")], nodes=["x", "y", "objective"]
-        ),
+        CausalGraph(edges=[("x", "objective"), ("y", "objective")], nodes=["x", "y", "objective"]),
     ]
 
     def mock_learn(self_inner: GraphLearner, log: object, **kwargs: object) -> CausalGraph:
