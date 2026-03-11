@@ -589,3 +589,72 @@ class TestEffectEstimatorIntegration:
         assert result.method == "bootstrap"
         # Very negative value should be clearly significant
         assert result.is_significant is True
+
+    def test_observational_bootstrap_fallback_insufficient_data(self) -> None:
+        """_observational_bootstrap_fallback returns insufficient_data when no split works."""
+        from causal_optimizer.estimator.effects import EffectEstimator
+        from causal_optimizer.types import ExperimentLog, ExperimentResult, ExperimentStatus
+
+        # Build a log with a single row — neither exact-match nor midpoint can produce
+        # 2+ samples per group, so the insufficient_data path fires.
+        result_single = ExperimentResult(
+            experiment_id="r-0",
+            parameters={"z": 5.0},
+            metrics={"objective": 42.0},
+            status=ExperimentStatus.KEEP,
+        )
+        log = ExperimentLog(results=[result_single])
+
+        graph = CausalGraph(edges=[("z", "objective")])
+        estimator = EffectEstimator(method="observational", causal_graph=graph)
+
+        # With a single row, all split strategies fail; result should be insufficient_data
+        result = estimator._observational_bootstrap_fallback(  # type: ignore[attr-defined]
+            experiment_log=log,
+            treatment_param="z",
+            treatment_value=10.0,
+            control_value=0.0,
+            objective_name="objective",
+        )
+
+        from causal_optimizer.estimator.effects import EffectEstimate
+
+        assert isinstance(result, EffectEstimate)
+        assert result.method == "insufficient_data"
+        assert result.is_significant is False
+
+    def test_nan_guard_in_observational_estimator(self) -> None:
+        """ObservationalEstimator falls back to RF when DoWhy returns NaN estimate."""
+        pytest.importorskip("dowhy")
+        from unittest.mock import MagicMock, patch
+
+        from causal_optimizer.estimator.observational import ObservationalEstimator
+
+        graph = CausalGraph(edges=[("x", "objective")])
+        estimator = ObservationalEstimator(causal_graph=graph, method="backdoor")
+
+        rng = np.random.default_rng(42)
+        log = _make_log_from_scm(rng=rng, n=100)
+
+        # Mock DoWhy to return NaN estimate value
+        mock_estimate = MagicMock()
+        mock_estimate.value = float("nan")
+
+        with patch("dowhy.CausalModel") as mock_model_cls:
+            mock_model = MagicMock()
+            mock_model_cls.return_value = mock_model
+            mock_model.identify_effect.return_value = MagicMock(
+                estimands={"backdoor": {"some": "estimand"}}
+            )
+            mock_model.estimate_effect.return_value = mock_estimate
+
+            result = estimator.estimate_intervention(
+                experiment_log=log,
+                treatment_var="x",
+                treatment_value=1.0,
+                objective_name="objective",
+            )
+
+        # Should have fallen back to RF surrogate
+        assert result.identified is False
+        assert np.isfinite(result.expected_outcome)
