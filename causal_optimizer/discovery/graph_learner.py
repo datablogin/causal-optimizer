@@ -32,8 +32,30 @@ class GraphLearner:
         self.method = method
         self.threshold = threshold
 
-    def learn(self, experiment_log: ExperimentLog) -> CausalGraph:
-        """Learn a causal graph from experiment results."""
+    def learn(
+        self,
+        experiment_log: ExperimentLog,
+        min_samples: int = 10,
+        objective_name: str = "objective",
+    ) -> CausalGraph:
+        """Learn a causal graph from experiment results.
+
+        Args:
+            experiment_log: History of experiments to learn from.
+            min_samples: Minimum number of results required; returns an empty
+                graph if fewer results are available.
+            objective_name: Name of the outcome metric column. When present,
+                this column is excluded from the set of optimization variables
+                so it can serve as the graph's outcome node.
+        """
+        if len(experiment_log.results) < min_samples:
+            logger.warning(
+                "Only %d results available (min_samples=%d); returning empty graph.",
+                len(experiment_log.results),
+                min_samples,
+            )
+            return CausalGraph(edges=[], nodes=[])
+
         df = experiment_log.to_dataframe()
         numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
         # Remove metadata columns
@@ -45,7 +67,7 @@ class GraphLearner:
             return CausalGraph(edges=[], nodes=numeric_cols)
 
         if self.method == "correlation":
-            return self._learn_correlation(df[numeric_cols])
+            return self._learn_correlation(df[numeric_cols], objective_name=objective_name)
         elif self.method == "pc":
             return self._learn_pc(df[numeric_cols])
         elif self.method == "notears":
@@ -53,18 +75,36 @@ class GraphLearner:
         else:
             raise ValueError(f"Unknown method: {self.method}")
 
-    def _learn_correlation(self, df: pd.DataFrame) -> CausalGraph:
-        """Simple correlation-based graph (baseline, not truly causal)."""
+    def _learn_correlation(
+        self,
+        df: pd.DataFrame,
+        objective_name: str = "objective",
+    ) -> CausalGraph:
+        """Simple correlation-based graph (baseline, not truly causal).
+
+        Variables correlated above ``self.threshold`` with the objective are
+        added as bidirected edges (potential confounders), while pairs of
+        non-objective variables above threshold become directed edges (the
+        first alphabetically causes the second, as a heuristic).
+        """
         corr = df.corr().abs()
         edges: list[tuple[str, str]] = []
+        bidirected: list[tuple[str, str]] = []
         cols = df.columns.tolist()
+        non_obj = [c for c in cols if c != objective_name]
 
-        for i, c1 in enumerate(cols):
-            for j, c2 in enumerate(cols):
-                if i < j and corr.loc[c1, c2] > self.threshold:
+        for i, c1 in enumerate(non_obj):
+            for c2 in non_obj[i + 1 :]:
+                if corr.loc[c1, c2] > self.threshold:
                     edges.append((c1, c2))
 
-        return CausalGraph(edges=edges, nodes=cols)
+        # Variables strongly correlated with objective become its direct causes
+        if objective_name in cols:
+            for c in non_obj:
+                if corr.loc[c, objective_name] > self.threshold:
+                    edges.append((c, objective_name))
+
+        return CausalGraph(edges=edges, bidirected_edges=bidirected, nodes=cols)
 
     def _learn_pc(self, df: pd.DataFrame) -> CausalGraph:
         """PC algorithm via causal-inference library."""
