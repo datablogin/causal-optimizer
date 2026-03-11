@@ -54,6 +54,8 @@ class EffectEstimator:
     or ``"iv"``).
     """
 
+    #: Valid values for the ``method`` parameter.
+    _VALID_METHODS: frozenset[str] = frozenset({"difference", "bootstrap", "aipw", "observational"})
     #: Valid values for the ``obs_method`` parameter.
     _VALID_OBS_METHODS: frozenset[str] = frozenset({"backdoor", "frontdoor", "iv"})
 
@@ -65,6 +67,10 @@ class EffectEstimator:
         causal_graph: CausalGraph | None = None,
         obs_method: str = "backdoor",
     ) -> None:
+        if method not in self._VALID_METHODS:
+            raise ValueError(
+                f"method={method!r} is not valid; choose one of {sorted(self._VALID_METHODS)}"
+            )
         if obs_method not in self._VALID_OBS_METHODS:
             raise ValueError(
                 f"obs_method={obs_method!r} is not valid; "
@@ -170,8 +176,9 @@ class EffectEstimator:
             float(np.percentile(effects, 100 * alpha / 2)),
             float(np.percentile(effects, 100 * (1 - alpha / 2))),
         )
-        # Approximate p-value from bootstrap distribution
-        p_value = float(2 * min(np.mean(effects <= 0), np.mean(effects >= 0)))
+        # Approximate two-sided p-value from bootstrap distribution.
+        # Cap at 1.0 to handle degenerate cases (e.g. all effects == 0).
+        p_value = float(min(2 * min(np.mean(effects <= 0), np.mean(effects >= 0)), 1.0))
 
         return EffectEstimate(
             point_estimate=point_estimate,
@@ -392,12 +399,19 @@ class EffectEstimator:
             control_arr = df[df[treatment_param] < mid][objective_name].values
             if len(treated_arr) >= 2 and len(control_arr) >= 2:
                 return self._bootstrap_estimate(treated_arr, control_arr)
-        all_vals = df[objective_name].values
-        half = max(1, len(all_vals) // 2)
-        # Random split to avoid row-order bias (earlier vs later experiments).
-        rng = np.random.default_rng(42)
-        idx = rng.permutation(len(all_vals))
-        return self._bootstrap_estimate(all_vals[idx[:half]], all_vals[idx[half:]])
+        # Neither exact equality nor midpoint split found sufficient data.
+        # Return insufficient_data rather than a meaningless random-partition estimate.
+        logger.warning(
+            "Could not partition data for treatment/control comparison; "
+            "returning insufficient_data estimate."
+        )
+        return EffectEstimate(
+            point_estimate=0.0,
+            confidence_interval=(float("-inf"), float("inf")),
+            p_value=1.0,
+            is_significant=False,
+            method="insufficient_data",
+        )
 
     def _observational_estimate(
         self,

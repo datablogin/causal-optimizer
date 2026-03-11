@@ -530,42 +530,11 @@ class TestEffectEstimatorIntegration:
             sys.modules[eff_mod] = original_eff
 
     def test_unknown_method_still_raises(self) -> None:
+        """EffectEstimator rejects invalid method at construction time."""
         from causal_optimizer.estimator.effects import EffectEstimator
-        from causal_optimizer.types import ExperimentLog, ExperimentResult, ExperimentStatus
 
-        estimator = EffectEstimator(method="totally_unknown")
-
-        # Build a log with exact treatment/control values so the early-return
-        # for insufficient data is NOT triggered; the unknown-method branch fires.
-        results = []
-        for i in range(5):
-            results.append(
-                ExperimentResult(
-                    experiment_id=f"t-{i}",
-                    parameters={"z": 1.0},
-                    metrics={"objective": float(i)},
-                    status=ExperimentStatus.KEEP,
-                )
-            )
-        for i in range(5):
-            results.append(
-                ExperimentResult(
-                    experiment_id=f"c-{i}",
-                    parameters={"z": 0.0},
-                    metrics={"objective": float(i + 10)},
-                    status=ExperimentStatus.KEEP,
-                )
-            )
-        log = ExperimentLog(results=results)
-
-        with pytest.raises(ValueError, match="Unknown method"):
-            estimator.estimate_effect(
-                experiment_log=log,
-                treatment_param="z",
-                treatment_value=1.0,
-                control_value=0.0,
-                objective_name="objective",
-            )
+        with pytest.raises(ValueError, match="method="):
+            EffectEstimator(method="totally_unknown")
 
     def test_observational_point_estimate_is_finite(self) -> None:
         pytest.importorskip("dowhy")
