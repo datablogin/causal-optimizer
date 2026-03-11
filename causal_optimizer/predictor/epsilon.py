@@ -31,6 +31,12 @@ def compute_epsilon(
     volume, rescaled by budget progress (n_current / n_max), to determine
     how much to trust the surrogate model.
 
+    The formula ``epsilon = coverage_ratio / (n_current / n_max)`` requires
+    that coverage grows at least proportionally to budget consumption. Early
+    in the budget (small n_current/n_max), the denominator is small so high
+    coverage is needed to reach epsilon=1. As the budget is consumed, the
+    bar for trusting the surrogate lowers proportionally.
+
     Args:
         observed_data: Array of shape (n_samples, n_dims) with observed points.
         domain_bounds: List of (lower, upper) bounds for each dimension.
@@ -48,7 +54,7 @@ def compute_epsilon(
         return 0.0
 
     n_dims = observed_data.shape[1]
-    if n_dims < 1 or len(domain_bounds) != n_dims:
+    if n_dims < 2 or len(domain_bounds) != n_dims:
         return 0.0
 
     # Compute total domain volume

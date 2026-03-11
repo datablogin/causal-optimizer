@@ -193,6 +193,13 @@ class ExperimentEngine:
 
     def run_loop(self, n_experiments: int) -> ExperimentLog:
         """Run the full optimization loop for n experiments."""
+        if self._predictor.epsilon_mode and n_experiments != self._predictor.n_max:
+            logger.warning(
+                "epsilon_mode is enabled with n_max=%d but run_loop was called with "
+                "n_experiments=%d. For best results, set n_max equal to n_experiments.",
+                self._predictor.n_max,
+                n_experiments,
+            )
         for i in range(n_experiments):
             result = self.step()
             best = self.log.best_result

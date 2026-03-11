@@ -14,7 +14,7 @@ import numpy as np
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import cross_val_score
 
-from causal_optimizer.predictor.epsilon import compute_epsilon
+from causal_optimizer.predictor.epsilon import compute_epsilon, should_observe
 
 if TYPE_CHECKING:
     from causal_optimizer.types import ExperimentLog, SearchSpace
@@ -162,14 +162,16 @@ class OffPolicyPredictor:
             return True  # Not enough data, must run
 
         n_current = observed_data.shape[0]
-        epsilon = compute_epsilon(observed_data, domain_bounds, n_current, self.n_max)
 
-        # With probability epsilon, observe (skip experiment)
-        if self._rng.random() < epsilon:
+        # Use the shared should_observe function for the stochastic decision
+        observe = should_observe(observed_data, domain_bounds, n_current, self.n_max, rng=self._rng)
+
+        if observe:
             # Even when the epsilon controller says observe, check if
             # uncertainty is too high — if so, fall back to intervening
             prediction = self.predict(parameters)
             if prediction is not None and prediction.uncertainty > self.uncertainty_threshold:
+                epsilon = compute_epsilon(observed_data, domain_bounds, n_current, self.n_max)
                 logger.debug(
                     "Epsilon controller chose observe, but uncertainty too high "
                     "(%.3f > %.3f); intervening instead",
@@ -177,6 +179,7 @@ class OffPolicyPredictor:
                     self.uncertainty_threshold,
                 )
                 return True
+            epsilon = compute_epsilon(observed_data, domain_bounds, n_current, self.n_max)
             logger.debug(
                 "Epsilon controller chose observe (epsilon=%.3f); skipping experiment",
                 epsilon,

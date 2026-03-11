@@ -160,6 +160,20 @@ class TestComputeEpsilon:
         eps = compute_epsilon(data, bounds, n_current=3, n_max=100)
         assert eps == 0.0
 
+    def test_1d_data_returns_zero(self) -> None:
+        """1D data is not supported by ConvexHull, should return 0.0."""
+        data = np.array([[0.0], [0.5], [1.0]])
+        bounds = [(0.0, 2.0)]
+        eps = compute_epsilon(data, bounds, n_current=3, n_max=10)
+        assert eps == 0.0
+
+    def test_negative_bound(self) -> None:
+        """Negative bounds (lower > upper) should return 0.0."""
+        data = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
+        bounds = [(1.0, 0.0), (0.0, 1.0)]  # Inverted first bound
+        eps = compute_epsilon(data, bounds, n_current=3, n_max=100)
+        assert eps == 0.0
+
     def test_mismatched_dims(self) -> None:
         """Mismatched dimensions between data and bounds should return 0.0."""
         data = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
@@ -203,6 +217,14 @@ class TestShouldObserve:
         for seed in range(20):
             result = should_observe(data, bounds, 1, 100, rng=np.random.default_rng(seed))
             assert result is False
+
+    def test_default_rng(self) -> None:
+        """should_observe should work without explicit rng."""
+        data = np.array([[0.5, 0.5]])  # Too few points -> epsilon=0
+        bounds = [(0.0, 1.0), (0.0, 1.0)]
+        # With epsilon=0, result is always False regardless of rng
+        result = should_observe(data, bounds, 1, 100)
+        assert result is False
 
     def test_high_epsilon_mostly_observes(self) -> None:
         """With high coverage, should observe most of the time."""
@@ -254,8 +276,8 @@ class TestOffPolicyPredictorEpsilonMode:
         predictor = OffPolicyPredictor(epsilon_mode=True, n_max=100)
         assert predictor.should_run_experiment({"x": 0.5, "y": 0.5}) is True
 
-    def test_epsilon_mode_calls_compute_epsilon(self) -> None:
-        """Verify epsilon computation is called when in epsilon mode."""
+    def test_epsilon_mode_calls_should_observe(self) -> None:
+        """Verify should_observe is called when in epsilon mode."""
         from causal_optimizer.types import ExperimentLog, ExperimentResult, ExperimentStatus
 
         predictor = OffPolicyPredictor(epsilon_mode=True, n_max=100)
@@ -277,10 +299,66 @@ class TestOffPolicyPredictorEpsilonMode:
             )
         predictor.fit(log, search_space, "objective")
 
-        with patch("causal_optimizer.predictor.off_policy.compute_epsilon") as mock_compute:
-            mock_compute.return_value = 0.0  # Always intervene
+        with patch("causal_optimizer.predictor.off_policy.should_observe") as mock_observe:
+            mock_observe.return_value = False  # Don't observe -> intervene
             result = predictor.should_run_experiment({"x": 0.5, "y": 0.5})
-            mock_compute.assert_called_once()
+            mock_observe.assert_called_once()
+            assert result is True
+
+    def test_epsilon_mode_observe_skips_experiment(self) -> None:
+        """When should_observe returns True and uncertainty is low, skip experiment."""
+        from causal_optimizer.types import ExperimentLog, ExperimentResult, ExperimentStatus
+
+        predictor = OffPolicyPredictor(epsilon_mode=True, n_max=100)
+
+        log = ExperimentLog()
+        search_space = make_search_space()
+        rng = np.random.default_rng(42)
+        for i in range(10):
+            x_val = float(rng.random())
+            y_val = float(rng.random())
+            log.results.append(
+                ExperimentResult(
+                    experiment_id=str(i),
+                    parameters={"x": x_val, "y": y_val},
+                    metrics={"objective": x_val**2 + y_val**2},
+                    status=ExperimentStatus.KEEP,
+                )
+            )
+        predictor.fit(log, search_space, "objective")
+
+        with patch("causal_optimizer.predictor.off_policy.should_observe") as mock_observe:
+            mock_observe.return_value = True  # Observe -> try to skip
+            # With low uncertainty, should actually skip (return False)
+            result = predictor.should_run_experiment({"x": 0.5, "y": 0.5})
+            assert result is False
+
+    def test_epsilon_mode_observe_high_uncertainty_intervenes(self) -> None:
+        """When should_observe says observe but uncertainty is high, intervene anyway."""
+        from causal_optimizer.types import ExperimentLog, ExperimentResult, ExperimentStatus
+
+        predictor = OffPolicyPredictor(epsilon_mode=True, n_max=100, uncertainty_threshold=0.0)
+
+        log = ExperimentLog()
+        search_space = make_search_space()
+        rng = np.random.default_rng(42)
+        for i in range(10):
+            x_val = float(rng.random())
+            y_val = float(rng.random())
+            log.results.append(
+                ExperimentResult(
+                    experiment_id=str(i),
+                    parameters={"x": x_val, "y": y_val},
+                    metrics={"objective": x_val**2 + y_val**2},
+                    status=ExperimentStatus.KEEP,
+                )
+            )
+        predictor.fit(log, search_space, "objective")
+
+        with patch("causal_optimizer.predictor.off_policy.should_observe") as mock_observe:
+            mock_observe.return_value = True  # Observe -> try to skip
+            # With threshold=0.0, any positive uncertainty will trigger intervention
+            result = predictor.should_run_experiment({"x": 0.5, "y": 0.5})
             assert result is True
 
 
@@ -329,11 +407,40 @@ class TestEngineEpsilonIntegration:
             search_space=make_search_space(),
             runner=QuadraticRunner(),
             epsilon_mode=True,
-            n_max=10,
+            n_max=8,
         )
         log = engine.run_loop(n_experiments=8)
         assert len(log.results) == 8
         assert log.best_result is not None
+
+    def test_engine_warns_on_n_max_mismatch(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Engine should warn when n_max != n_experiments."""
+        import logging
+
+        engine = ExperimentEngine(
+            search_space=make_search_space(),
+            runner=QuadraticRunner(),
+            epsilon_mode=True,
+            n_max=100,
+        )
+        with caplog.at_level(logging.WARNING):
+            engine.run_loop(n_experiments=5)
+        assert "n_max=100" in caplog.text
+        assert "n_experiments=5" in caplog.text
+
+    def test_engine_no_warning_when_n_max_matches(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Engine should not warn when n_max == n_experiments."""
+        import logging
+
+        engine = ExperimentEngine(
+            search_space=make_search_space(),
+            runner=QuadraticRunner(),
+            epsilon_mode=True,
+            n_max=5,
+        )
+        with caplog.at_level(logging.WARNING):
+            engine.run_loop(n_experiments=5)
+        assert "n_max=" not in caplog.text
 
     def test_epsilon_mode_can_skip_experiments(self) -> None:
         """With small n_max and good coverage, some experiments may be skipped.
