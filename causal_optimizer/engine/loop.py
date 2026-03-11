@@ -362,6 +362,8 @@ class ExperimentEngine:
 
         if result.important_variables:
             self._screened_focus_variables = result.important_variables
+            # Reset counter on success so future transitions can screen again
+            self._screening_attempts = 0
             logger.info(
                 "Screening identified important variables: %s",
                 result.important_variables,

@@ -336,8 +336,8 @@ def test_screening_max_retries_proceeds_to_optimization():
     assert engine._phase in ("optimization", "exploitation")
 
 
-def test_screening_increments_attempt_counter():
-    """Each call to _run_screening increments the attempt counter."""
+def test_screening_resets_counter_on_success():
+    """Successful screening resets the attempt counter to allow future re-screening."""
     engine = ExperimentEngine(
         search_space=make_search_space(),
         runner=QuadraticRunner(),
@@ -347,8 +347,9 @@ def test_screening_increments_attempt_counter():
     # Run 10 experiments to trigger the exploration->optimization transition
     engine.run_loop(n_experiments=10)
 
-    # _run_screening should have been called, incrementing the counter
-    assert engine._screening_attempts >= 1
+    # Screening succeeded (QuadraticRunner produces useful data), so counter resets to 0
+    assert engine._screening_result is not None
+    assert engine._screening_attempts == 0
 
 
 # --- MAP-Elites crash guard tests ---
