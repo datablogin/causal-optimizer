@@ -416,8 +416,11 @@ def test_graph_learner_with_toy_graph_benchmark() -> None:
     graph = learner.learn(log, min_samples=10, objective_name="objective")
 
     assert isinstance(graph, CausalGraph)
-    # Graph nodes should include x, z, objective
-    assert "x" in graph.nodes or len(graph.nodes) > 0
+    # Graph nodes should include all three variables in the toy graph
+    for expected_node in ("x", "z", "objective"):
+        assert expected_node in graph.nodes, (
+            f"Expected node {expected_node!r} in graph nodes {graph.nodes}"
+        )
 
 
 def test_graph_learner_correlation_method_no_extra_deps() -> None:

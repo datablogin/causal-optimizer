@@ -115,9 +115,16 @@ class GraphLearner:
         Directed edges (X → Y) are added for pairs where *one* variable is the
         known outcome (``objective_name``).  All other pairs with absolute
         correlation above ``self.bidir_threshold`` receive a bidirected edge
-        (X ↔ Y) to indicate a potential confounder.  Pairs with moderate
-        correlation (above ``self.threshold`` but at most ``self.bidir_threshold``)
-        are represented as directed edges in index order.
+        (X ↔ Y) as a heuristic for potential confounding — this is *not* a
+        rigorous causal identification; it only signals that direction is
+        ambiguous and a confounder may exist.  Pairs with moderate correlation
+        (above ``self.threshold`` but at most ``self.bidir_threshold``) are
+        represented as directed edges in index order.
+
+        .. warning::
+            Bidirected edges produced here are heuristic proxies, not
+            statistically-identified confounders.  Treat downstream POMIS
+            computations that rely on them as approximate guidance only.
         """
         corr = df.corr().abs()
         cols = df.columns.tolist()
@@ -126,6 +133,13 @@ class GraphLearner:
         bidirected_edges: list[tuple[str, str]] = []
 
         # Identify parameter columns vs. outcome column
+        if objective_name not in cols:
+            logger.warning(
+                "objective_name %r not found in data columns %r; "
+                "all variable pairs will be treated as non-outcome",
+                objective_name,
+                cols,
+            )
         outcome_cols = {objective_name} if objective_name in cols else set()
 
         for i, c1 in enumerate(cols):
@@ -161,9 +175,13 @@ class GraphLearner:
         """PC algorithm via causal-inference library.
 
         The PC algorithm outputs a CPDAG (completed partially directed acyclic
-        graph) which may contain undirected edges.  Undirected edges are
-        converted to bidirected edges (X ↔ Y) because their direction is
-        statistically unidentifiable from the data alone.
+        graph) which may contain undirected edges.  Undirected edges indicate
+        that the direction is statistically unidentifiable from the data alone;
+        they are represented as directed edges in index order (u → v) as a
+        conservative default.  They are *not* converted to bidirected edges,
+        because an undirected CPDAG edge means ``u → v`` or ``v → u`` — it does
+        **not** imply a hidden common cause (which is what a bidirected edge
+        X ↔ Y represents in an ADMG).
         """
         try:
             from causal_inference.discovery import PCAlgorithm
@@ -181,7 +199,14 @@ class GraphLearner:
             u, v = edge[0], edge[1]
             edge_type = edge[2] if len(edge) > 2 else "directed"
             if edge_type == "undirected":
-                bidirected_edges.append((u, v))
+                # Direction unidentifiable from CPDAG — use index order as a
+                # conservative default rather than implying confounding.
+                logger.debug(
+                    "PC: undirected edge (%r, %r) — orientation ambiguous, using index order",
+                    u,
+                    v,
+                )
+                directed_edges.append((u, v))
             else:
                 directed_edges.append((u, v))
 
