@@ -437,8 +437,7 @@ class ExperimentEngine:
         else:
             # Hybrid mode: prior graph is preserved; discovered graph is informational only
             logger.info(
-                "Hybrid mode: prior causal graph retained; "
-                "discovered graph logged but not applied"
+                "Hybrid mode: prior causal graph retained; discovered graph logged but not applied"
             )
 
     def _run_screening(self) -> None:
