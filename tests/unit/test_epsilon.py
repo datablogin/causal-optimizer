@@ -366,7 +366,7 @@ class TestOffPolicyPredictorEpsilonMode:
         assert predictor.should_run_experiment({"x": 0.5, "y": 0.5}) is True
 
     def test_epsilon_mode_observe_skips_experiment(self) -> None:
-        """When epsilon is high and uncertainty is low, skip experiment."""
+        """When epsilon is high, model quality is good, and uncertainty is low, skip."""
         from causal_optimizer.types import ExperimentLog, ExperimentResult, ExperimentStatus
 
         predictor = OffPolicyPredictor(epsilon_mode=True, n_max=100)
@@ -387,8 +387,9 @@ class TestOffPolicyPredictorEpsilonMode:
             )
         predictor.fit(log, search_space, "objective")
 
-        # Force observe path: cached epsilon=1.0 and rng returns 0.0 (< 1.0)
+        # Force observe path: cached epsilon=1.0, good model quality, rng returns 0.0
         predictor._cached_epsilon = 1.0
+        predictor._model_quality = 0.8  # Must be >= 0.3 to pass model-quality guard
         with patch.object(predictor, "_rng") as mock_rng:
             mock_rng.random.return_value = 0.0
             result = predictor.should_run_experiment({"x": 0.5, "y": 0.5})
@@ -509,6 +510,65 @@ class TestOffPolicyPredictorEpsilonMode:
             result = predictor.should_run_experiment({"x": 0.5, "y": 0.5})
             assert result is True  # Must intervene since no model
 
+    def test_epsilon_mode_observe_low_model_quality_intervenes(self) -> None:
+        """When epsilon says observe but model quality is low, intervene anyway."""
+        from causal_optimizer.types import ExperimentLog, ExperimentResult, ExperimentStatus
+
+        predictor = OffPolicyPredictor(epsilon_mode=True, n_max=100)
+
+        log = ExperimentLog()
+        search_space = make_search_space()
+        rng = np.random.default_rng(42)
+        for i in range(10):
+            x_val = float(rng.random())
+            y_val = float(rng.random())
+            log.results.append(
+                ExperimentResult(
+                    experiment_id=str(i),
+                    parameters={"x": x_val, "y": y_val},
+                    metrics={"objective": x_val**2 + y_val**2},
+                    status=ExperimentStatus.KEEP,
+                )
+            )
+        predictor.fit(log, search_space, "objective")
+
+        # Force observe path but with poor model quality
+        predictor._cached_epsilon = 1.0
+        predictor._model_quality = 0.1  # Below 0.3 threshold
+        with patch.object(predictor, "_rng") as mock_rng:
+            mock_rng.random.return_value = 0.0
+            result = predictor.should_run_experiment({"x": 0.5, "y": 0.5})
+            assert result is True  # Must intervene due to poor model quality
+
+    def test_seed_parameter_reproducibility(self) -> None:
+        """OffPolicyPredictor with a seed should produce reproducible decisions."""
+        from causal_optimizer.types import ExperimentLog, ExperimentResult, ExperimentStatus
+
+        def make_predictor_and_decide(seed: int) -> list[bool]:
+            predictor = OffPolicyPredictor(epsilon_mode=True, n_max=100, seed=seed)
+            log = ExperimentLog()
+            search_space = make_search_space()
+            rng = np.random.default_rng(0)
+            for i in range(10):
+                x_val = float(rng.random())
+                y_val = float(rng.random())
+                log.results.append(
+                    ExperimentResult(
+                        experiment_id=str(i),
+                        parameters={"x": x_val, "y": y_val},
+                        metrics={"objective": x_val**2 + y_val**2},
+                        status=ExperimentStatus.KEEP,
+                    )
+                )
+            predictor.fit(log, search_space, "objective")
+            predictor._cached_epsilon = 0.5
+            predictor._model_quality = 0.8
+            return [predictor.should_run_experiment({"x": 0.5, "y": 0.5}) for _ in range(20)]
+
+        results_a = make_predictor_and_decide(seed=42)
+        results_b = make_predictor_and_decide(seed=42)
+        assert results_a == results_b
+
     def test_compute_epsilon_duplicate_points(self) -> None:
         """Duplicate points should produce zero-volume hull."""
         data = np.array(
@@ -530,6 +590,36 @@ class TestOffPolicyPredictorEpsilonMode:
 
 class TestEngineEpsilonIntegration:
     """Integration tests for ExperimentEngine with epsilon_mode."""
+
+    def test_missing_bounds_warns(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Variables without explicit bounds should produce a warning."""
+        import logging
+
+        from causal_optimizer.types import ExperimentLog, ExperimentResult, ExperimentStatus
+
+        space = SearchSpace(
+            variables=[
+                Variable(name="x", variable_type=VariableType.CONTINUOUS, lower=0.0, upper=1.0),
+                Variable(name="y", variable_type=VariableType.CONTINUOUS, lower=None, upper=None),
+            ]
+        )
+        predictor = OffPolicyPredictor(epsilon_mode=True, n_max=100)
+        log = ExperimentLog()
+        rng = np.random.default_rng(42)
+        for i in range(5):
+            x_val = float(rng.random())
+            y_val = float(rng.random())
+            log.results.append(
+                ExperimentResult(
+                    experiment_id=str(i),
+                    parameters={"x": x_val, "y": y_val},
+                    metrics={"objective": x_val**2 + y_val**2},
+                    status=ExperimentStatus.KEEP,
+                )
+            )
+        with caplog.at_level(logging.WARNING):
+            predictor.fit(log, space, "objective")
+        assert "Variable 'y' has no bounds" in caplog.text
 
     def test_engine_accepts_epsilon_params(self) -> None:
         """Engine should accept epsilon_mode and n_max parameters."""

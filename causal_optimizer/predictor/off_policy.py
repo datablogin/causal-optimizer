@@ -47,6 +47,7 @@ class OffPolicyPredictor:
         min_history: int = 5,
         epsilon_mode: bool = False,
         n_max: int = 100,
+        seed: int | None = None,
     ) -> None:
         self.uncertainty_threshold = uncertainty_threshold
         self.min_history = min_history
@@ -59,7 +60,7 @@ class OffPolicyPredictor:
         self._cached_features: np.ndarray | None = None
         self._cached_epsilon: float = 0.0
         self._search_space: SearchSpace | None = None
-        self._rng: np.random.Generator = np.random.default_rng()
+        self._rng: np.random.Generator = np.random.default_rng(seed)
 
     def fit(
         self,
@@ -89,13 +90,15 @@ class OffPolicyPredictor:
             ]
 
             # Cache numeric features (even before min_history, since the
-            # convex hull only needs 3+ rows, not min_history rows)
+            # convex hull only needs 3+ rows, not min_history rows).
+            # Drop rows with NaN rather than imputing 0.0 — imputing can
+            # place points outside domain bounds and inflate hull coverage.
             if self._numeric_var_names and len(df) >= 1:
-                numeric_df = df[self._numeric_var_names]
-                self._cached_features = np.asarray(
-                    numeric_df.to_numpy(dtype=np.float64, na_value=0.0),
-                    dtype=np.float64,
-                )
+                numeric_df = df[self._numeric_var_names].dropna()
+                if len(numeric_df) >= 1:
+                    self._cached_features = numeric_df.to_numpy(dtype=np.float64)
+                else:
+                    self._cached_features = None
             else:
                 self._cached_features = None
 
@@ -220,6 +223,14 @@ class OffPolicyPredictor:
                     epsilon,
                 )
                 return True
+            if prediction.model_quality < 0.3:
+                logger.debug(
+                    "Epsilon controller chose observe (epsilon=%.3f), but model quality "
+                    "too low (%.3f < 0.3); intervening instead",
+                    epsilon,
+                    prediction.model_quality,
+                )
+                return True
             if prediction.uncertainty > self.uncertainty_threshold:
                 logger.debug(
                     "Epsilon controller chose observe (epsilon=%.3f), but uncertainty "
@@ -255,6 +266,12 @@ class OffPolicyPredictor:
         for var in self._search_space.variables:
             if var.name not in self._numeric_var_names:
                 continue
+            if var.lower is None or var.upper is None:
+                logger.warning(
+                    "Variable '%s' has no bounds; defaulting to [0.0, 1.0] for epsilon "
+                    "coverage estimate. Set explicit bounds for accurate results.",
+                    var.name,
+                )
             lower = var.lower if var.lower is not None else 0.0
             upper = var.upper if var.upper is not None else 1.0
             bounds.append((lower, upper))
