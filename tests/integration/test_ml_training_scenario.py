@@ -184,12 +184,8 @@ class TestMLTrainingScenario:
         assert len(pomis_sets) >= 1, "Expected at least one POMIS set"
         # At least one POMIS set should have fewer variables than the full space
         all_search_vars = set(space.variable_names)
-        has_pruning = any(
-            len(pset & all_search_vars) < len(all_search_vars) for pset in pomis_sets
-        )
-        assert has_pruning, (
-            f"Expected POMIS to prune the 9-variable space, got sets: {pomis_sets}"
-        )
+        has_pruning = any(len(pset & all_search_vars) < len(all_search_vars) for pset in pomis_sets)
+        assert has_pruning, f"Expected POMIS to prune the 9-variable space, got sets: {pomis_sets}"
 
     def test_phase_transitions_with_mixed_types(self) -> None:
         """Engine should transition phases correctly with mixed variable types."""
@@ -308,13 +304,11 @@ class TestMLTrainingScenario:
         expected_vars = {v.name for v in adapter.get_search_space().variables}
         for result in log.results:
             param_names = set(result.parameters.keys())
-            assert expected_vars == param_names, (
-                f"Expected vars {expected_vars}, got {param_names}"
-            )
+            assert expected_vars == param_names, f"Expected vars {expected_vars}, got {param_names}"
             # Check categorical vars are valid choices
-            assert result.parameters["optimizer"] in [
-                "adamw", "muon", "sgd", "lion"
-            ], f"Invalid optimizer: {result.parameters['optimizer']}"
-            assert result.parameters["activation"] in [
-                "gelu", "swiglu", "relu"
-            ], f"Invalid activation: {result.parameters['activation']}"
+            assert result.parameters["optimizer"] in ["adamw", "muon", "sgd", "lion"], (
+                f"Invalid optimizer: {result.parameters['optimizer']}"
+            )
+            assert result.parameters["activation"] in ["gelu", "swiglu", "relu"], (
+                f"Invalid activation: {result.parameters['activation']}"
+            )

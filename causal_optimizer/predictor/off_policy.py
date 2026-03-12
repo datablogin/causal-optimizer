@@ -58,13 +58,9 @@ def _encode_dataframe_for_rf(
             # Label-encode: map each category to an integer
             choices = var.choices or sorted(col.dropna().unique().tolist())
             mapping = {c: float(i) for i, c in enumerate(choices)}
-            encoded_cols.append(
-                col.map(mapping).fillna(0.0).to_numpy(dtype=np.float64)
-            )
+            encoded_cols.append(col.map(mapping).fillna(0.0).to_numpy(dtype=np.float64))
         elif var is not None and var.variable_type == VariableType.BOOLEAN:
-            encoded_cols.append(
-                col.astype(float).fillna(0.0).to_numpy(dtype=np.float64)
-            )
+            encoded_cols.append(col.astype(float).fillna(0.0).to_numpy(dtype=np.float64))
         else:
             encoded_cols.append(
                 pd.to_numeric(col, errors="coerce").fillna(0.0).to_numpy(dtype=np.float64)
