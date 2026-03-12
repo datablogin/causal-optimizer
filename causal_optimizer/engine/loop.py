@@ -694,6 +694,29 @@ class ExperimentEngine:
             )
             return
 
+        # Verify the effect direction matches the optimization goal.
+        # SensitivityValidator uses abs(effect) for SNR/E-value, so is_robust
+        # can be True even when the effect goes the wrong way (regression).
+        improving = (report.effect_size < 0) if self.minimize else (report.effect_size > 0)
+        if report.is_robust and not improving:
+            logger.warning(
+                "Validation at %s→%s: effect direction is wrong "
+                "(effect=%.4f, minimize=%s); treating as non-robust",
+                old_phase,
+                new_phase,
+                report.effect_size,
+                self.minimize,
+            )
+            # Override: a "robust" regression is not a real improvement.
+            report = RobustnessReport(
+                effect_size=report.effect_size,
+                noise_estimate=report.noise_estimate,
+                signal_to_noise=report.signal_to_noise,
+                e_value=report.e_value,
+                is_robust=False,
+                summary=report.summary + "; effect direction is wrong for optimization goal",
+            )
+
         self.validation_results.append(report)
 
         if report.is_robust:

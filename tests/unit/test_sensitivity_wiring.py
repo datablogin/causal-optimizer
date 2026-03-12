@@ -129,3 +129,34 @@ def test_validation_graceful_on_error() -> None:
 
     # Should have no report since the validator raised
     assert len(engine.validation_results) == 0
+
+
+def test_validation_wrong_direction_treated_as_non_robust() -> None:
+    """If the effect direction is wrong for the optimization goal, is_robust is overridden."""
+    engine = ExperimentEngine(
+        search_space=_make_space(),
+        runner=_QuadRunner(),
+        minimize=True,
+        seed=42,
+    )
+    # Add enough experiments for validation
+    for _ in range(11):
+        engine.run_experiment({"x": 1.0, "y": 1.0})
+
+    # Mock a report where is_robust=True but effect_size > 0 (wrong for minimize)
+    mock_report = RobustnessReport(
+        effect_size=1.5,  # Positive = regression for minimization
+        noise_estimate=0.5,
+        signal_to_noise=3.0,
+        e_value=5.0,
+        is_robust=True,
+        summary="Robust improvement",
+    )
+    with patch.object(engine._validator, "validate_improvement", return_value=mock_report):
+        engine._run_validation("exploration", "optimization")
+
+    assert len(engine.validation_results) == 1
+    report = engine.validation_results[0]
+    # Should be overridden to non-robust because direction is wrong
+    assert report.is_robust is False
+    assert "effect direction is wrong" in report.summary
