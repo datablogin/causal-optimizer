@@ -93,9 +93,9 @@ def test_validation_at_exploitation_transition() -> None:
         engine.step()
 
     # Should have reports from both transitions (exploration->optimization
-    # and optimization->exploitation). Due to screening retries the exact count
-    # may vary, but we expect at least 1.
-    assert len(engine.validation_results) >= 1
+    # and optimization->exploitation). Screening retries may add extra
+    # exploration->optimization transitions, but there must be at least 2.
+    assert len(engine.validation_results) >= 2
     assert all(isinstance(r, RobustnessReport) for r in engine.validation_results)
 
 
@@ -159,4 +159,5 @@ def test_validation_wrong_direction_treated_as_non_robust() -> None:
     report = engine.validation_results[0]
     # Should be overridden to non-robust because direction is wrong
     assert report.is_robust is False
-    assert "effect direction is wrong" in report.summary
+    assert "Effect direction is wrong" in report.summary
+    assert "originally:" in report.summary

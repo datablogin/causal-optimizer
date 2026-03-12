@@ -714,7 +714,11 @@ class ExperimentEngine:
                 signal_to_noise=report.signal_to_noise,
                 e_value=report.e_value,
                 is_robust=False,
-                summary=report.summary + "; effect direction is wrong for optimization goal",
+                summary=(
+                    f"Effect direction is wrong for optimization goal "
+                    f"(effect={report.effect_size:.6f}, minimize={self.minimize}); "
+                    f"originally: {report.summary}"
+                ),
             )
 
         self.validation_results.append(report)
