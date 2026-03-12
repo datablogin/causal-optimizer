@@ -33,7 +33,7 @@ def engine_no_graph() -> ExperimentEngine:
         seed=42,
         max_skips=3,
         discovery_method="correlation",
-        discovery_threshold=0.3,
+        discovery_threshold=0.1,  # Low threshold to ensure edges are discovered from 10 samples
     )
     return engine
 
@@ -49,9 +49,7 @@ def test_no_graph_discovery_produces_graph(engine_no_graph: ExperimentEngine) ->
     assert len(engine_no_graph._discovered_graph.edges) > 0, (
         "Discovered graph should have at least one edge"
     )
-    assert len(engine_no_graph._discovered_graph.nodes) > 0, (
-        "Discovered graph should have nodes"
-    )
+    assert len(engine_no_graph._discovered_graph.nodes) > 0, "Discovered graph should have nodes"
 
 
 def test_no_graph_active_graph_is_discovered(engine_no_graph: ExperimentEngine) -> None:

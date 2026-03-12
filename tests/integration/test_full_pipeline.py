@@ -49,9 +49,7 @@ def test_full_pipeline_phase_transitions(engine_with_graph: ExperimentEngine) ->
     unique_phases = set(phases)
     assert "exploration" in unique_phases, "Expected exploration phase"
     # Optimization or exploitation should appear (screening may extend exploration)
-    assert len(unique_phases) >= 2, (
-        f"Expected at least 2 phases, got {unique_phases}"
-    )
+    assert len(unique_phases) >= 2, f"Expected at least 2 phases, got {unique_phases}"
 
 
 def test_full_pipeline_screening_runs(engine_with_graph: ExperimentEngine) -> None:
@@ -73,12 +71,9 @@ def test_full_pipeline_off_policy_skips(
     with caplog.at_level(logging.INFO, logger="causal_optimizer.engine.loop"):
         engine_with_graph.run_loop(n_experiments=60)
 
-    # Check that at least one skip message was logged
-    skip_messages = [r for r in caplog.records if "skip" in r.message.lower()]
-    # Off-policy may or may not skip depending on data quality; this is soft
-    # The predictor needs enough data to make predictions, so skips happen after
-    # the predictor has been trained (after ~5-10 experiments)
-    # We don't assert > 0 because it depends on the random seed and model quality
+    # Verify log capture worked; off-policy may or may not skip depending on
+    # data quality and random seed, so we only check the log is non-empty.
+    assert len(caplog.records) > 0, "Expected log output from the engine loop"
 
 
 def test_full_pipeline_reasonable_result(engine_with_graph: ExperimentEngine) -> None:

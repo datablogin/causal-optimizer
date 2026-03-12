@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import patch
 
 from causal_optimizer.engine.loop import ExperimentEngine
 from causal_optimizer.types import (
-    CausalGraph,
     SearchSpace,
     Variable,
     VariableType,
@@ -95,3 +95,35 @@ def test_validation_at_exploitation_transition() -> None:
     # may vary, but we expect at least 1.
     assert len(engine.validation_results) >= 1
     assert all(isinstance(r, RobustnessReport) for r in engine.validation_results)
+
+
+def test_validation_skipped_with_few_results() -> None:
+    """Validation should be skipped (no report) if fewer than 4 experiments."""
+    engine = ExperimentEngine(
+        search_space=_make_space(),
+        runner=_QuadRunner(),
+        seed=42,
+    )
+    # Manually call _run_validation with a tiny log (< 4 results)
+    engine.run_experiment({"x": 1.0, "y": 1.0})
+    engine.run_experiment({"x": 0.5, "y": 0.5})
+    engine._run_validation("exploration", "optimization")
+    assert len(engine.validation_results) == 0
+
+
+def test_validation_graceful_on_error() -> None:
+    """If SensitivityValidator raises, validation is skipped gracefully."""
+    engine = ExperimentEngine(
+        search_space=_make_space(),
+        runner=_QuadRunner(),
+        seed=42,
+    )
+    # Add enough experiments for validation
+    for _ in range(11):
+        engine.run_experiment({"x": 1.0, "y": 1.0})
+
+    with patch.object(engine._validator, "validate_improvement", side_effect=RuntimeError("boom")):
+        engine._run_validation("exploration", "optimization")
+
+    # Should have no report since the validator raised
+    assert len(engine.validation_results) == 0
