@@ -175,6 +175,10 @@ class ExperimentEngine:
         )
         self._validator = SensitivityValidator()
         self.validation_results: list[RobustnessReport] = []
+        #: Parallel list of ``(old_phase, new_phase)`` tuples so consumers can
+        #: determine which transition each :class:`RobustnessReport` belongs to.
+        #: ``validation_transitions[i]`` corresponds to ``validation_results[i]``.
+        self.validation_transitions: list[tuple[str, str]] = []
 
     @property
     def causal_graph(self) -> CausalGraph | None:
@@ -728,6 +732,7 @@ class ExperimentEngine:
             )
 
         self.validation_results.append(report)
+        self.validation_transitions.append((old_phase, new_phase))
 
         if report.is_robust:
             logger.info(

@@ -64,16 +64,23 @@ def test_full_pipeline_screening_runs(engine_with_graph: ExperimentEngine) -> No
     )
 
 
-def test_full_pipeline_off_policy_skips(
+def test_full_pipeline_engine_logs_activity(
     engine_with_graph: ExperimentEngine, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """Off-policy predictor should skip at least some experiments."""
+    """Engine should emit log messages during the optimization loop."""
     with caplog.at_level(logging.INFO, logger="causal_optimizer.engine.loop"):
         engine_with_graph.run_loop(n_experiments=60)
 
-    # Verify log capture worked; off-policy may or may not skip depending on
-    # data quality and random seed, so we only check the log is non-empty.
-    assert len(caplog.records) > 0, "Expected log output from the engine loop"
+    # Verify the engine produced meaningful log output (phase transitions,
+    # screening, validation, etc.). Off-policy skips are non-deterministic
+    # and depend on seed/data quality, so we don't assert on them specifically.
+    keywords = ("phase", "validation", "screening")
+    phase_logs = [
+        r for r in caplog.records if any(k in r.message.lower() for k in keywords)
+    ]
+    assert len(phase_logs) > 0, (
+        "Expected log messages about phases, validation, or screening"
+    )
 
 
 def test_full_pipeline_reasonable_result(engine_with_graph: ExperimentEngine) -> None:
