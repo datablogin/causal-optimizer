@@ -21,6 +21,8 @@ from causal_optimizer.engine.loop import ExperimentEngine
 from causal_optimizer.types import ExperimentStatus
 from causal_optimizer.validator.sensitivity import RobustnessReport
 
+pytestmark = pytest.mark.slow
+
 
 @pytest.fixture()
 def engine_with_graph() -> ExperimentEngine:
@@ -75,12 +77,8 @@ def test_full_pipeline_engine_logs_activity(
     # screening, validation, etc.). Off-policy skips are non-deterministic
     # and depend on seed/data quality, so we don't assert on them specifically.
     keywords = ("phase", "validation", "screening")
-    phase_logs = [
-        r for r in caplog.records if any(k in r.message.lower() for k in keywords)
-    ]
-    assert len(phase_logs) > 0, (
-        "Expected log messages about phases, validation, or screening"
-    )
+    phase_logs = [r for r in caplog.records if any(k in r.message.lower() for k in keywords)]
+    assert len(phase_logs) > 0, "Expected log messages about phases, validation, or screening"
 
 
 def test_full_pipeline_reasonable_result(engine_with_graph: ExperimentEngine) -> None:
@@ -105,9 +103,6 @@ def test_full_pipeline_robustness_report(engine_with_graph: ExperimentEngine) ->
     """At least one RobustnessReport should be generated during the run."""
     engine_with_graph.run_loop(n_experiments=60)
 
-    assert hasattr(engine_with_graph, "validation_results"), (
-        "Engine should have validation_results attribute"
-    )
     assert len(engine_with_graph.validation_results) >= 1, (
         "Expected at least one RobustnessReport from phase transitions"
     )

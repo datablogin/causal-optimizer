@@ -16,6 +16,8 @@ from causal_optimizer.benchmarks.toy_graph import ToyGraphBenchmark
 from causal_optimizer.engine.loop import ExperimentEngine
 from causal_optimizer.validator.sensitivity import RobustnessReport
 
+pytestmark = pytest.mark.slow
+
 
 @pytest.fixture()
 def engine_no_graph() -> ExperimentEngine:
@@ -81,7 +83,6 @@ def test_no_graph_robustness_report(engine_no_graph: ExperimentEngine) -> None:
     """At least one RobustnessReport should be generated even without a prior graph."""
     engine_no_graph.run_loop(n_experiments=60)
 
-    assert hasattr(engine_no_graph, "validation_results")
     assert len(engine_no_graph.validation_results) >= 1, (
         "Expected at least one RobustnessReport from phase transitions"
     )

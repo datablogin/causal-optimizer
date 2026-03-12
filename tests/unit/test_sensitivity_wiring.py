@@ -32,14 +32,16 @@ class _QuadRunner:
         return {"objective": x**2 + y**2}
 
 
-def test_engine_has_validation_results_attribute() -> None:
-    """Engine should expose a validation_results list."""
+def test_engine_has_validation_records() -> None:
+    """Engine should expose validation_records and a validation_results property."""
     engine = ExperimentEngine(
         search_space=_make_space(),
         runner=_QuadRunner(),
         seed=42,
     )
-    assert hasattr(engine, "validation_results")
+    assert isinstance(engine.validation_records, list)
+    assert len(engine.validation_records) == 0
+    # Property should also work
     assert isinstance(engine.validation_results, list)
     assert len(engine.validation_results) == 0
 

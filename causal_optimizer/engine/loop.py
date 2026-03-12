@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 import numpy as np
@@ -34,6 +35,15 @@ logger = logging.getLogger(__name__)
 # add no statistical value over the engine's own greedy fallback.
 _MIN_KEPT = 5
 _MIN_DISCARDED = 2
+
+
+@dataclass(frozen=True)
+class ValidationRecord:
+    """A single validation result paired with its phase-transition context."""
+
+    report: RobustnessReport
+    old_phase: str
+    new_phase: str
 
 
 class ExperimentRunner(Protocol):
@@ -174,11 +184,14 @@ class ExperimentEngine:
             MAPElites(descriptor_names, minimize=minimize) if descriptor_names else None
         )
         self._validator = SensitivityValidator()
-        self.validation_results: list[RobustnessReport] = []
-        #: Parallel list of ``(old_phase, new_phase)`` tuples so consumers can
-        #: determine which transition each :class:`RobustnessReport` belongs to.
-        #: ``validation_transitions[i]`` corresponds to ``validation_results[i]``.
-        self.validation_transitions: list[tuple[str, str]] = []
+        #: Validation records from phase transitions.  Each record bundles a
+        #: :class:`RobustnessReport` with the phase-transition context.
+        self.validation_records: list[ValidationRecord] = []
+
+    @property
+    def validation_results(self) -> list[RobustnessReport]:
+        """Convenience accessor: just the reports from all validation records."""
+        return [r.report for r in self.validation_records]
 
     @property
     def causal_graph(self) -> CausalGraph | None:
@@ -681,7 +694,10 @@ class ExperimentEngine:
         """
         results = self.log.results
         if len(results) < 4:
-            # Need at least 2 baseline + 2 improved for validation
+            # Need at least 2 baseline + 2 improved for validation.
+            # SensitivityValidator also guards at < 2 per group; this engine-side
+            # check avoids the overhead of building ID lists and calling the
+            # validator when the result is guaranteed to be "insufficient data."
             return
 
         midpoint = len(results) // 2
@@ -707,6 +723,7 @@ class ExperimentEngine:
         # Verify the effect direction matches the optimization goal.
         # SensitivityValidator uses abs(effect) for SNR/E-value, so is_robust
         # can be True even when the effect goes the wrong way (regression).
+        # Note: effect_size == 0.0 is treated as "not improving" (no change).
         improving = (report.effect_size < 0) if self.minimize else (report.effect_size > 0)
         if report.is_robust and not improving:
             logger.warning(
@@ -731,8 +748,9 @@ class ExperimentEngine:
                 ),
             )
 
-        self.validation_results.append(report)
-        self.validation_transitions.append((old_phase, new_phase))
+        self.validation_records.append(
+            ValidationRecord(report=report, old_phase=old_phase, new_phase=new_phase)
+        )
 
         if report.is_robust:
             logger.info(
