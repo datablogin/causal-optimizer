@@ -175,7 +175,11 @@ class ExperimentEngine:
 
     @property
     def pomis_sets(self) -> list[frozenset[str]] | None:
-        """POMIS intervention sets computed during the optimization phase."""
+        """POMIS intervention sets computed during the optimization phase.
+
+        Read-only: computed internally by :meth:`_compute_pomis` at the
+        exploration-to-optimization phase transition. Not user-settable.
+        """
         return self._pomis_sets
 
     @property

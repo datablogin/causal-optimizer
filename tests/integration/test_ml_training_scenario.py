@@ -215,9 +215,9 @@ class TestMLTrainingScenario:
         """The RF surrogate should handle categorical string values without error.
 
         When Ax is not available, the engine falls back to the RF surrogate
-        (via _suggest_surrogate). The surrogate uses .astype(float, errors='ignore')
-        which leaves strings as-is, then fillna(0). This test verifies the full
-        path works for a space with categoricals.
+        (via _suggest_surrogate). The surrogate uses encode_dataframe_for_rf
+        which label-encodes categoricals to integers. This test verifies the
+        full optimization path works for a space with categoricals.
         """
         adapter = MLTrainingAdapter()
         runner = MLTrainingSimRunner(seed=42)

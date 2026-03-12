@@ -59,6 +59,9 @@ def encode_dataframe_for_rf(
         if var is not None and var.variable_type == VariableType.CATEGORICAL:
             choices = _get_categorical_choices(var, name, col)
             mapping = {c: float(i) for i, c in enumerate(choices)}
+            # Unknown categories (not in choices) become NaN via .map(), then 0.0
+            # via fillna. This collides with the first choice's encoding (also 0.0).
+            # RF is robust to this since unknown categories are rare in practice.
             encoded_cols.append(col.map(mapping).fillna(0.0).to_numpy(dtype=np.float64))
         elif var is not None and var.variable_type == VariableType.BOOLEAN:
             encoded_cols.append(col.astype(float).fillna(0.0).to_numpy(dtype=np.float64))
@@ -101,6 +104,8 @@ def encode_params_for_rf(
                     name,
                 )
             mapping = {c: float(i) for i, c in enumerate(choices)}
+            # Unknown categories default to 0.0 (same as first choice).
+            # This mirrors the fillna(0.0) behavior in encode_dataframe_for_rf.
             values.append(mapping.get(raw, 0.0))
         elif var is not None and var.variable_type == VariableType.BOOLEAN:
             values.append(1.0 if raw else 0.0)

@@ -119,17 +119,10 @@ class TestMarketingScenario:
         pomis_sets = compute_pomis(graph, "conversions")
 
         assert len(pomis_sets) >= 1, "Expected at least one POMIS set"
-        # Each POMIS set should be a proper subset of all search space + graph variables
+        # At least one POMIS set should have fewer search-space variables than the full 5
         all_search_vars = set(space.variable_names)
-        for pset in pomis_sets:
-            # POMIS sets contain graph nodes, not just search space vars.
-            # The key pruning test: at least one set should have fewer
-            # search-space-intersecting variables than the full 5.
-            search_overlap = pset & all_search_vars
-            # The set should not be the entire search space
-            assert len(search_overlap) < len(all_search_vars) or len(pset) < len(all_search_vars), (
-                f"POMIS set {pset} did not prune the search space"
-            )
+        has_pruning = any(len(pset & all_search_vars) < len(all_search_vars) for pset in pomis_sets)
+        assert has_pruning, f"Expected POMIS to prune the 5-variable space, got sets: {pomis_sets}"
 
     def test_phase_transitions(self) -> None:
         """Engine should transition through exploration -> optimization phases."""
