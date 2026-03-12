@@ -51,6 +51,20 @@ Each `step()` call: suggest parameters → off-policy check (skip if predicted p
 
 `ExperimentEngine` owns an `ExperimentLog` (list of `ExperimentResult`). Each result has parameters, metrics, and status (KEEP/DISCARD/CRASH). The `suggest_parameters()` function reads the log + optional `CausalGraph` to propose the next experiment.
 
+### Auto-discovery (`discovery/graph_learner.py` → `GraphLearner`)
+
+The engine can learn a causal graph from experiment data at the exploration→optimization phase transition.  Set `discovery_method` on `ExperimentEngine` to enable:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `discovery_method` | `None` (disabled) | `"correlation"`, `"pc"`, or `"notears"` |
+| `discovery_threshold` | `0.3` | Minimum absolute correlation to include an edge |
+| `discovery_bidir_threshold` | `0.7` | Threshold above which non-outcome pairs get a bidirected edge (correlation method only) |
+
+**Hybrid mode:** When both a `causal_graph` prior and a `discovery_method` are provided, the discovered graph is logged but the prior is retained.
+
+**Bidirected edge semantics:** Bidirected edges from auto-discovery are *heuristic proxies*, not formally identified confounders.  They signal that direction is ambiguous or a common cause may exist.  POMIS computation treats them conservatively.
+
 ### Graceful degradation
 
 Ax/BoTorch → RF surrogate. AIPW → bootstrap CI. pyDOE3 → built-in LHS. Core runs on numpy/pandas/scipy/scikit-learn only.
@@ -75,4 +89,4 @@ This is a hard requirement. No exceptions. PRs that skip any of these steps must
 
 ## Known issues
 
-- `EffectEstimator` exists but is not wired into the engine loop (ad-hoc bootstrap used instead)
+None currently tracked.

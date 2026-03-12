@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from scipy import stats
 
+from causal_optimizer.types import ExperimentStatus
+
 if TYPE_CHECKING:
     from causal_optimizer.types import CausalGraph, ExperimentLog
 
@@ -66,6 +68,7 @@ class EffectEstimator:
         n_bootstrap: int = 1000,
         causal_graph: CausalGraph | None = None,
         obs_method: str = "backdoor",
+        seed: int | None = None,
     ) -> None:
         if method not in self._VALID_METHODS:
             raise ValueError(
@@ -81,6 +84,7 @@ class EffectEstimator:
         self.n_bootstrap = n_bootstrap
         self.causal_graph = causal_graph
         self.obs_method = obs_method
+        self._rng = np.random.default_rng(seed)
 
     def estimate_effect(
         self,
@@ -142,7 +146,7 @@ class EffectEstimator:
             point_estimate=effect,
             confidence_interval=ci,
             p_value=float(p_value),
-            is_significant=p_value < alpha,  # alpha = 1 - confidence_level (e.g. 0.05 for 95% CI)
+            is_significant=float(p_value) < alpha,
             method="difference",
         )
 
@@ -160,14 +164,13 @@ class EffectEstimator:
             small_sample: When True (or when total n < 10), uses 100 bootstrap
                 samples instead of ``self.n_bootstrap`` for efficiency.
         """
-        rng = np.random.default_rng(42)
         n_total = len(treated) + len(control)
         n_iter = 100 if (small_sample or n_total < 10) else self.n_bootstrap
         effects = np.empty(n_iter)
 
         for i in range(n_iter):
-            t_boot = rng.choice(treated, size=len(treated), replace=True)
-            c_boot = rng.choice(control, size=len(control), replace=True)
+            t_boot = self._rng.choice(treated, size=len(treated), replace=True)
+            c_boot = self._rng.choice(control, size=len(control), replace=True)
             effects[i] = np.mean(t_boot) - np.mean(c_boot)
 
         point_estimate = float(np.mean(treated) - np.mean(control))
@@ -184,7 +187,7 @@ class EffectEstimator:
             point_estimate=point_estimate,
             confidence_interval=ci,
             p_value=p_value,
-            is_significant=p_value < (1 - self.confidence_level),
+            is_significant=p_value < alpha,
             method="bootstrap",
         )
 
@@ -210,16 +213,13 @@ class EffectEstimator:
 
         Returns:
             :class:`EffectEstimate` with ``is_significant`` indicating whether
-            the improvement is statistically meaningful.
-
-            - Fewer than 2 kept experiments: permissive fallback
-              (``is_significant=True``) — no comparison is possible.
-            - 2–4 kept experiments: greedy comparison — ``is_significant=True``
-              only when the current value strictly beats the best-so-far.
-            - 5+ kept experiments: full statistical test (bootstrap or t-test).
+            the improvement is statistically meaningful.  When fewer than 2
+            kept experiments are available, returns a permissive estimate
+            (``is_significant=True``) to avoid premature pruning.  Between 2
+            and 4 kept experiments, uses a greedy comparison (faster, less
+            data required).  With 5+ kept experiments, uses the configured
+            statistical method.
         """
-        from causal_optimizer.types import ExperimentStatus
-
         kept_values = [
             r.metrics[objective_name]
             for r in experiment_log.results
@@ -237,10 +237,9 @@ class EffectEstimator:
             )
 
         # Small sample: not enough kept history for reliable bootstrap testing
-        # (< 5 kept). Fall back to a greedy comparison: a better result is
-        # considered significant, a worse result is not.  This avoids both
-        # false positives (keeping noise) and false negatives (discarding real
-        # improvements) when data is scarce.
+        # (2–4 kept). Use greedy comparison: a better result is considered
+        # significant, a worse result is not.  This avoids both false positives
+        # (keeping noise) and false negatives (discarding real improvements).
         if len(kept_values) < 5:
             kept_arr_small = np.array(kept_values, dtype=float)
             best_small = float(np.min(kept_arr_small) if minimize else np.max(kept_arr_small))
@@ -250,86 +249,112 @@ class EffectEstimator:
                 point_estimate=point_est,
                 confidence_interval=(float("-inf"), float("inf")),
                 p_value=0.0 if is_better else 1.0,
-                is_significant=is_better,  # greedy comparison for small samples
-                method="greedy",  # raw comparison, no estimation performed
+                is_significant=is_better,
+                method="greedy",
             )
 
         kept_arr = np.array(kept_values, dtype=float)
-
-        best = float(np.min(kept_arr)) if minimize else float(np.max(kept_arr))
+        best = float(np.min(kept_arr) if minimize else np.max(kept_arr))
 
         if self.method == "difference":
-            # Use t-test between current_value and kept distribution
+            # One-sided t-test: test whether current_value is significantly
+            # better than the kept distribution.
+            # H0: mean(kept_arr) == current_value.
+            # For minimize=True, "better" means current_value < mean(kept),
+            # so we use alternative="greater" (kept mean > current_value).
+            # For minimize=False, alternative="less" (kept mean < current_value).
+            # Combined with the directional guard (current_value < best / > best),
+            # this gives a coherent one-sided significance test.
             effect = float(current_value - best)
-            _, p_value = stats.ttest_1samp(kept_arr, popmean=current_value)
-            p_value_f = float(p_value)
-            se = float(np.std(kept_arr) / np.sqrt(len(kept_arr)))
-            alpha_ci = 1 - self.confidence_level
-            z = stats.norm.ppf(1 - alpha_ci / 2)
-            ci = (effect - z * se, effect + z * se)
-
+            if minimize:
+                result = stats.ttest_1samp(kept_arr, popmean=current_value, alternative="greater")
+            else:
+                result = stats.ttest_1samp(kept_arr, popmean=current_value, alternative="less")
+            p_value_f = float(result.pvalue)
+            # Infinite CI bounds: the CI for min(kept_arr) requires bootstrap;
+            # callers should rely on is_significant rather than CI bounds.
             if minimize:
                 is_significant = current_value < best and p_value_f < (1 - self.confidence_level)
             else:
                 is_significant = current_value > best and p_value_f < (1 - self.confidence_level)
-
             return EffectEstimate(
                 point_estimate=effect,
-                confidence_interval=ci,
+                confidence_interval=(float("-inf"), float("inf")),
                 p_value=p_value_f,
                 is_significant=is_significant,
                 method="difference",
             )
 
-        elif self.method in ("bootstrap", "aipw", "observational"):
-            # Bootstrap CI for the best-so-far in the kept distribution.
-            # If current_value falls outside the CI on the improvement side,
-            # it is significantly better than any historically kept result.
-            # Note: when method="observational", this path still uses bootstrap
-            # (not DoWhy), because estimate_improvement compares against the
-            # historical distribution, not an ATE between two intervention values.
-            rng = np.random.default_rng(42)
-            n_iter = 100 if len(kept_arr) < 10 else self.n_bootstrap
-            boot_bests = np.empty(n_iter)
-            for i in range(n_iter):
-                boot = rng.choice(kept_arr, size=len(kept_arr), replace=True)
-                boot_bests[i] = float(np.min(boot) if minimize else np.max(boot))
+        elif self.method == "bootstrap":
+            return self._bootstrap_improvement(kept_arr, current_value, best, minimize)
 
-            point_estimate = current_value - best
-            alpha = 1 - self.confidence_level
-
-            # CI for the best-so-far under bootstrap
-            ci_best_lo = float(np.percentile(boot_bests, 100 * alpha / 2))
-            ci_best_hi = float(np.percentile(boot_bests, 100 * (1 - alpha / 2)))
-
-            if minimize:
-                # Significant improvement: current_value < lower bound of best CI
-                is_significant = current_value < ci_best_lo
-                # p-value: fraction of bootstrap bests at or below current_value
-                p_value = float(np.mean(boot_bests <= current_value))
-            else:
-                # Significant improvement: current_value > upper bound of best CI
-                is_significant = current_value > ci_best_hi
-                # p-value: fraction of bootstrap bests at or above current_value
-                p_value = float(np.mean(boot_bests >= current_value))
-
-            # CI of the point estimate (current - best) derived from best CI
-            ci_lo = float(current_value - ci_best_hi)
-            ci_hi = float(current_value - ci_best_lo)
-
-            # When method="observational", label this as bootstrap since no DoWhy
-            # identification ran here (we compare against historical distribution).
-            method_label = "bootstrap" if self.method == "observational" else self.method
-            return EffectEstimate(
-                point_estimate=point_estimate,
-                confidence_interval=(ci_lo, ci_hi),
-                p_value=p_value,
-                is_significant=is_significant,
-                method=method_label,
+        elif self.method == "aipw":
+            # AIPW (augmented IPW) requires a treatment/control split that is not
+            # available in the improvement context — fall back to bootstrap and warn.
+            logger.warning(
+                "estimate_improvement does not support 'aipw'; falling back to bootstrap"
             )
+            return self._bootstrap_improvement(kept_arr, current_value, best, minimize)
+
+        elif self.method == "observational":
+            # When method="observational", estimate_improvement still uses bootstrap
+            # (not DoWhy), because this method compares against the historical
+            # distribution — not an ATE between two intervention values.
+            return self._bootstrap_improvement(kept_arr, current_value, best, minimize)
 
         else:
             raise ValueError(f"Unknown method: {self.method}")
+
+    def _bootstrap_improvement(
+        self,
+        kept_arr: np.ndarray,
+        current_value: float,
+        best: float,
+        minimize: bool,
+    ) -> EffectEstimate:
+        """Bootstrap significance test for improvement over kept distribution.
+
+        Uses a one-sided t-test with a bootstrap-estimated p-value to test
+        whether *current_value* is significantly better than the mean of
+        *kept_arr*, combined with a directional guard against *best*.
+
+        A bootstrap-of-the-minimum approach is *not* used here because the
+        bootstrapped minimum is heavily concentrated at ``min(kept_arr)``
+        (probability ≈ 63% per resample), so ``ci_best_lo ≈ min(kept_arr)``
+        and the test degenerates to the greedy check.  Instead we bootstrap
+        the *mean* of the kept distribution so the CI is meaningful.
+        """
+        n_iter = 100 if len(kept_arr) < 10 else self.n_bootstrap
+        boot_means = np.empty(n_iter)
+        for i in range(n_iter):
+            boot = self._rng.choice(kept_arr, size=len(kept_arr), replace=True)
+            boot_means[i] = float(np.mean(boot))
+
+        point_estimate = current_value - best
+        alpha = 1 - self.confidence_level
+        ci_lo = float(np.percentile(boot_means, 100 * alpha / 2))
+        ci_hi = float(np.percentile(boot_means, 100 * (1 - alpha / 2)))
+
+        # p-value: fraction of bootstrap means at least as extreme as current_value
+        # in the improvement direction.  For minimize=True, "at least as extreme"
+        # means ≤ current_value.  A very good candidate (very low value) has almost
+        # no boot_means below it → p_value ≈ 0 (strong significance).
+        if minimize:
+            p_value = float(np.mean(boot_means <= current_value))
+            # Significant if current_value is below the CI lower bound of the
+            # kept mean AND is a raw improvement over the best-so-far.
+            is_significant = current_value < best and current_value < ci_lo
+        else:
+            p_value = float(np.mean(boot_means >= current_value))
+            is_significant = current_value > best and current_value > ci_hi
+
+        return EffectEstimate(
+            point_estimate=point_estimate,
+            confidence_interval=(ci_lo, ci_hi),
+            p_value=p_value,
+            is_significant=is_significant,
+            method="bootstrap",
+        )
 
     def _aipw_estimate(
         self,

@@ -162,7 +162,7 @@ def test_engine_auto_discovery_graph_has_nodes() -> None:
 
 @pytest.mark.slow
 def test_engine_auto_discovery_no_prior_graph_required() -> None:
-    """Auto-discovery only fires when no prior causal_graph is provided."""
+    """In hybrid mode, discovery runs even with a prior graph but doesn't override it."""
     prior_graph = CausalGraph(edges=[("x", "y")], nodes=["x", "y"])
     engine = ExperimentEngine(
         search_space=make_search_space(),
@@ -379,7 +379,8 @@ def test_graph_learner_no_edges_for_uncorrelated_data() -> None:
     """Uncorrelated data should produce no edges with high threshold."""
     from causal_optimizer.discovery.graph_learner import GraphLearner
 
-    learner = GraphLearner(method="correlation", threshold=0.9)
+    # bidir_threshold must be >= threshold
+    learner = GraphLearner(method="correlation", threshold=0.9, bidir_threshold=0.95)
     log = _make_log_no_correlation(n=30)
 
     graph = learner.learn(log, min_samples=5)
@@ -409,6 +410,7 @@ def test_graph_learner_with_toy_graph_benchmark() -> None:
     benchmark = ToyGraphBenchmark(rng=np.random.default_rng(42))
     log = ExperimentLog()
     rng = np.random.default_rng(42)
+
     for i in range(20):
         x = float(rng.uniform(-5, 5))
         z = float(rng.uniform(-5, 20))
@@ -426,8 +428,11 @@ def test_graph_learner_with_toy_graph_benchmark() -> None:
     graph = learner.learn(log, min_samples=10, objective_name="objective")
 
     assert isinstance(graph, CausalGraph)
-    # Graph nodes should include x, z, objective
-    assert "x" in graph.nodes or len(graph.nodes) > 0
+    # Graph nodes should include all three variables in the toy graph
+    for expected_node in ("x", "z", "objective"):
+        assert expected_node in graph.nodes, (
+            f"Expected node {expected_node!r} in graph nodes {graph.nodes}"
+        )
 
 
 def test_graph_learner_correlation_method_no_extra_deps() -> None:
@@ -484,6 +489,69 @@ def test_engine_discovery_no_pomis_without_confounders() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Tests for re-discovery after screening revert
+# ---------------------------------------------------------------------------
+
+
+def test_prior_causal_graph_attribute_set_correctly() -> None:
+    """_prior_causal_graph stores only the user-supplied prior, not auto-discovered."""
+    prior_graph = CausalGraph(edges=[("x", "y")], nodes=["x", "y"])
+
+    # With prior graph
+    engine_with_prior = ExperimentEngine(
+        search_space=make_search_space(),
+        runner=QuadraticRunner(),
+        causal_graph=prior_graph,
+        discovery_method="correlation",
+    )
+    assert engine_with_prior._prior_causal_graph is prior_graph
+
+    # Without prior graph
+    engine_no_prior = ExperimentEngine(
+        search_space=make_search_space(),
+        runner=QuadraticRunner(),
+        discovery_method="correlation",
+    )
+    assert engine_no_prior._prior_causal_graph is None
+
+
+@pytest.mark.slow
+def test_auto_discovery_overwrites_previous_auto_discovered_graph() -> None:
+    """When _run_auto_discovery runs again (after screening revert), auto-discovered
+    graph is replaced with the newer richer dataset — not locked as a prior."""
+    from unittest.mock import patch
+
+    from causal_optimizer.discovery.graph_learner import GraphLearner
+
+    call_count = 0
+    graphs = [
+        CausalGraph(edges=[("x", "objective")], nodes=["x", "y", "objective"]),
+        CausalGraph(edges=[("x", "objective"), ("y", "objective")], nodes=["x", "y", "objective"]),
+    ]
+
+    def mock_learn(self_inner: GraphLearner, log: object, **kwargs: object) -> CausalGraph:
+        nonlocal call_count
+        graph = graphs[min(call_count, len(graphs) - 1)]
+        call_count += 1
+        return graph
+
+    with patch.object(GraphLearner, "learn", mock_learn):
+        engine = ExperimentEngine(
+            search_space=make_search_space(),
+            runner=QuadraticRunner(),
+            discovery_method="correlation",
+            # Use max_screening_attempts=1 so we can predict when screening fires
+        )
+        # Trigger the transition manually by running 12 steps
+        engine.run_loop(n_experiments=12)
+
+    # The discovered graph should be the result of one of the mock calls
+    assert engine._discovered_graph is not None
+    # Crucially, _prior_causal_graph should still be None (no user prior)
+    assert engine._prior_causal_graph is None
+
+
+# ---------------------------------------------------------------------------
 # Tests for engine with invalid discovery_method
 # ---------------------------------------------------------------------------
 
@@ -496,3 +564,101 @@ def test_engine_invalid_discovery_method_raises() -> None:
             runner=QuadraticRunner(),
             discovery_method="invalid_method",
         )
+
+
+def test_engine_discovery_failure_continues_without_graph(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """When discovery raises an expected exception, engine logs error and continues."""
+    from unittest.mock import patch
+
+    from causal_optimizer.discovery.graph_learner import GraphLearner
+
+    engine = ExperimentEngine(
+        search_space=make_search_space(),
+        runner=QuadraticRunner(),
+        discovery_method="correlation",
+    )
+
+    with (
+        patch.object(GraphLearner, "learn", side_effect=ValueError("mock failure")),
+        caplog.at_level(logging.ERROR, logger="causal_optimizer.engine.loop"),
+    ):
+        engine.run_loop(n_experiments=12)
+
+    # Should log the failure but not crash
+    error_messages = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
+    assert any("Auto-discovery failed" in msg for msg in error_messages)
+    # No graph was set since discovery failed
+    assert engine._causal_graph is None
+    assert engine._discovered_graph is None
+
+
+def test_engine_invalid_bidir_threshold_raises() -> None:
+    """ExperimentEngine should raise ValueError when bidir_threshold < threshold."""
+    with pytest.raises(ValueError, match="discovery_bidir_threshold"):
+        ExperimentEngine(
+            search_space=make_search_space(),
+            runner=QuadraticRunner(),
+            discovery_method="correlation",
+            discovery_threshold=0.8,
+            discovery_bidir_threshold=0.5,
+        )
+
+
+def test_graph_learner_independent_vars_no_bidirected_edge() -> None:
+    """For independent x and y, the learner should not add a bidirected edge between them."""
+    from causal_optimizer.discovery.graph_learner import GraphLearner
+
+    # Build a log where x and y are independent (different seeds for each)
+    rng = np.random.default_rng(0)
+    log = ExperimentLog()
+    for i in range(30):
+        x = float(rng.uniform(-5, 5))
+        y = float(rng.uniform(-5, 5))  # independent of x
+        log.results.append(
+            ExperimentResult(
+                experiment_id=f"ind-{i:03d}",
+                parameters={"x": x, "y": y},
+                metrics={"objective": float(x**2 + y**2)},
+                status=ExperimentStatus.KEEP,
+            )
+        )
+
+    learner = GraphLearner(method="correlation", threshold=0.3, bidir_threshold=0.7)
+    graph = learner.learn(log, min_samples=10, objective_name="objective")
+
+    # Independent x and y should not get a bidirected edge between them —
+    # the key invariant is that uncorrelated pairs don't get confounding edges.
+    assert ("x", "y") not in graph.bidirected_edges
+    assert ("y", "x") not in graph.bidirected_edges
+
+
+def test_engine_cyclic_graph_is_discarded(caplog: pytest.LogCaptureFixture) -> None:
+    """If discovery produces a cyclic graph, it should be discarded with an error log."""
+    from unittest.mock import patch
+
+    from causal_optimizer.discovery.graph_learner import GraphLearner
+
+    cyclic_graph = CausalGraph(
+        nodes=["x", "y", "objective"],
+        edges=[("x", "y"), ("y", "x"), ("x", "objective")],
+    )
+
+    engine = ExperimentEngine(
+        search_space=make_search_space(),
+        runner=QuadraticRunner(),
+        discovery_method="correlation",
+    )
+
+    with (
+        patch.object(GraphLearner, "learn", return_value=cyclic_graph),
+        caplog.at_level(logging.ERROR, logger="causal_optimizer.engine.loop"),
+    ):
+        engine.run_loop(n_experiments=12)
+
+    # Cyclic graph should be discarded
+    assert engine._causal_graph is None
+    assert engine._discovered_graph is None
+    error_messages = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
+    assert any("cycle" in msg.lower() for msg in error_messages)
