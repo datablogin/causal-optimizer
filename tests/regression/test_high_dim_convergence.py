@@ -17,7 +17,7 @@ import pytest
 from causal_optimizer.benchmarks.high_dimensional import HighDimensionalSparseBenchmark
 from causal_optimizer.benchmarks.runner import BenchmarkResult, BenchmarkRunner
 
-from .conftest import (
+from .helpers import (
     assert_causal_beats_random,
     assert_curve_lengths,
     assert_monotonic_curves,

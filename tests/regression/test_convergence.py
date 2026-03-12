@@ -11,6 +11,12 @@ seeds. We use generous tolerances because:
 If these tests become flaky, increase ``BUDGET`` or ``N_SEEDS`` rather than
 weakening assertions — the underlying claim (causal > random) should hold
 with enough samples.
+
+Note: this file tests worst-seed variance (test_causal_beats_random_worst_seed)
+while test_high_dim_convergence.py tests a loose sanity-check bound instead.
+The asymmetry is intentional — worst-seed checks are most useful on the simpler
+benchmark where variance is lower, while the high-dim benchmark benefits more
+from a catastrophic-regression guard.
 """
 
 from __future__ import annotations
@@ -21,7 +27,7 @@ import pytest
 from causal_optimizer.benchmarks.runner import BenchmarkResult, BenchmarkRunner
 from causal_optimizer.benchmarks.toy_graph import ToyGraphBenchmark
 
-from .conftest import (
+from .helpers import (
     assert_causal_beats_random,
     assert_curve_lengths,
     assert_monotonic_curves,
@@ -92,9 +98,10 @@ class TestToyGraphConvergence:
         worst_causal = max(causal_finals)  # max because lower is better
         avg_random = float(np.mean(random_finals))
 
-        # Very generous: worst causal seed should be within 1.0 of random mean.
-        # This matches the existing integration test tolerance and absorbs
-        # high single-seed variance.
+        # Absolute tolerance of 1.0: on ToyGraph the objective (negated Y)
+        # typically ranges from about -1.2 to +0.5, so 1.0 covers roughly
+        # the full range. This matches the existing integration test tolerance
+        # in tests/integration/test_causal_beats_naive.py.
         tolerance = 1.0
         assert worst_causal <= avg_random + tolerance, (
             f"Worst causal seed ({worst_causal:.4f}) is drastically worse than "
