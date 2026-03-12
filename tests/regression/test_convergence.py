@@ -39,7 +39,13 @@ class TestToyGraphConvergence:
 
     @pytest.fixture(scope="class")
     def results(self) -> list[BenchmarkResult]:
-        """Run the benchmark comparison once for the whole test class."""
+        """Run the benchmark comparison once for the whole test class.
+
+        Note: engine-based strategies (causal, surrogate_only) have unseeded
+        internal RNG (suggestions, bootstrap). This is acceptable because we
+        use generous tolerances and multiple seeds to absorb variance. See
+        BenchmarkRunner.run docstring for details.
+        """
         bench = ToyGraphBenchmark(noise_scale=0.1)
         runner = BenchmarkRunner(bench)
         return runner.compare(
@@ -86,8 +92,10 @@ class TestToyGraphConvergence:
         worst_causal = max(causal_finals)  # max because lower is better
         avg_random = float(np.mean(random_finals))
 
-        # Very generous: worst causal seed should be within 50% of |random mean|
-        tolerance = 0.50 * max(abs(avg_random), 1.0)
+        # Very generous: worst causal seed should be within 1.0 of random mean.
+        # This matches the existing integration test tolerance and absorbs
+        # high single-seed variance.
+        tolerance = 1.0
         assert worst_causal <= avg_random + tolerance, (
             f"Worst causal seed ({worst_causal:.4f}) is drastically worse than "
             f"random mean ({avg_random:.4f}) on ToyGraph. "

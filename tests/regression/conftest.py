@@ -54,8 +54,15 @@ def assert_causal_beats_random(
     causal_finals = finals_for_strategy(results, "causal")
     random_finals = finals_for_strategy(results, "random")
 
-    assert len(causal_finals) == n_seeds
-    assert len(random_finals) == n_seeds
+    strategies_present = sorted({r.strategy for r in results})
+    assert len(causal_finals) == n_seeds, (
+        f"Expected {n_seeds} causal results, got {len(causal_finals)}. "
+        f"Strategies present: {strategies_present}"
+    )
+    assert len(random_finals) == n_seeds, (
+        f"Expected {n_seeds} random results, got {len(random_finals)}. "
+        f"Strategies present: {strategies_present}"
+    )
 
     avg_causal = float(np.mean(causal_finals))
     avg_random = float(np.mean(random_finals))
