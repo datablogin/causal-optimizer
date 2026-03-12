@@ -56,6 +56,9 @@ class ExperimentEngine:
         7. Validate — sensitivity analysis on findings
     """
 
+    #: Valid values for the ``discovery_method`` parameter.
+    _VALID_DISCOVERY_METHODS: frozenset[str] = frozenset({"correlation", "pc", "notears"})
+
     def __init__(
         self,
         search_space: SearchSpace,
@@ -69,6 +72,9 @@ class ExperimentEngine:
         epsilon_mode: bool = False,
         n_max: int = 100,
         seed: int | None = None,
+        discovery_method: str | None = None,
+        discovery_threshold: float = 0.3,
+        discovery_bidir_threshold: float = 0.7,
         effect_method: str = "bootstrap",
         confidence_level: float = 0.95,
         n_bootstrap: int = 1000,
@@ -79,6 +85,21 @@ class ExperimentEngine:
             seed: Seed for reproducibility of random operations in
                 ``OffPolicyPredictor`` and ``EffectEstimator`` bootstrap
                 sampling.  Does **not** seed MAP-Elites archive sampling.
+            discovery_method: Algorithm used to learn a causal graph from
+                experiment data at the exploration→optimization phase
+                transition.  Valid values are ``"correlation"``, ``"pc"``,
+                and ``"notears"``.  Set to ``None`` (default) to disable
+                auto-discovery (backward-compatible).  When a *causal_graph*
+                is also provided the discovered graph is logged but the prior
+                graph is **not** replaced (hybrid mode).
+            discovery_threshold: Correlation threshold forwarded to
+                :class:`~causal_optimizer.discovery.graph_learner.GraphLearner`.
+                Variable pairs with |r| ≤ this value are not connected.
+                Defaults to ``0.3`` (the ``GraphLearner`` default).
+            discovery_bidir_threshold: For the correlation method, pairs of
+                non-outcome variables with |r| above *this* value get a
+                bidirected edge (X ↔ Y) rather than a directed edge.  Forwarded
+                to ``GraphLearner(bidir_threshold=...)``.  Defaults to ``0.7``.
             effect_method: Method used by :class:`EffectEstimator` to assess
                 statistical significance in keep/discard decisions.  Valid
                 values are ``"difference"`` and ``"bootstrap"`` (default).
@@ -93,6 +114,17 @@ class ExperimentEngine:
                 ``effect_method="bootstrap"`` (default 1000).  Passed to
                 :class:`~causal_optimizer.estimator.effects.EffectEstimator`.
         """
+        if discovery_method is not None and discovery_method not in self._VALID_DISCOVERY_METHODS:
+            raise ValueError(
+                f"discovery_method={discovery_method!r} is not valid; "
+                f"choose one of {sorted(self._VALID_DISCOVERY_METHODS)} or None"
+            )
+        if discovery_bidir_threshold < discovery_threshold:
+            raise ValueError(
+                f"discovery_bidir_threshold ({discovery_bidir_threshold!r}) must be >= "
+                f"discovery_threshold ({discovery_threshold!r}); "
+                "when bidir_threshold < threshold, bidirected edges are unreachable"
+            )
         _valid_effect_methods = {"difference", "bootstrap", "aipw"}
         if effect_method not in _valid_effect_methods:
             raise ValueError(
@@ -104,7 +136,20 @@ class ExperimentEngine:
         self.runner = runner
         self.objective_name = objective_name
         self.minimize = minimize
-        self.causal_graph = causal_graph
+        # _causal_graph is the single source of truth for the active graph.
+        # self.causal_graph is kept as a public alias that stays in sync.
+        self._causal_graph: CausalGraph | None = causal_graph
+        # Separate reference to the user-supplied prior so _run_auto_discovery can
+        # distinguish "no prior was given" from "auto-discovery already ran once".
+        # This is important when _run_screening reverts the phase to exploration and
+        # _run_auto_discovery is called again: without this distinction, the
+        # auto-discovered graph from the first call would be treated as a user prior
+        # and block re-discovery from the richer dataset.
+        self._prior_causal_graph: CausalGraph | None = causal_graph
+        self._discovery_method: str | None = discovery_method
+        self._discovery_threshold: float = discovery_threshold
+        self._discovery_bidir_threshold: float = discovery_bidir_threshold
+        self._discovered_graph: CausalGraph | None = None
         self.log = ExperimentLog()
         self._phase: str = "exploration"
         self._effect_estimator = EffectEstimator(
@@ -124,6 +169,19 @@ class ExperimentEngine:
         self._archive: MAPElites | None = (
             MAPElites(descriptor_names, minimize=minimize) if descriptor_names else None
         )
+
+    @property
+    def causal_graph(self) -> CausalGraph | None:
+        """The active causal graph (user-supplied prior or auto-discovered)."""
+        return self._causal_graph
+
+    @causal_graph.setter
+    def causal_graph(self, graph: CausalGraph | None) -> None:
+        self._causal_graph = graph
+        # Keep _prior_causal_graph in sync so that post-construction assignments
+        # (e.g. engine.causal_graph = domain_graph) are treated as user priors
+        # and protect against being overwritten by _run_auto_discovery.
+        self._prior_causal_graph = graph
 
     def run_experiment(self, parameters: dict[str, Any]) -> ExperimentResult:
         """Execute a single experiment and log the result."""
@@ -185,7 +243,7 @@ class ExperimentEngine:
                     return suggest_parameters(
                         search_space=self.search_space,
                         experiment_log=self.log,
-                        causal_graph=self.causal_graph,
+                        causal_graph=self._causal_graph,
                         phase=self._phase,
                         minimize=self.minimize,
                         objective_name=self.objective_name,
@@ -198,7 +256,7 @@ class ExperimentEngine:
         return suggest_parameters(
             search_space=self.search_space,
             experiment_log=self.log,
-            causal_graph=self.causal_graph,
+            causal_graph=self._causal_graph,
             phase=self._phase,
             minimize=self.minimize,
             objective_name=self.objective_name,
@@ -391,6 +449,9 @@ class ExperimentEngine:
         # Run screening and POMIS when transitioning from exploration to optimization
         # (also covers direct exploration → exploitation if max_screening_attempts is large)
         if old_phase == "exploration" and self._phase in ("optimization", "exploitation"):
+            # Auto-discover causal graph from data before screening
+            self._run_auto_discovery()
+
             if self._screening_attempts < self._max_screening_attempts:
                 self._run_screening()
             else:
@@ -403,6 +464,129 @@ class ExperimentEngine:
                 self._screened_focus_variables = self.search_space.variable_names
             if self._phase == "optimization":  # screening may have reverted to exploration
                 self._compute_pomis()
+
+    def _run_auto_discovery(self) -> None:
+        """Discover a causal graph from experiment data if ``discovery_method`` is set.
+
+        Two operating modes:
+
+        - **No user prior** (``self._prior_causal_graph is None``): the discovered
+          graph becomes the active graph used for optimization.  If discovery runs
+          again after a screening-induced phase revert, the previously auto-discovered
+          graph is overwritten with the richer dataset.
+        - **Hybrid mode** (user supplied a prior graph): the discovered graph is
+          computed and logged for informational purposes, but the prior graph is
+          *not* replaced.
+        """
+        if self._discovery_method is None:
+            return
+
+        _discovery_caveats = {
+            "correlation": (
+                "heuristic only; bidirected edges are proxies, not identified confounders — "
+                "treat results as approximate guidance"
+            ),
+            "pc": (
+                "assumes causal sufficiency and faithfulness; undirected CPDAG edges are "
+                "represented as bidirected (conservative placeholder, not identified confounders)"
+            ),
+            "notears": (
+                "continuous optimisation method; may not converge on small or noisy samples"
+            ),
+        }
+        caveat = _discovery_caveats.get(self._discovery_method, "")
+        logger.info(
+            "Running %r causal discovery (%s)",
+            self._discovery_method,
+            caveat,
+        )
+
+        from causal_optimizer.discovery.graph_learner import GraphLearner
+
+        learner = GraphLearner(
+            method=self._discovery_method,
+            threshold=self._discovery_threshold,
+            bidir_threshold=self._discovery_bidir_threshold,
+        )
+        try:
+            discovered = learner.learn(self.log, objective_name=self.objective_name)
+        except (ValueError, ImportError, RuntimeError) as exc:
+            # Gracefully degrade on expected failures (bad data, missing dep,
+            # algorithm convergence issues).  Other exceptions propagate so
+            # programming errors are not silently swallowed.
+            logger.error(
+                "Auto-discovery failed (%s: %s), continuing without causal graph",
+                type(exc).__name__,
+                exc,
+                exc_info=True,
+            )
+            return
+
+        # Validate that the directed-edge subgraph is a DAG (no cycles).
+        # Cycles can occur with heuristic discovery methods; a cyclic graph
+        # breaks topological ordering used by POMIS computation.
+        if self._has_directed_cycle(discovered):
+            logger.error(
+                "Discovered graph contains directed cycles; discarding to avoid breaking "
+                "topological ordering in downstream POMIS computation"
+            )
+            return
+
+        self._discovered_graph = discovered
+
+        n_nodes = len(discovered.nodes)
+        n_edges = len(discovered.edges)
+        n_bidir = len(discovered.bidirected_edges)
+        logger.info(
+            "Discovered causal graph with %d nodes, %d edges (%d bidirected)",
+            n_nodes,
+            n_edges,
+            n_bidir,
+        )
+
+        if self._prior_causal_graph is None:
+            # No user-supplied prior — use the discovered graph going forward.
+            # This also handles the re-discovery case after a screening revert:
+            # the new graph (with more samples) replaces the old auto-discovered one.
+            # Assign directly to _causal_graph (bypassing the property setter) so
+            # that _prior_causal_graph stays None — the auto-discovered graph must
+            # not be promoted to a user prior, otherwise re-discovery after a
+            # screening revert would enter hybrid mode and stop updating the graph.
+            self._causal_graph = discovered
+        else:
+            # Hybrid mode: user-supplied prior is preserved; discovered graph is informational only
+            logger.info(
+                "Hybrid mode: prior causal graph retained; discovered graph logged but not applied"
+            )
+
+    @staticmethod
+    def _has_directed_cycle(graph: CausalGraph) -> bool:
+        """Return True if the directed-edge subgraph contains a cycle.
+
+        Uses DFS with a grey/black colouring scheme.  Bidirected edges are
+        intentionally ignored because they do not impose causal ordering;
+        only ``graph.edges`` (directed edges) are checked.
+        """
+        adjacency: dict[str, list[str]] = {n: [] for n in graph.nodes}
+        for u, v in graph.edges:
+            # Unconditionally append; if u is not in nodes, a KeyError is raised
+            # so callers learn about malformed graphs rather than silently skipping.
+            adjacency[u].append(v)
+
+        # 0 = unvisited, 1 = in-stack (grey), 2 = done (black)
+        color: dict[str, int] = {n: 0 for n in graph.nodes}
+
+        def dfs(node: str) -> bool:
+            color[node] = 1
+            for nbr in adjacency.get(node, []):
+                if color[nbr] == 1:
+                    return True  # back-edge → cycle
+                if color[nbr] == 0 and dfs(nbr):
+                    return True
+            color[node] = 2
+            return False
+
+        return any(dfs(n) for n in graph.nodes if color[n] == 0)
 
     def _run_screening(self) -> None:
         """Run screening analysis to identify important variables."""
@@ -438,13 +622,13 @@ class ExperimentEngine:
 
     def _compute_pomis(self) -> None:
         """Compute POMIS sets if the causal graph has confounders."""
-        if self.causal_graph is None or not self.causal_graph.has_confounders:
+        if self._causal_graph is None or not self._causal_graph.has_confounders:
             return
 
         try:
             from causal_optimizer.optimizer.pomis import compute_pomis
 
-            self._pomis_sets = compute_pomis(self.causal_graph, self.objective_name)
+            self._pomis_sets = compute_pomis(self._causal_graph, self.objective_name)
             logger.info("POMIS sets: %s", self._pomis_sets)
         except Exception:
             logger.warning(
