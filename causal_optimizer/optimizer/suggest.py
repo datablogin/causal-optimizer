@@ -327,12 +327,9 @@ def _suggest_surrogate(
     best = experiment_log.best_result(objective_name, minimize)
     best_params = dict(best.parameters) if best else {}
 
-    from causal_optimizer.predictor.off_policy import (
-        _encode_dataframe_for_rf,
-        _encode_params_for_rf,
-    )
+    from causal_optimizer.predictor.encoding import encode_dataframe_for_rf, encode_params_for_rf
 
-    features = _encode_dataframe_for_rf(df, focus_var_names, search_space)
+    features = encode_dataframe_for_rf(df, focus_var_names, search_space)
     y = df[objective_name].values
 
     rf = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=42)
@@ -356,7 +353,7 @@ def _suggest_surrogate(
     best_pred = float("inf") if minimize else float("-inf")
 
     for candidate in candidates:
-        x = _encode_params_for_rf(candidate, focus_var_names, search_space)
+        x = encode_params_for_rf(candidate, focus_var_names, search_space)
         pred = rf.predict(x)[0]
         if (minimize and pred < best_pred) or (not minimize and pred > best_pred):
             best_pred = pred

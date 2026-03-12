@@ -179,8 +179,8 @@ class TestMarketingScenario:
         engine.run_loop(15)
 
         # POMIS should have been computed (graph has confounders)
-        assert engine._pomis_sets is not None, "POMIS sets should be computed"
-        assert len(engine._pomis_sets) >= 1, "Should have at least one POMIS set"
+        assert engine.pomis_sets is not None, "POMIS sets should be computed"
+        assert len(engine.pomis_sets) >= 1, "Should have at least one POMIS set"
 
     def test_multiple_seeds_produce_valid_results(self) -> None:
         """Different seeds should all produce valid (non-crash) results.

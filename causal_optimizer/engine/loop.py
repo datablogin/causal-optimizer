@@ -174,6 +174,11 @@ class ExperimentEngine:
         )
 
     @property
+    def pomis_sets(self) -> list[frozenset[str]] | None:
+        """POMIS intervention sets computed during the optimization phase."""
+        return self._pomis_sets
+
+    @property
     def causal_graph(self) -> CausalGraph | None:
         """The active causal graph (user-supplied prior or auto-discovered)."""
         return self._causal_graph

@@ -256,8 +256,8 @@ class TestMLTrainingScenario:
         engine.run_loop(15)
 
         # Graph has confounders, so POMIS should be computed
-        assert engine._pomis_sets is not None, "POMIS sets should be computed"
-        assert len(engine._pomis_sets) >= 1
+        assert engine.pomis_sets is not None, "POMIS sets should be computed"
+        assert len(engine.pomis_sets) >= 1
 
     def test_multiple_seeds_produce_valid_results(self) -> None:
         """Different seeds should all produce valid (non-crash) results.
