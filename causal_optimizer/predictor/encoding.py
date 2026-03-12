@@ -3,6 +3,11 @@
 Provides consistent encoding of mixed-type variables (continuous, integer,
 categorical, boolean) for use in sklearn RandomForestRegressor. Used by
 both the off-policy predictor and the surrogate-guided suggestion strategy.
+
+Note on encoding scheme: categorical variables are label-encoded (mapped to
+ordinal integers). Random Forests are robust to this since they split on
+thresholds, but it introduces a false ordering. If this module is extended
+to other model types, consider one-hot encoding instead.
 """
 
 from __future__ import annotations
@@ -13,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 
-from causal_optimizer.types import VariableType
+from causal_optimizer.types import Variable, VariableType
 
 if TYPE_CHECKING:
     from causal_optimizer.types import SearchSpace
@@ -91,7 +96,8 @@ def encode_params_for_rf(
             choices = var.choices or []
             if not choices:
                 logger.warning(
-                    "Categorical variable '%s' has no choices defined; encoding as 0.0",
+                    "Categorical variable '%s' has no choices defined; encoding as 0.0. "
+                    "Set explicit choices on the Variable for consistent encoding.",
                     name,
                 )
             mapping = {c: float(i) for i, c in enumerate(choices)}
@@ -108,7 +114,7 @@ def encode_params_for_rf(
 
 
 def _get_categorical_choices(
-    var: Any,
+    var: Variable,
     name: str,
     col: pd.Series,
 ) -> list[Any]:

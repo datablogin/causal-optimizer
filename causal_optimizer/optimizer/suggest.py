@@ -13,6 +13,7 @@ from typing import Any
 
 import numpy as np
 
+from causal_optimizer.predictor.encoding import encode_dataframe_for_rf, encode_params_for_rf
 from causal_optimizer.types import CausalGraph, ExperimentLog, SearchSpace, VariableType
 
 logger = logging.getLogger(__name__)
@@ -326,8 +327,6 @@ def _suggest_surrogate(
     # Get best-known values for non-focus variables
     best = experiment_log.best_result(objective_name, minimize)
     best_params = dict(best.parameters) if best else {}
-
-    from causal_optimizer.predictor.encoding import encode_dataframe_for_rf, encode_params_for_rf
 
     features = encode_dataframe_for_rf(df, focus_var_names, search_space)
     y = df[objective_name].values

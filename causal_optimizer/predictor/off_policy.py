@@ -132,10 +132,12 @@ class OffPolicyPredictor:
             self._model = None
             return
 
-        if self._search_space is None:
+        # _search_space is set at the top of fit(), but mypy needs narrowing
+        search_space = self._search_space
+        if search_space is None:  # pragma: no cover
             self._model = None
             return
-        features = encode_dataframe_for_rf(df, self._var_names, self._search_space)
+        features = encode_dataframe_for_rf(df, self._var_names, search_space)
         y = df[objective_name].values
 
         self._model = RandomForestRegressor(n_estimators=100, max_depth=8, random_state=42)
