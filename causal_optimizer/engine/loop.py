@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
 import numpy as np
@@ -190,7 +190,11 @@ class ExperimentEngine:
 
     @property
     def validation_results(self) -> list[RobustnessReport]:
-        """Convenience accessor: just the reports from all validation records."""
+        """Convenience accessor: just the reports from all validation records.
+
+        Returns a fresh list on every call.  For phase-transition context, use
+        :attr:`validation_records` directly.
+        """
         return [r.report for r in self.validation_records]
 
     @property
@@ -701,17 +705,17 @@ class ExperimentEngine:
             return
 
         midpoint = len(results) // 2
-        baseline_ids = [r.experiment_id for r in results[:midpoint]]
-        improved_ids = [r.experiment_id for r in results[midpoint:]]
+        earlier_ids = [r.experiment_id for r in results[:midpoint]]
+        later_ids = [r.experiment_id for r in results[midpoint:]]
 
         try:
             report = self._validator.validate_improvement(
                 experiment_log=self.log,
-                baseline_experiments=baseline_ids,
-                improved_experiments=improved_ids,
+                baseline_experiments=earlier_ids,
+                improved_experiments=later_ids,
                 objective_name=self.objective_name,
             )
-        except Exception:
+        except (ValueError, RuntimeError, ArithmeticError):
             logger.warning(
                 "Sensitivity validation failed at %s→%s transition, continuing without",
                 old_phase,
@@ -735,11 +739,8 @@ class ExperimentEngine:
                 self.minimize,
             )
             # Override: a "robust" regression is not a real improvement.
-            report = RobustnessReport(
-                effect_size=report.effect_size,
-                noise_estimate=report.noise_estimate,
-                signal_to_noise=report.signal_to_noise,
-                e_value=report.e_value,
+            report = replace(
+                report,
                 is_robust=False,
                 summary=(
                     f"Effect direction is wrong for optimization goal "
