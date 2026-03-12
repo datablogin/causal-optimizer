@@ -72,10 +72,12 @@ def test_validation_does_not_block_phase_transition() -> None:
     for _ in range(11):
         engine.step()
 
-    # Phase should have moved to optimization (or beyond) regardless of robustness
-    assert engine._phase in ("optimization", "exploitation", "exploration")
-    # It shouldn't be stuck in exploration due to validation failure
-    # (it might revert due to screening, but validation shouldn't be the cause)
+    # After 11 steps, phase must have reached optimization or beyond at least once.
+    # Screening may have reverted it, but validation must never be the cause.
+    phases_seen = {r.metadata.get("phase") for r in engine.log.results}
+    assert "optimization" in phases_seen or "exploitation" in phases_seen, (
+        "Phase never advanced past exploration — validation may have incorrectly blocked it"
+    )
 
 
 def test_validation_at_exploitation_transition() -> None:
