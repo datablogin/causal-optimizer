@@ -12,6 +12,10 @@ If these tests become flaky, increase ``BUDGET`` or ``N_SEEDS`` rather than
 weakening assertions — the underlying claim (causal > random) should hold
 with enough samples.
 
+Related: tests/integration/test_causal_beats_naive.py runs a lighter version
+of these checks (fewer seeds, fewer assertions). These regression tests are
+strictly more comprehensive but both suites are kept intentionally.
+
 Note: this file tests worst-seed variance (test_causal_beats_random_worst_seed)
 while test_high_dim_convergence.py tests a loose sanity-check bound instead.
 The asymmetry is intentional — worst-seed checks are most useful on the simpler

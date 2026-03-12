@@ -81,6 +81,10 @@ class TestHighDimConvergence:
         This is a weaker guard than test_causal_beats_random_mean_final (which
         uses 20% tolerance). Here we use 50% tolerance as a safety net to catch
         severe regressions even when the tighter test is noisy.
+
+        See test_convergence.py for the complementary worst-seed check used on
+        the ToyGraph benchmark (the asymmetry is explained in that file's
+        module docstring).
         """
         causal_finals = finals_for_strategy(results, "causal")
         random_finals = finals_for_strategy(results, "random")

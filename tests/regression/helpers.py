@@ -57,6 +57,10 @@ def assert_causal_beats_random(
     avg_causal = float(np.mean(causal_finals))
     avg_random = float(np.mean(random_finals))
 
+    # Floor at 1.0 so near-zero random means don't produce a vanishingly
+    # small tolerance. Both benchmarks have objectives around -1 to 0, so
+    # the floor is typically active and tolerance_fraction acts as an
+    # absolute tolerance in practice.
     tolerance = tolerance_fraction * max(abs(avg_random), 1.0)
     assert avg_causal <= avg_random + tolerance, (
         f"Causal ({avg_causal:.4f}) did not beat random ({avg_random:.4f}) "
