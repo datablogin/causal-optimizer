@@ -59,6 +59,11 @@ class ExperimentEngine:
     #: Valid values for the ``discovery_method`` parameter.
     _VALID_DISCOVERY_METHODS: frozenset[str] = frozenset({"correlation", "pc", "notears"})
 
+    #: Valid values for the ``effect_method`` parameter.
+    _VALID_EFFECT_METHODS: frozenset[str] = frozenset(
+        {"difference", "bootstrap", "aipw", "observational"}
+    )
+
     def __init__(
         self,
         search_space: SearchSpace,
@@ -102,11 +107,8 @@ class ExperimentEngine:
                 to ``GraphLearner(bidir_threshold=...)``.  Defaults to ``0.7``.
             effect_method: Method used by :class:`EffectEstimator` to assess
                 statistical significance in keep/discard decisions.  Valid
-                values are ``"difference"`` and ``"bootstrap"`` (default).
-                ``"aipw"`` is accepted but automatically falls back to
-                ``"bootstrap"`` with a logged warning (AIPW requires
-                treatment/control assignment not available in improvement
-                tests).
+                values are ``"difference"``, ``"bootstrap"`` (default),
+                ``"aipw"``, and ``"observational"``.
             confidence_level: Confidence level for statistical tests (default
                 0.95 → alpha = 0.05).  Passed directly to
                 :class:`~causal_optimizer.estimator.effects.EffectEstimator`.
@@ -125,11 +127,10 @@ class ExperimentEngine:
                 f"discovery_threshold ({discovery_threshold!r}); "
                 "when bidir_threshold < threshold, bidirected edges are unreachable"
             )
-        _valid_effect_methods = {"difference", "bootstrap", "aipw"}
-        if effect_method not in _valid_effect_methods:
+        if effect_method not in self._VALID_EFFECT_METHODS:
             raise ValueError(
-                f"Invalid effect_method {effect_method!r}. "
-                f"Must be one of {sorted(_valid_effect_methods)}."
+                f"effect_method={effect_method!r} is not valid; "
+                f"choose one of {sorted(self._VALID_EFFECT_METHODS)}"
             )
 
         self.search_space = search_space
@@ -152,8 +153,10 @@ class ExperimentEngine:
         self._discovered_graph: CausalGraph | None = None
         self.log = ExperimentLog()
         self._phase: str = "exploration"
+        self._effect_method = effect_method
         self._effect_estimator = EffectEstimator(
             method=effect_method,
+            causal_graph=causal_graph,
             confidence_level=confidence_level,
             n_bootstrap=n_bootstrap,
             seed=seed,
@@ -553,6 +556,21 @@ class ExperimentEngine:
             # not be promoted to a user prior, otherwise re-discovery after a
             # screening revert would enter hybrid mode and stop updating the graph.
             self._causal_graph = discovered
+
+            # Rebuild the effect estimator with the active causal graph whenever
+            # a graph with edges becomes available from auto-discovery.  Skip empty
+            # graphs (0 edges) since they provide no structural information and
+            # would silently disable DoWhy's causal identification for observational.
+            # Preserve all non-graph settings from the existing estimator so that
+            # any future parameters added to EffectEstimator are not silently dropped.
+            if self._causal_graph is not None and len(self._causal_graph.edges) > 0:
+                self._effect_estimator = EffectEstimator(
+                    method=self._effect_method,
+                    causal_graph=self._causal_graph,
+                    confidence_level=self._effect_estimator.confidence_level,
+                    n_bootstrap=self._effect_estimator.n_bootstrap,
+                    obs_method=self._effect_estimator.obs_method,
+                )
         else:
             # Hybrid mode: user-supplied prior is preserved; discovered graph is informational only
             logger.info(

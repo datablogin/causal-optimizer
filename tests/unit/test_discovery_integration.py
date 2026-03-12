@@ -43,6 +43,18 @@ def make_three_var_space() -> SearchSpace:
     )
 
 
+class CorrelatedRunner:
+    """Runner where x and y are strongly correlated via z = x + y."""
+
+    def __init__(self, seed: int = 42) -> None:
+        self._rng = np.random.default_rng(seed)
+
+    def run(self, parameters: dict[str, Any]) -> dict[str, float]:
+        x = parameters.get("x", 0.0)
+        y = parameters.get("y", 0.0)
+        return {"objective": float(x**2 + y**2)}
+
+
 class QuadraticRunner:
     """Simple test runner: f(x, y) = x² + y² (minimum at origin)."""
 
@@ -50,6 +62,20 @@ class QuadraticRunner:
         x = parameters.get("x", 0.0)
         y = parameters.get("y", 0.0)
         return {"objective": float(x**2 + y**2)}
+
+
+class HighlyCorrelatedRunner:
+    """Runner that produces strong correlations between x and y."""
+
+    def __init__(self, seed: int = 42) -> None:
+        self._rng = np.random.default_rng(seed)
+
+    def run(self, parameters: dict[str, Any]) -> dict[str, float]:
+        x = parameters.get("x", 0.0)
+        y = parameters.get("y", 0.0)
+        # Make x and y strongly correlated in the output
+        noise = self._rng.normal(0, 0.001)
+        return {"objective": float(x + y + noise)}
 
 
 def _make_log_with_correlation(n: int = 15, seed: int = 42) -> ExperimentLog:

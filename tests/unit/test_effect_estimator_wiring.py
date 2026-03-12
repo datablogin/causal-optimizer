@@ -594,7 +594,7 @@ def test_estimate_improvement_aipw_warns_and_falls_back(caplog: pytest.LogCaptur
 
 def test_engine_rejects_invalid_effect_method() -> None:
     """Engine must reject invalid effect_method at __init__ time."""
-    with pytest.raises(ValueError, match="Invalid effect_method 'invalid'"):
+    with pytest.raises(ValueError, match="effect_method"):
         ExperimentEngine(
             search_space=make_search_space(),
             runner=QuadraticRunner(),

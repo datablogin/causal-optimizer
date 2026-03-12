@@ -17,7 +17,7 @@ from scipy import stats
 from causal_optimizer.types import ExperimentStatus
 
 if TYPE_CHECKING:
-    from causal_optimizer.types import ExperimentLog
+    from causal_optimizer.types import CausalGraph, ExperimentLog
 
 logger = logging.getLogger(__name__)
 
@@ -49,18 +49,41 @@ class EffectEstimator:
     - 'difference': simple difference in means (baseline)
     - 'bootstrap': bootstrap confidence intervals
     - 'aipw': augmented IPW via causal-inference library
+    - 'observational': DoWhy backdoor/frontdoor/IV adjustment (requires causal_graph)
+
+    When ``method='observational'``, the ``obs_method`` parameter controls
+    which DoWhy identification strategy is used (``"backdoor"``, ``"frontdoor"``,
+    or ``"iv"``).
     """
+
+    #: Valid values for the ``method`` parameter.
+    _VALID_METHODS: frozenset[str] = frozenset({"difference", "bootstrap", "aipw", "observational"})
+    #: Valid values for the ``obs_method`` parameter.
+    _VALID_OBS_METHODS: frozenset[str] = frozenset({"backdoor", "frontdoor", "iv"})
 
     def __init__(
         self,
         method: str = "bootstrap",
         confidence_level: float = 0.95,
         n_bootstrap: int = 1000,
+        causal_graph: CausalGraph | None = None,
+        obs_method: str = "backdoor",
         seed: int | None = None,
     ) -> None:
+        if method not in self._VALID_METHODS:
+            raise ValueError(
+                f"method={method!r} is not valid; choose one of {sorted(self._VALID_METHODS)}"
+            )
+        if obs_method not in self._VALID_OBS_METHODS:
+            raise ValueError(
+                f"obs_method={obs_method!r} is not valid; "
+                f"choose one of {sorted(self._VALID_OBS_METHODS)}"
+            )
         self.method = method
         self.confidence_level = confidence_level
         self.n_bootstrap = n_bootstrap
+        self.causal_graph = causal_graph
+        self.obs_method = obs_method
         self._rng = np.random.default_rng(seed)
 
     def estimate_effect(
@@ -72,6 +95,15 @@ class EffectEstimator:
         objective_name: str = "objective",
     ) -> EffectEstimate:
         """Estimate the causal effect of changing `treatment_param` from control to treatment."""
+        if self.method == "observational":
+            return self._observational_estimate(
+                experiment_log,
+                treatment_param,
+                float(treatment_value),
+                float(control_value),
+                objective_name,
+            )
+
         df = experiment_log.to_dataframe()
 
         treated = df[df[treatment_param] == treatment_value][objective_name].values
@@ -147,8 +179,9 @@ class EffectEstimator:
             float(np.percentile(effects, 100 * alpha / 2)),
             float(np.percentile(effects, 100 * (1 - alpha / 2))),
         )
-        # Approximate p-value from bootstrap distribution
-        p_value = float(2 * min(np.mean(effects <= 0), np.mean(effects >= 0)))
+        # Approximate two-sided p-value from bootstrap distribution.
+        # Cap at 1.0 to handle degenerate cases (e.g. all effects == 0).
+        p_value = float(min(2 * min(np.mean(effects <= 0), np.mean(effects >= 0)), 1.0))
 
         return EffectEstimate(
             point_estimate=point_estimate,
@@ -263,6 +296,12 @@ class EffectEstimator:
             )
             return self._bootstrap_improvement(kept_arr, current_value, best, minimize)
 
+        elif self.method == "observational":
+            # When method="observational", estimate_improvement still uses bootstrap
+            # (not DoWhy), because this method compares against the historical
+            # distribution — not an ATE between two intervention values.
+            return self._bootstrap_improvement(kept_arr, current_value, best, minimize)
+
         else:
             raise ValueError(f"Unknown method: {self.method}")
 
@@ -356,4 +395,123 @@ class EffectEstimator:
             p_value=result.p_value,
             is_significant=result.p_value < (1 - self.confidence_level),
             method="aipw",
+        )
+
+    def _observational_bootstrap_fallback(
+        self,
+        experiment_log: ExperimentLog,
+        treatment_param: str,
+        treatment_value: float,
+        control_value: float,
+        objective_name: str,
+    ) -> EffectEstimate:
+        """Bootstrap fallback when observational estimation fails or is unavailable.
+
+        For continuous treatments, exact float equality rarely matches observed rows.
+        Falls back to a midpoint split: rows at or above the midpoint between
+        treatment_value and control_value are treated as the treatment group.
+        """
+        df = experiment_log.to_dataframe()
+        # Try exact equality first (works for binary/discrete treatments).
+        treated_arr = df[df[treatment_param] == treatment_value][objective_name].values
+        control_arr = df[df[treatment_param] == control_value][objective_name].values
+        if len(treated_arr) >= 2 and len(control_arr) >= 2:
+            return self._bootstrap_estimate(treated_arr, control_arr)
+        # Tolerance-based midpoint split for continuous treatments.
+        if treatment_param in df.columns:
+            mid = (float(treatment_value) + float(control_value)) / 2.0
+            treated_arr = df[df[treatment_param] >= mid][objective_name].values
+            control_arr = df[df[treatment_param] < mid][objective_name].values
+            if len(treated_arr) >= 2 and len(control_arr) >= 2:
+                return self._bootstrap_estimate(treated_arr, control_arr)
+        # Neither exact equality nor midpoint split found sufficient data.
+        # Return insufficient_data rather than a meaningless random-partition estimate.
+        logger.warning(
+            "Could not partition data for treatment/control comparison; "
+            "returning insufficient_data estimate."
+        )
+        return EffectEstimate(
+            point_estimate=0.0,
+            confidence_interval=(float("-inf"), float("inf")),
+            p_value=1.0,
+            is_significant=False,
+            method="insufficient_data",
+        )
+
+    def _observational_estimate(
+        self,
+        experiment_log: ExperimentLog,
+        treatment_param: str,
+        treatment_value: float,
+        control_value: float,
+        objective_name: str,
+    ) -> EffectEstimate:
+        """Estimate causal effect via DoWhy observational adjustment.
+
+        Requires ``self.causal_graph`` to be set.  Falls back to bootstrap
+        when DoWhy is not installed or the effect is not identifiable.
+        """
+        if self.causal_graph is None:
+            raise ValueError(
+                "method='observational' requires causal_graph to be provided "
+                "to EffectEstimator.__init__"
+            )
+
+        from causal_optimizer.estimator.observational import ObservationalEstimator
+
+        obs_estimator = ObservationalEstimator(
+            causal_graph=self.causal_graph,
+            method=self.obs_method,
+            confidence_level=self.confidence_level,
+        )
+
+        try:
+            treatment_est = obs_estimator.estimate_intervention(
+                experiment_log=experiment_log,
+                treatment_var=treatment_param,
+                treatment_value=treatment_value,
+                objective_name=objective_name,
+            )
+            control_est = obs_estimator.estimate_intervention(
+                experiment_log=experiment_log,
+                treatment_var=treatment_param,
+                treatment_value=control_value,
+                objective_name=objective_name,
+            )
+        except ImportError:
+            logger.warning(
+                "dowhy not installed, falling back to bootstrap for observational method"
+            )
+            return self._observational_bootstrap_fallback(
+                experiment_log, treatment_param, treatment_value, control_value, objective_name
+            )
+
+        if not treatment_est.identified or not control_est.identified:
+            logger.warning("Effect not identifiable via %s; falling back to bootstrap", self.method)
+            return self._observational_bootstrap_fallback(
+                experiment_log, treatment_param, treatment_value, control_value, objective_name
+            )
+
+        point_estimate = treatment_est.expected_outcome - control_est.expected_outcome
+        # CI by subtraction of endpoints — deliberately conservative (widest interval
+        # consistent with independent estimates).  This is an over-approximation when
+        # treatment and control are estimated from the same dataset, but guarantees
+        # valid coverage without requiring joint estimation of the covariance.
+        ci_lo = treatment_est.confidence_interval[0] - control_est.confidence_interval[1]
+        ci_hi = treatment_est.confidence_interval[1] - control_est.confidence_interval[0]
+
+        # Approximate p-value from the CI width using the configured confidence level
+        alpha = 1.0 - self.confidence_level
+        z_crit = float(stats.norm.ppf(1.0 - alpha / 2.0))
+        ci_width = ci_hi - ci_lo
+        se = ci_width / (2 * z_crit) if ci_width > 0 else 1.0
+        z_stat = abs(point_estimate) / se if se > 0 else 0.0
+        p_value = float(2 * stats.norm.sf(z_stat))
+
+        return EffectEstimate(
+            point_estimate=point_estimate,
+            confidence_interval=(ci_lo, ci_hi),
+            p_value=p_value,
+            is_significant=p_value < (1 - self.confidence_level),
+            method=treatment_est.method,
         )

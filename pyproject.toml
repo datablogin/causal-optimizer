@@ -56,6 +56,7 @@ evolution = [
 ]
 causal = [
     "causal-inference-marketing @ git+https://github.com/datablogin/causal-inference-marketing.git",
+    "dowhy>=0.11",
 ]
 all = [
     "causal-optimizer[bayesian,doe,evolution,causal]",
