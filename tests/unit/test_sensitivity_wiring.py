@@ -163,3 +163,32 @@ def test_validation_wrong_direction_treated_as_non_robust() -> None:
     assert report.is_robust is False
     assert "Effect direction is wrong" in report.summary
     assert "originally:" in report.summary
+
+
+def test_validation_wrong_direction_maximize() -> None:
+    """Direction override also works for maximize: negative effect is wrong."""
+    engine = ExperimentEngine(
+        search_space=_make_space(),
+        runner=_QuadRunner(),
+        minimize=False,
+        seed=42,
+    )
+    for _ in range(11):
+        engine.run_experiment({"x": 1.0, "y": 1.0})
+
+    # effect_size < 0 is wrong for maximization
+    mock_report = RobustnessReport(
+        effect_size=-2.0,
+        noise_estimate=0.5,
+        signal_to_noise=4.0,
+        e_value=6.0,
+        is_robust=True,
+        summary="Robust improvement",
+    )
+    with patch.object(engine._validator, "validate_improvement", return_value=mock_report):
+        engine._run_validation("exploration", "optimization")
+
+    assert len(engine.validation_results) == 1
+    report = engine.validation_results[0]
+    assert report.is_robust is False
+    assert "Effect direction is wrong" in report.summary
