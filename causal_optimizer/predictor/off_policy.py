@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import cross_val_score
 
@@ -21,6 +22,92 @@ if TYPE_CHECKING:
     from causal_optimizer.types import ExperimentLog, SearchSpace
 
 logger = logging.getLogger(__name__)
+
+
+def _encode_dataframe_for_rf(
+    df: pd.DataFrame,
+    var_names: list[str],
+    search_space: SearchSpace,
+) -> np.ndarray:
+    """Encode a DataFrame of mixed-type variables into a numeric array for RF.
+
+    Categorical variables are label-encoded (mapped to integers).
+    Boolean variables are converted to 0/1.
+    Continuous and integer variables are passed through as floats.
+
+    Args:
+        df: DataFrame with experiment data.
+        var_names: Variable names to include (column subset of df).
+        search_space: Search space with variable type metadata.
+
+    Returns:
+        A 2D numpy float64 array of shape (n_rows, len(var_names)).
+    """
+    var_types = {v.name: v for v in search_space.variables}
+    encoded_cols: list[np.ndarray] = []
+
+    for name in var_names:
+        if name not in df.columns:
+            encoded_cols.append(np.zeros(len(df), dtype=np.float64))
+            continue
+
+        col = df[name]
+        var = var_types.get(name)
+
+        if var is not None and var.variable_type == VariableType.CATEGORICAL:
+            # Label-encode: map each category to an integer
+            choices = var.choices or sorted(col.dropna().unique().tolist())
+            mapping = {c: float(i) for i, c in enumerate(choices)}
+            encoded_cols.append(
+                col.map(mapping).fillna(0.0).to_numpy(dtype=np.float64)
+            )
+        elif var is not None and var.variable_type == VariableType.BOOLEAN:
+            encoded_cols.append(
+                col.astype(float).fillna(0.0).to_numpy(dtype=np.float64)
+            )
+        else:
+            encoded_cols.append(
+                pd.to_numeric(col, errors="coerce").fillna(0.0).to_numpy(dtype=np.float64)
+            )
+
+    if not encoded_cols:
+        return np.empty((len(df), 0), dtype=np.float64)
+    return np.column_stack(encoded_cols)
+
+
+def _encode_params_for_rf(
+    parameters: dict[str, Any],
+    var_names: list[str],
+    search_space: SearchSpace,
+) -> np.ndarray:
+    """Encode a single parameter dict into a numeric array for RF prediction.
+
+    Uses the same encoding scheme as _encode_dataframe_for_rf so that
+    the feature representation is consistent between fit and predict.
+
+    Returns:
+        A 2D numpy float64 array of shape (1, len(var_names)).
+    """
+    var_types = {v.name: v for v in search_space.variables}
+    values: list[float] = []
+
+    for name in var_names:
+        raw = parameters.get(name, 0)
+        var = var_types.get(name)
+
+        if var is not None and var.variable_type == VariableType.CATEGORICAL:
+            choices = var.choices or []
+            mapping = {c: float(i) for i, c in enumerate(choices)}
+            values.append(mapping.get(raw, 0.0))
+        elif var is not None and var.variable_type == VariableType.BOOLEAN:
+            values.append(1.0 if raw else 0.0)
+        else:
+            try:
+                values.append(float(raw))
+            except (TypeError, ValueError):
+                values.append(0.0)
+
+    return np.array(values, dtype=np.float64).reshape(1, -1)
 
 
 @dataclass
@@ -131,14 +218,8 @@ class OffPolicyPredictor:
             self._model = None
             return
 
-        features = (
-            df[self._var_names]
-            .apply(
-                lambda x: x.astype(float, errors="ignore"),
-            )
-            .fillna(0)
-            .values
-        )
+        assert self._search_space is not None  # set at top of fit()
+        features = _encode_dataframe_for_rf(df, self._var_names, self._search_space)
         y = df[objective_name].values
 
         self._model = RandomForestRegressor(n_estimators=100, max_depth=8, random_state=42)
@@ -159,10 +240,10 @@ class OffPolicyPredictor:
 
     def predict(self, parameters: dict[str, Any]) -> Prediction | None:
         """Predict the outcome of a candidate experiment."""
-        if self._model is None:
+        if self._model is None or self._search_space is None:
             return None
 
-        x = np.array([parameters.get(v, 0) for v in self._var_names]).reshape(1, -1)
+        x = _encode_params_for_rf(parameters, self._var_names, self._search_space)
 
         # Get predictions from individual trees for uncertainty
         tree_predictions = np.array([tree.predict(x)[0] for tree in self._model.estimators_])
