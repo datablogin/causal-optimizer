@@ -18,13 +18,18 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from causal_optimizer.benchmarks.runner import BenchmarkRunner
+from causal_optimizer.benchmarks.runner import BenchmarkResult, BenchmarkRunner
 from causal_optimizer.benchmarks.toy_graph import ToyGraphBenchmark
+
+from .conftest import (
+    assert_causal_beats_random,
+    assert_curve_lengths,
+    assert_monotonic_curves,
+    finals_for_strategy,
+)
 
 BUDGET = 40
 N_SEEDS = 5
-# 20% tolerance: causal must beat random by this fraction of random's |mean|,
-# but we allow being up to TOLERANCE * |random_mean| worse to absorb noise.
 TOLERANCE_FRACTION = 0.20
 
 
@@ -33,7 +38,7 @@ class TestToyGraphConvergence:
     """Convergence regression on ToyGraphBenchmark (X -> Z -> objective)."""
 
     @pytest.fixture(scope="class")
-    def results(self) -> list[object]:
+    def results(self) -> list[BenchmarkResult]:
         """Run the benchmark comparison once for the whole test class."""
         bench = ToyGraphBenchmark(noise_scale=0.1)
         runner = BenchmarkRunner(bench)
@@ -43,87 +48,40 @@ class TestToyGraphConvergence:
             n_seeds=N_SEEDS,
         )
 
-    def test_causal_beats_random_mean_final(self, results: list[object]) -> None:
+    def test_causal_beats_random_mean_final(self, results: list[BenchmarkResult]) -> None:
         """Causal strategy's mean final objective beats random with 20% tolerance.
 
         Since we minimize, lower is better. The assertion is:
             avg_causal <= avg_random + TOLERANCE_FRACTION * |avg_random|
 
-        This gives causal a generous cushion — it just needs to not be
+        This gives causal a generous cushion -- it just needs to not be
         catastrophically worse than random.
         """
-        from causal_optimizer.benchmarks.runner import BenchmarkResult
+        assert_causal_beats_random(results, N_SEEDS, TOLERANCE_FRACTION, "ToyGraph")
 
-        causal_finals = [
-            r.final_best for r in results if isinstance(r, BenchmarkResult) and r.strategy == "causal"
-        ]
-        random_finals = [
-            r.final_best for r in results if isinstance(r, BenchmarkResult) and r.strategy == "random"
-        ]
-
-        assert len(causal_finals) == N_SEEDS
-        assert len(random_finals) == N_SEEDS
-
-        avg_causal = float(np.mean(causal_finals))
-        avg_random = float(np.mean(random_finals))
-
-        # Lower is better. Allow causal to be up to 20% of |random mean| worse.
-        tolerance = TOLERANCE_FRACTION * max(abs(avg_random), 1.0)
-        assert avg_causal <= avg_random + tolerance, (
-            f"Causal ({avg_causal:.4f}) did not beat random ({avg_random:.4f}) "
-            f"within {TOLERANCE_FRACTION:.0%} tolerance on ToyGraph. "
-            f"Causal finals: {causal_finals}, Random finals: {random_finals}"
-        )
-
-    def test_surrogate_only_runs_without_error(self, results: list[object]) -> None:
+    def test_surrogate_only_runs_without_error(self, results: list[BenchmarkResult]) -> None:
         """Surrogate-only strategy completes all runs without crashing."""
-        from causal_optimizer.benchmarks.runner import BenchmarkResult
-
-        surrogate_results = [
-            r for r in results if isinstance(r, BenchmarkResult) and r.strategy == "surrogate_only"
-        ]
+        surrogate_results = finals_for_strategy(results, "surrogate_only")
         assert len(surrogate_results) == N_SEEDS
 
-    def test_convergence_curves_are_monotonic(self, results: list[object]) -> None:
+    def test_convergence_curves_are_monotonic(self, results: list[BenchmarkResult]) -> None:
         """All convergence curves should be monotonically non-increasing (best-so-far)."""
-        from causal_optimizer.benchmarks.runner import BenchmarkResult
+        assert_monotonic_curves(results)
 
-        for r in results:
-            if not isinstance(r, BenchmarkResult):
-                continue
-            curve = r.convergence_curve
-            for i in range(1, len(curve)):
-                assert curve[i] <= curve[i - 1] + 1e-12, (
-                    f"Convergence curve for {r.strategy} seed={r.seed} is not monotonic "
-                    f"at step {i}: {curve[i - 1]:.6f} -> {curve[i]:.6f}"
-                )
-
-    def test_all_strategies_produce_budget_length_curves(self, results: list[object]) -> None:
+    def test_all_strategies_produce_budget_length_curves(
+        self, results: list[BenchmarkResult]
+    ) -> None:
         """Each result's convergence curve should have exactly ``BUDGET`` entries."""
-        from causal_optimizer.benchmarks.runner import BenchmarkResult
+        assert_curve_lengths(results, BUDGET)
 
-        for r in results:
-            if not isinstance(r, BenchmarkResult):
-                continue
-            assert len(r.convergence_curve) == BUDGET, (
-                f"{r.strategy} seed={r.seed}: expected {BUDGET} steps, "
-                f"got {len(r.convergence_curve)}"
-            )
-
-    def test_causal_beats_random_worst_seed(self, results: list[object]) -> None:
+    def test_causal_beats_random_worst_seed(self, results: list[BenchmarkResult]) -> None:
         """Causal strategy's worst seed should not be drastically worse than random's mean.
 
         This guards against high variance: even the worst causal seed should
         be within a generous margin of random's average performance.
         """
-        from causal_optimizer.benchmarks.runner import BenchmarkResult
-
-        causal_finals = [
-            r.final_best for r in results if isinstance(r, BenchmarkResult) and r.strategy == "causal"
-        ]
-        random_finals = [
-            r.final_best for r in results if isinstance(r, BenchmarkResult) and r.strategy == "random"
-        ]
+        causal_finals = finals_for_strategy(results, "causal")
+        random_finals = finals_for_strategy(results, "random")
 
         worst_causal = max(causal_finals)  # max because lower is better
         avg_random = float(np.mean(random_finals))
