@@ -23,6 +23,7 @@ from causal_optimizer.types import (
     ExperimentStatus,
     SearchSpace,
 )
+from causal_optimizer.validator.sensitivity import RobustnessReport, SensitivityValidator
 
 logger = logging.getLogger(__name__)
 
@@ -172,6 +173,8 @@ class ExperimentEngine:
         self._archive: MAPElites | None = (
             MAPElites(descriptor_names, minimize=minimize) if descriptor_names else None
         )
+        self._validator = SensitivityValidator()
+        self.validation_results: list[RobustnessReport] = []
 
     @property
     def causal_graph(self) -> CausalGraph | None:
@@ -449,6 +452,10 @@ class ExperimentEngine:
         else:
             self._phase = "exploitation"
 
+        # Validate improvement at every phase transition
+        if old_phase != self._phase:
+            self._run_validation(old_phase, self._phase)
+
         # Run screening and POMIS when transitioning from exploration to optimization
         # (also covers direct exploration → exploitation if max_screening_attempts is large)
         if old_phase == "exploration" and self._phase in ("optimization", "exploitation"):
@@ -653,6 +660,57 @@ class ExperimentEngine:
                 "POMIS computation failed or unavailable, continuing without", exc_info=True
             )
             self._pomis_sets = None
+
+    def _run_validation(self, old_phase: str, new_phase: str) -> None:
+        """Run sensitivity validation on the best result at a phase transition.
+
+        Compares the first half of experiments (baseline) against the second half
+        (improved) to assess whether the observed improvement is robust.  If the
+        result is not robust, a warning is logged but the phase transition is not
+        blocked — the engine always makes forward progress.
+        """
+        results = self.log.results
+        if len(results) < 4:
+            # Need at least 2 baseline + 2 improved for validation
+            return
+
+        midpoint = len(results) // 2
+        baseline_ids = [r.experiment_id for r in results[:midpoint]]
+        improved_ids = [r.experiment_id for r in results[midpoint:]]
+
+        try:
+            report = self._validator.validate_improvement(
+                experiment_log=self.log,
+                baseline_experiments=baseline_ids,
+                improved_experiments=improved_ids,
+                objective_name=self.objective_name,
+            )
+        except Exception:
+            logger.warning(
+                "Sensitivity validation failed at %s→%s transition, continuing without",
+                old_phase,
+                new_phase,
+                exc_info=True,
+            )
+            return
+
+        self.validation_results.append(report)
+
+        if report.is_robust:
+            logger.info(
+                "Validation at %s→%s: improvement is robust (%s)",
+                old_phase,
+                new_phase,
+                report.summary,
+            )
+        else:
+            logger.warning(
+                "Validation at %s→%s: improvement is NOT robust (%s); "
+                "continuing with phase transition",
+                old_phase,
+                new_phase,
+                report.summary,
+            )
 
     def _extract_descriptors(self, metrics: dict[str, float]) -> dict[str, float]:
         """Extract descriptor values from metrics for MAP-Elites."""
