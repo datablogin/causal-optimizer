@@ -452,10 +452,6 @@ class ExperimentEngine:
         else:
             self._phase = "exploitation"
 
-        # Validate improvement at every phase transition
-        if old_phase != self._phase:
-            self._run_validation(old_phase, self._phase)
-
         # Run screening and POMIS when transitioning from exploration to optimization
         # (also covers direct exploration → exploitation if max_screening_attempts is large)
         if old_phase == "exploration" and self._phase in ("optimization", "exploitation"):
@@ -474,6 +470,12 @@ class ExperimentEngine:
                 self._screened_focus_variables = self.search_space.variable_names
             if self._phase == "optimization":  # screening may have reverted to exploration
                 self._compute_pomis()
+
+        # Validate after screening has confirmed (or skipped) the transition.
+        # This ensures reports only describe transitions that actually stuck —
+        # screening can revert exploration→optimization back to exploration.
+        if old_phase != self._phase:
+            self._run_validation(old_phase, self._phase)
 
     def _run_auto_discovery(self) -> None:
         """Discover a causal graph from experiment data if ``discovery_method`` is set.
@@ -662,12 +664,16 @@ class ExperimentEngine:
             self._pomis_sets = None
 
     def _run_validation(self, old_phase: str, new_phase: str) -> None:
-        """Run sensitivity validation on the best result at a phase transition.
+        """Run sensitivity validation at a confirmed phase transition.
 
-        Compares the first half of experiments (baseline) against the second half
-        (improved) to assess whether the observed improvement is robust.  If the
-        result is not robust, a warning is logged but the phase transition is not
-        blocked — the engine always makes forward progress.
+        Compares the first half of all experiments so far (baseline) against
+        the second half (improved) to assess whether the optimization trajectory
+        is producing robust improvements within the outgoing phase.  This is a
+        within-phase trend check, not a cross-phase comparison — no experiments
+        from the new phase exist yet at the moment of transition.
+
+        If the result is not robust, a warning is logged but the phase transition
+        is not blocked — the engine always makes forward progress.
         """
         results = self.log.results
         if len(results) < 4:
@@ -725,14 +731,14 @@ class ExperimentEngine:
 
         if report.is_robust:
             logger.info(
-                "Validation at %s→%s: improvement is robust (%s)",
+                "Validation at %s→%s transition: optimization trend is robust (%s)",
                 old_phase,
                 new_phase,
                 report.summary,
             )
         else:
             logger.warning(
-                "Validation at %s→%s: improvement is NOT robust (%s); "
+                "Validation at %s→%s transition: optimization trend is NOT robust (%s); "
                 "continuing with phase transition",
                 old_phase,
                 new_phase,
