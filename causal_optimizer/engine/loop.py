@@ -13,6 +13,7 @@ from typing import Any, Protocol
 import numpy as np
 
 from causal_optimizer.designer.screening import ScreeningDesigner, ScreeningResult
+from causal_optimizer.estimator.effects import EffectEstimator
 from causal_optimizer.evolution.map_elites import MAPElites
 from causal_optimizer.predictor.off_policy import OffPolicyPredictor
 from causal_optimizer.types import (
@@ -25,13 +26,13 @@ from causal_optimizer.types import (
 
 logger = logging.getLogger(__name__)
 
-# Minimum requirements for statistical evaluation
-_MIN_EXPERIMENTS = 5
-_MIN_KEPT = 2
+# Minimum requirements before calling estimate_improvement() for keep/discard.
+# _MIN_KEPT=5 ensures the estimator uses its full statistical method (bootstrap
+# or difference).  With fewer than 5 kept experiments the estimator falls back
+# to a greedy comparison (method="greedy"), so calling it from the engine would
+# add no statistical value over the engine's own greedy fallback.
+_MIN_KEPT = 5
 _MIN_DISCARDED = 2
-_N_BOOTSTRAP = 1000
-_ALPHA_EARLY = 0.1  # permissive threshold for < 20 experiments
-_ALPHA_LATE = 0.05  # stricter threshold for >= 20 experiments
 
 
 class ExperimentRunner(Protocol):
@@ -68,15 +69,37 @@ class ExperimentEngine:
         epsilon_mode: bool = False,
         n_max: int = 100,
         seed: int | None = None,
+        effect_method: str = "bootstrap",
+        confidence_level: float = 0.95,
+        n_bootstrap: int = 1000,
     ) -> None:
         """Initialize the experiment engine.
 
         Args:
-            seed: Seed for the epsilon controller's RNG only. Controls
-                reproducibility of observe/intervene decisions in
-                ``OffPolicyPredictor``. Does **not** seed other random
-                sources in the engine (MAP-Elites sampling, bootstrap CI).
+            seed: Seed for reproducibility of random operations in
+                ``OffPolicyPredictor`` and ``EffectEstimator`` bootstrap
+                sampling.  Does **not** seed MAP-Elites archive sampling.
+            effect_method: Method used by :class:`EffectEstimator` to assess
+                statistical significance in keep/discard decisions.  Valid
+                values are ``"difference"`` and ``"bootstrap"`` (default).
+                ``"aipw"`` is accepted but automatically falls back to
+                ``"bootstrap"`` with a logged warning (AIPW requires
+                treatment/control assignment not available in improvement
+                tests).
+            confidence_level: Confidence level for statistical tests (default
+                0.95 → alpha = 0.05).  Passed directly to
+                :class:`~causal_optimizer.estimator.effects.EffectEstimator`.
+            n_bootstrap: Number of bootstrap samples used when
+                ``effect_method="bootstrap"`` (default 1000).  Passed to
+                :class:`~causal_optimizer.estimator.effects.EffectEstimator`.
         """
+        _valid_effect_methods = {"difference", "bootstrap", "aipw"}
+        if effect_method not in _valid_effect_methods:
+            raise ValueError(
+                f"Invalid effect_method {effect_method!r}. "
+                f"Must be one of {sorted(_valid_effect_methods)}."
+            )
+
         self.search_space = search_space
         self.runner = runner
         self.objective_name = objective_name
@@ -84,6 +107,12 @@ class ExperimentEngine:
         self.causal_graph = causal_graph
         self.log = ExperimentLog()
         self._phase: str = "exploration"
+        self._effect_estimator = EffectEstimator(
+            method=effect_method,
+            confidence_level=confidence_level,
+            n_bootstrap=n_bootstrap,
+            seed=seed,
+        )
         self._predictor = OffPolicyPredictor(epsilon_mode=epsilon_mode, n_max=n_max, seed=seed)
         self._max_skips = max_skips
         self._screening_result: ScreeningResult | None = None
@@ -182,19 +211,33 @@ class ExperimentEngine:
 
         Uses the off-policy predictor to skip experiments that are predicted
         to have poor outcomes (with high confidence). If an experiment is
-        skipped, a new suggestion is generated, up to max_skips times.
+        skipped, the prediction is noted (but NOT added to the experiment log)
+        and a new suggestion is generated, up to max_skips times.
         """
         skips = 0
         while True:
             parameters = self.suggest_next()
 
-            # Check if the predictor recommends skipping this experiment
+            # Check if the predictor recommends observing (not running) this experiment
             if skips < self._max_skips and not self._predictor.should_run_experiment(parameters):
                 skips += 1
-                logger.info(
-                    f"Off-policy predictor recommends skipping experiment "
-                    f"(skip {skips}/{self._max_skips}), suggesting new parameters"
-                )
+                # Get predicted outcome for logging purposes (not logged to experiment log)
+                prediction = self._predictor.predict(parameters)
+                if prediction is not None:
+                    logger.info(
+                        "Observation (predicted): objective=%.4f "
+                        "(skip %d/%d), suggesting new parameters",
+                        prediction.expected_value,
+                        skips,
+                        self._max_skips,
+                    )
+                else:
+                    logger.info(
+                        "Off-policy predictor recommends skipping experiment "
+                        "(skip %d/%d), suggesting new parameters",
+                        skips,
+                        self._max_skips,
+                    )
                 continue
 
             if skips >= self._max_skips:
@@ -233,15 +276,16 @@ class ExperimentEngine:
     def _is_improvement_significant(self, current_objective: float) -> bool | None:
         """Check if the current objective is a statistically significant improvement.
 
-        Uses bootstrap confidence intervals on the distribution of kept objectives
-        to determine if the current value represents a real improvement over noise.
+        Delegates to :attr:`_effect_estimator` via
+        :meth:`~causal_optimizer.estimator.effects.EffectEstimator.estimate_improvement`,
+        which compares *current_objective* against the distribution of kept
+        experiments in the log.
 
         Returns:
             True if improvement is statistically significant.
             False if the change is within noise.
             None if insufficient data for statistical evaluation (fall back to greedy).
         """
-        n_total = len(self.log.results)
         kept = [
             r.metrics.get(self.objective_name)
             for r in self.log.results
@@ -254,46 +298,34 @@ class ExperimentEngine:
             and r.metrics.get(self.objective_name) is not None
         ]
 
-        # Not enough history for statistical evaluation
-        if n_total < _MIN_EXPERIMENTS or len(kept) < _MIN_KEPT or len(discarded) < _MIN_DISCARDED:
+        # Not enough history for statistical evaluation — fall back to greedy.
+        # Require at least 5 kept experiments (aligns with estimate_improvement's
+        # own greedy-fallback threshold) and 2 discarded for contrast.
+        if len(kept) < _MIN_KEPT or len(discarded) < _MIN_DISCARDED:
             return None
 
-        kept_arr = np.array(kept)
-        best_objective = float(np.min(kept_arr) if self.minimize else np.max(kept_arr))
-
-        # Bootstrap the difference: current_objective - best_objective
-        # For minimization, a negative difference means improvement
-        observed_diff = current_objective - best_objective
-
-        rng = np.random.default_rng(seed=None)
-        bootstrap_diffs = np.empty(_N_BOOTSTRAP)
-        for i in range(_N_BOOTSTRAP):
-            boot_sample = rng.choice(kept_arr, size=len(kept_arr), replace=True)
-            boot_best = float(np.min(boot_sample) if self.minimize else np.max(boot_sample))
-            bootstrap_diffs[i] = current_objective - boot_best
-
-        # Adaptive alpha: permissive early, stricter later
-        alpha = _ALPHA_EARLY if n_total < 20 else _ALPHA_LATE
-
-        if self.minimize:
-            # For minimization: improvement means current < best (negative diff)
-            # Check if the observed diff is significantly negative
-            # (below the lower bound of the bootstrap CI)
-            threshold = float(np.percentile(bootstrap_diffs, 100 * alpha))
-            is_significant = observed_diff < threshold
-        else:
-            # For maximization: improvement means current > best (positive diff)
-            # Check if the observed diff is significantly positive
-            # (above the upper bound of the bootstrap CI)
-            threshold = float(np.percentile(bootstrap_diffs, 100 * (1 - alpha)))
-            is_significant = observed_diff > threshold
-
-        logger.debug(
-            f"Statistical evaluation: diff={observed_diff:.6f}, "
-            f"threshold={threshold:.6f}, alpha={alpha}, significant={is_significant}"
+        estimate = self._effect_estimator.estimate_improvement(
+            experiment_log=self.log,
+            current_value=current_objective,
+            objective_name=self.objective_name,
+            minimize=self.minimize,
         )
 
-        return is_significant
+        logger.debug(
+            "Statistical evaluation via %s: %s",
+            estimate.method,
+            estimate.summary,
+        )
+
+        # The guard above ensures len(kept) >= _MIN_KEPT (5), which is stricter
+        # than the estimator's "insufficient_data" threshold (< 2 kept).  With
+        # _MIN_KEPT=5 the estimator always uses a statistical test here, but the
+        # check below is kept as a defensive safety net for future callers who
+        # may bypass the guard or lower _MIN_KEPT without updating this code.
+        if estimate.method == "insufficient_data":
+            return None
+
+        return estimate.is_significant
 
     def _evaluate_status(self, metrics: dict[str, float]) -> ExperimentStatus:
         """Determine if this result should be kept.
