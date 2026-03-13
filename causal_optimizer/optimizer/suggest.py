@@ -13,6 +13,7 @@ from typing import Any
 
 import numpy as np
 
+from causal_optimizer.predictor.encoding import encode_dataframe_for_rf, encode_params_for_rf
 from causal_optimizer.types import CausalGraph, ExperimentLog, SearchSpace, VariableType
 
 logger = logging.getLogger(__name__)
@@ -327,9 +328,7 @@ def _suggest_surrogate(
     best = experiment_log.best_result(objective_name, minimize)
     best_params = dict(best.parameters) if best else {}
 
-    features = (
-        df[focus_var_names].apply(lambda x: x.astype(float, errors="ignore")).fillna(0).values
-    )
+    features = encode_dataframe_for_rf(df, focus_var_names, search_space)
     y = df[objective_name].values
 
     rf = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=42)
@@ -353,7 +352,7 @@ def _suggest_surrogate(
     best_pred = float("inf") if minimize else float("-inf")
 
     for candidate in candidates:
-        x = np.array([candidate.get(v, 0) for v in focus_var_names]).reshape(1, -1)
+        x = encode_params_for_rf(candidate, focus_var_names, search_space)
         pred = rf.predict(x)[0]
         if (minimize and pred < best_pred) or (not minimize and pred > best_pred):
             best_pred = pred

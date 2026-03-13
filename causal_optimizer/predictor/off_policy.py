@@ -14,6 +14,7 @@ import numpy as np
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import cross_val_score
 
+from causal_optimizer.predictor.encoding import encode_dataframe_for_rf, encode_params_for_rf
 from causal_optimizer.predictor.epsilon import compute_epsilon
 from causal_optimizer.types import VariableType
 
@@ -131,14 +132,12 @@ class OffPolicyPredictor:
             self._model = None
             return
 
-        features = (
-            df[self._var_names]
-            .apply(
-                lambda x: x.astype(float, errors="ignore"),
-            )
-            .fillna(0)
-            .values
-        )
+        # _search_space is set at the top of fit(), but mypy needs narrowing
+        search_space = self._search_space
+        if search_space is None:  # pragma: no cover
+            self._model = None
+            return
+        features = encode_dataframe_for_rf(df, self._var_names, search_space)
         y = df[objective_name].values
 
         self._model = RandomForestRegressor(n_estimators=100, max_depth=8, random_state=42)
@@ -159,10 +158,10 @@ class OffPolicyPredictor:
 
     def predict(self, parameters: dict[str, Any]) -> Prediction | None:
         """Predict the outcome of a candidate experiment."""
-        if self._model is None:
+        if self._model is None or self._search_space is None:
             return None
 
-        x = np.array([parameters.get(v, 0) for v in self._var_names]).reshape(1, -1)
+        x = encode_params_for_rf(parameters, self._var_names, self._search_space)
 
         # Get predictions from individual trees for uncertainty
         tree_predictions = np.array([tree.predict(x)[0] for tree in self._model.estimators_])
