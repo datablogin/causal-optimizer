@@ -19,7 +19,6 @@ import pytest
 from causal_optimizer.benchmarks import CompleteGraphBenchmark
 from causal_optimizer.benchmarks.runner import BenchmarkRunner
 
-
 # ──────────────────────────────────────────────────────────────────────────────
 # Constants
 # ──────────────────────────────────────────────────────────────────────────────

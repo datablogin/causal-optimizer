@@ -135,19 +135,19 @@ class TestGreedyMissesInteraction:
             df = log.to_dataframe()
             x1 = df["x1"].values
             x2 = df["x2"].values
-            X_main = df[["x1", "x2"]].values
-            X_with_inter = pd.DataFrame(
+            x_main = df[["x1", "x2"]].values
+            x_with_inter = pd.DataFrame(
                 {"x1": x1, "x2": x2, "interaction": x1 * x2}
             ).values
             y = df["objective"].values
 
             rf_without = RandomForestRegressor(n_estimators=100, max_depth=3, random_state=42)
-            rf_without.fit(X_main, y)
-            score_without = float(rf_without.score(X_main, y))
+            rf_without.fit(x_main, y)
+            score_without = float(rf_without.score(x_main, y))
 
             rf_with = RandomForestRegressor(n_estimators=100, max_depth=3, random_state=42)
-            rf_with.fit(X_with_inter, y)
-            score_with = float(rf_with.score(X_with_inter, y))
+            rf_with.fit(x_with_inter, y)
+            score_with = float(rf_with.score(x_with_inter, y))
 
             gaps.append(score_with - score_without)
 
