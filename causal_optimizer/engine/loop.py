@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
 import numpy as np
@@ -23,6 +24,7 @@ from causal_optimizer.types import (
     ExperimentStatus,
     SearchSpace,
 )
+from causal_optimizer.validator.sensitivity import RobustnessReport, SensitivityValidator
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +35,15 @@ logger = logging.getLogger(__name__)
 # add no statistical value over the engine's own greedy fallback.
 _MIN_KEPT = 5
 _MIN_DISCARDED = 2
+
+
+@dataclass(frozen=True)
+class ValidationRecord:
+    """A single validation result paired with its phase-transition context."""
+
+    report: RobustnessReport
+    old_phase: str
+    new_phase: str
 
 
 class ExperimentRunner(Protocol):
@@ -172,6 +183,19 @@ class ExperimentEngine:
         self._archive: MAPElites | None = (
             MAPElites(descriptor_names, minimize=minimize) if descriptor_names else None
         )
+        self._validator = SensitivityValidator()
+        #: Validation records from phase transitions.  Each record bundles a
+        #: :class:`RobustnessReport` with the phase-transition context.
+        self.validation_records: list[ValidationRecord] = []
+
+    @property
+    def validation_results(self) -> list[RobustnessReport]:
+        """Convenience accessor: just the reports from all validation records.
+
+        Returns a fresh list on every call.  For phase-transition context, use
+        :attr:`validation_records` directly.
+        """
+        return [r.report for r in self.validation_records]
 
     @property
     def causal_graph(self) -> CausalGraph | None:
@@ -468,6 +492,12 @@ class ExperimentEngine:
             if self._phase == "optimization":  # screening may have reverted to exploration
                 self._compute_pomis()
 
+        # Validate after screening has confirmed (or skipped) the transition.
+        # This ensures reports only describe transitions that actually stuck —
+        # screening can revert exploration→optimization back to exploration.
+        if old_phase != self._phase:
+            self._run_validation(old_phase, self._phase)
+
     def _run_auto_discovery(self) -> None:
         """Discover a causal graph from experiment data if ``discovery_method`` is set.
 
@@ -653,6 +683,91 @@ class ExperimentEngine:
                 "POMIS computation failed or unavailable, continuing without", exc_info=True
             )
             self._pomis_sets = None
+
+    def _run_validation(self, old_phase: str, new_phase: str) -> None:
+        """Run sensitivity validation at a confirmed phase transition.
+
+        Compares the first half of all experiments so far (baseline) against
+        the second half (improved) to assess whether the optimization trajectory
+        is producing robust improvements within the outgoing phase.  This is a
+        within-phase trend check, not a cross-phase comparison — no experiments
+        from the new phase exist yet at the moment of transition.
+
+        If the result is not robust, a warning is logged but the phase transition
+        is not blocked — the engine always makes forward progress.
+        """
+        results = self.log.results
+        if len(results) < 4:
+            # Need at least 2 baseline + 2 improved for validation.
+            # SensitivityValidator also guards at < 2 per group; this engine-side
+            # check avoids the overhead of building ID lists and calling the
+            # validator when the result is guaranteed to be "insufficient data."
+            return
+
+        midpoint = len(results) // 2
+        earlier_ids = [r.experiment_id for r in results[:midpoint]]
+        later_ids = [r.experiment_id for r in results[midpoint:]]
+
+        try:
+            report = self._validator.validate_improvement(
+                experiment_log=self.log,
+                baseline_experiments=earlier_ids,
+                improved_experiments=later_ids,
+                objective_name=self.objective_name,
+            )
+        except (ValueError, RuntimeError, ArithmeticError):
+            logger.warning(
+                "Sensitivity validation failed at %s→%s transition, continuing without",
+                old_phase,
+                new_phase,
+                exc_info=True,
+            )
+            return
+
+        # Verify the effect direction matches the optimization goal.
+        # SensitivityValidator uses abs(effect) for SNR/E-value, so is_robust
+        # can be True even when the effect goes the wrong way (regression).
+        # Note: effect_size == 0.0 is treated as "not improving" (no change).
+        improving = (report.effect_size < 0) if self.minimize else (report.effect_size > 0)
+        if report.is_robust and not improving:
+            logger.warning(
+                "Validation at %s→%s: effect direction is wrong "
+                "(effect=%.4f, minimize=%s); treating as non-robust",
+                old_phase,
+                new_phase,
+                report.effect_size,
+                self.minimize,
+            )
+            # Override: a "robust" regression is not a real improvement.
+            report = replace(
+                report,
+                is_robust=False,
+                summary=(
+                    f"Effect direction is wrong for optimization goal "
+                    f"(effect={report.effect_size:.6f}, minimize={self.minimize}); "
+                    f"originally: {report.summary}"
+                ),
+            )
+
+        self.validation_records.append(
+            ValidationRecord(report=report, old_phase=old_phase, new_phase=new_phase)
+        )
+
+        if report.is_robust:
+            logger.info(
+                "Validation at %s→%s transition: optimization trend is robust (%s)",
+                old_phase,
+                new_phase,
+                report.summary,
+            )
+        else:
+            logger.warning(
+                "Validation at %s→%s transition: optimization trend is NOT robust (%s); "
+                "continuing with phase transition",
+                old_phase,
+                new_phase,
+                report.summary,
+            )
 
     def _extract_descriptors(self, metrics: dict[str, float]) -> dict[str, float]:
         """Extract descriptor values from metrics for MAP-Elites."""
