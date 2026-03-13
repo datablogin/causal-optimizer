@@ -134,6 +134,7 @@ def _suggest_optimization(
             minimize,
             objective_name,
             focus_variables=focus_variables,
+            pomis_sets=pomis_sets,
         )
     except ImportError:
         logger.info("Ax/BoTorch not available, using surrogate-guided sampling")
