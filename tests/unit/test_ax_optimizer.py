@@ -17,6 +17,8 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
+pytest.importorskip("ax")
+
 from causal_optimizer.types import (
     SearchSpace,
     Variable,
