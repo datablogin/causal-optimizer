@@ -212,89 +212,39 @@ def _suggest_bayesian(
     minimize: bool,
     objective_name: str,
     focus_variables: list[str] | None = None,
+    pomis_sets: list[frozenset[str]] | None = None,
 ) -> dict[str, Any]:
-    """Bayesian optimization via Ax/BoTorch.
+    """Bayesian optimization via Ax/BoTorch using :class:`AxBayesianOptimizer`.
 
     If focus_variables is provided and non-empty, only those variables are
-    optimized; non-focus variables are fixed at their best-known values.
+    optimized; non-focus variables are fixed at their midpoint values.
+
+    If pomis_sets is provided, the POMIS prior is forwarded to the optimizer
+    so that candidates biased toward POMIS-only interventions are preferred.
+
+    Raises
+    ------
+    ImportError
+        Propagated from :class:`AxBayesianOptimizer` when ax-platform is not
+        installed.  The caller (``_suggest_optimization``) catches this and
+        falls back to the RF surrogate.
     """
-    from ax.service.ax_client import AxClient
+    from causal_optimizer.optimizer.bayesian import AxBayesianOptimizer
 
-    ax_client = AxClient()
-
-    # Determine which variables to optimize vs. fix
-    focus_set = set(focus_variables) if focus_variables else None
-    best = experiment_log.best_result(objective_name, minimize)
-    best_params = dict(best.parameters) if best else {}
-
-    # Build Ax parameter list (only focus variables)
-    ax_params = []
-    for var in search_space.variables:
-        if focus_set and var.name not in focus_set:
-            continue
-        if var.variable_type == VariableType.CONTINUOUS:
-            ax_params.append(
-                {
-                    "name": var.name,
-                    "type": "range",
-                    "bounds": [var.lower or 0.0, var.upper or 1.0],
-                    "value_type": "float",
-                }
-            )
-        elif var.variable_type == VariableType.INTEGER:
-            ax_params.append(
-                {
-                    "name": var.name,
-                    "type": "range",
-                    "bounds": [int(var.lower or 0), int(var.upper or 10)],
-                    "value_type": "int",
-                }
-            )
-        elif var.variable_type == VariableType.CATEGORICAL:
-            ax_params.append(
-                {
-                    "name": var.name,
-                    "type": "choice",
-                    "values": var.choices or [],
-                }
-            )
-        elif var.variable_type == VariableType.BOOLEAN:
-            ax_params.append(
-                {
-                    "name": var.name,
-                    "type": "choice",
-                    "values": [True, False],
-                }
-            )
-
-    ax_client.create_experiment(
-        name="causal_optimizer",
-        parameters=ax_params,
+    optimizer = AxBayesianOptimizer(
+        search_space=search_space,
+        objective_name=objective_name,
         minimize=minimize,
+        focus_variables=focus_variables if focus_variables else None,
+        pomis_prior=pomis_sets,
     )
 
-    # Feed historical data (only focus variable columns)
+    # Feed historical data into the optimizer
     for result in experiment_log.results:
         if objective_name in result.metrics:
-            trial_params = {
-                k: v for k, v in result.parameters.items() if not focus_set or k in focus_set
-            }
-            _, trial_index = ax_client.attach_trial(trial_params)
-            ax_client.complete_trial(
-                trial_index=trial_index,
-                raw_data={objective_name: result.metrics[objective_name]},
-            )
+            optimizer.update(result.parameters, result.metrics[objective_name])
 
-    params, _ = ax_client.get_next_trial()
-    result_params = dict(params)
-
-    # Fill in non-focus variables at best-known values
-    if focus_set:
-        for var in search_space.variables:
-            if var.name not in focus_set and var.name in best_params:
-                result_params[var.name] = best_params[var.name]
-
-    return result_params
+    return optimizer.suggest()
 
 
 def _suggest_surrogate(
