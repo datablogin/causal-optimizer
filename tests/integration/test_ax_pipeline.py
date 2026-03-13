@@ -39,7 +39,6 @@ def _run_strategy(strategy: str, seed: int, n_steps: int = 40) -> float:
         # Force ImportError on ax import so _suggest_bayesian falls back to RF
         import unittest.mock as mock
 
-        engine._ax_unavailable = True  # type: ignore[attr-defined]
         _orig_suggest = engine.suggest_next
 
         def _rf_only_suggest() -> dict:  # type: ignore[type-arg]

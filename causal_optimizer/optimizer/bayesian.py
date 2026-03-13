@@ -10,8 +10,9 @@ Graceful degradation: if ``ax`` is not installed, instantiating
 from __future__ import annotations
 
 import logging
-import random
 from typing import Any
+
+import numpy as np
 
 from causal_optimizer.types import SearchSpace, VariableType
 
@@ -147,6 +148,11 @@ class AxBayesianOptimizer:
         # Track observations for best() lookup
         self._observations: list[tuple[dict[str, Any], float]] = []
 
+        # Seeded RNG for reproducible POMIS prior sampling.
+        # Uses seed+1 to avoid collision with the AxClient random_seed so the
+        # two independent sources of randomness don't share state.
+        self._rng = np.random.default_rng(seed + 1 if seed is not None else None)
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -180,7 +186,7 @@ class AxBayesianOptimizer:
 
         # Apply POMIS prior with 80% probability.
         # _pomis_non_focus was precomputed in __init__ from the POMIS union.
-        if self._pomis_prior and random.random() < 0.8:  # noqa: S311
+        if self._pomis_prior and self._rng.random() < 0.8:
             for var_name in self._pomis_non_focus:
                 if var_name in self._midpoints:
                     result[var_name] = self._midpoints[var_name]
