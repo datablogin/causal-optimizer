@@ -134,6 +134,7 @@ def _suggest_optimization(
             minimize,
             objective_name,
             focus_variables=focus_variables,
+            pomis_sets=pomis_sets,
         )
     except ImportError:
         logger.info("Ax/BoTorch not available, using surrogate-guided sampling")
@@ -212,89 +213,57 @@ def _suggest_bayesian(
     minimize: bool,
     objective_name: str,
     focus_variables: list[str] | None = None,
+    pomis_sets: list[frozenset[str]] | None = None,
 ) -> dict[str, Any]:
-    """Bayesian optimization via Ax/BoTorch.
+    """Bayesian optimization via Ax/BoTorch using :class:`AxBayesianOptimizer`.
 
     If focus_variables is provided and non-empty, only those variables are
-    optimized; non-focus variables are fixed at their best-known values.
+    optimized; non-focus variables are fixed at their midpoint values.
+
+    If pomis_sets is provided, the POMIS prior is forwarded to the optimizer
+    so that candidates biased toward POMIS-only interventions are preferred.
+
+    Raises
+    ------
+    ImportError
+        Propagated from :class:`AxBayesianOptimizer` when ax-platform is not
+        installed.  The caller (``_suggest_optimization``) catches this and
+        falls back to the RF surrogate.
+
+    Notes
+    -----
+    **Scalability**: a fresh ``AxBayesianOptimizer`` is created on every call
+    and all historical results are replayed via ``update()`` in O(N) time.
+    For typical experiment budgets (N < 200) this is negligible, but at larger
+    scales consider caching the optimizer instance on the engine so history is
+    loaded incrementally (one ``update()`` per new result rather than all N).
+
+    **Double POMIS enforcement**: The caller (``_suggest_optimization``) may
+    already constrain ``focus_variables`` to the POMIS intersection (hard
+    constraint — non-focus vars always at midpoint).  Passing ``pomis_sets``
+    here adds a second, *soft* layer: 80% of the time non-POMIS *active*
+    variables are clamped to midpoint, and the remaining 20% explore the full
+    active space.  The two levels are complementary: the hard constraint from
+    ``focus_variables`` eliminates clearly irrelevant variables, while the
+    soft POMIS prior guides Ax's acquisition function toward causally
+    identified intervention sets.
     """
-    from ax.service.ax_client import AxClient
+    from causal_optimizer.optimizer.bayesian import AxBayesianOptimizer
 
-    ax_client = AxClient()
-
-    # Determine which variables to optimize vs. fix
-    focus_set = set(focus_variables) if focus_variables else None
-    best = experiment_log.best_result(objective_name, minimize)
-    best_params = dict(best.parameters) if best else {}
-
-    # Build Ax parameter list (only focus variables)
-    ax_params = []
-    for var in search_space.variables:
-        if focus_set and var.name not in focus_set:
-            continue
-        if var.variable_type == VariableType.CONTINUOUS:
-            ax_params.append(
-                {
-                    "name": var.name,
-                    "type": "range",
-                    "bounds": [var.lower or 0.0, var.upper or 1.0],
-                    "value_type": "float",
-                }
-            )
-        elif var.variable_type == VariableType.INTEGER:
-            ax_params.append(
-                {
-                    "name": var.name,
-                    "type": "range",
-                    "bounds": [int(var.lower or 0), int(var.upper or 10)],
-                    "value_type": "int",
-                }
-            )
-        elif var.variable_type == VariableType.CATEGORICAL:
-            ax_params.append(
-                {
-                    "name": var.name,
-                    "type": "choice",
-                    "values": var.choices or [],
-                }
-            )
-        elif var.variable_type == VariableType.BOOLEAN:
-            ax_params.append(
-                {
-                    "name": var.name,
-                    "type": "choice",
-                    "values": [True, False],
-                }
-            )
-
-    ax_client.create_experiment(
-        name="causal_optimizer",
-        parameters=ax_params,
+    optimizer = AxBayesianOptimizer(
+        search_space=search_space,
+        objective_name=objective_name,
         minimize=minimize,
+        focus_variables=focus_variables if focus_variables else None,
+        pomis_prior=pomis_sets,
     )
 
-    # Feed historical data (only focus variable columns)
+    # Feed historical data into the optimizer (O(N) replay — see Notes above)
     for result in experiment_log.results:
         if objective_name in result.metrics:
-            trial_params = {
-                k: v for k, v in result.parameters.items() if not focus_set or k in focus_set
-            }
-            _, trial_index = ax_client.attach_trial(trial_params)
-            ax_client.complete_trial(
-                trial_index=trial_index,
-                raw_data={objective_name: result.metrics[objective_name]},
-            )
+            optimizer.update(result.parameters, result.metrics[objective_name])
 
-    params, _ = ax_client.get_next_trial()
-    result_params = dict(params)
-
-    # Fill in non-focus variables at best-known values
-    if focus_set:
-        for var in search_space.variables:
-            if var.name not in focus_set and var.name in best_params:
-                result_params[var.name] = best_params[var.name]
-
-    return result_params
+    return optimizer.suggest()
 
 
 def _suggest_surrogate(
@@ -370,17 +339,7 @@ def _get_focus_variables(
     if causal_graph is None:
         return search_space.variable_names
 
-    # Find ancestors of the objective in the DAG
-    ancestors: set[str] = set()
-    frontier = {objective_name}
-    while frontier:
-        node = frontier.pop()
-        for u, v in causal_graph.edges:
-            if v == node and u not in ancestors:
-                ancestors.add(u)
-                frontier.add(u)
-
-    # Intersect with search space variables
+    ancestors = causal_graph.ancestors(objective_name)
     focus = [v for v in search_space.variable_names if v in ancestors]
     return focus if focus else search_space.variable_names
 

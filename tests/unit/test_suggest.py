@@ -211,8 +211,9 @@ def test_suggest_optimization_with_pomis_constrains_focus():
     # so second set {"y", "z"} is chosen
     pomis_sets = [frozenset({"x"}), frozenset({"y", "z"})]
 
-    with patch("causal_optimizer.optimizer.suggest._suggest_surrogate") as mock_surrogate:
-        mock_surrogate.return_value = {"x": 1.0, "y": 2.0, "z": 3.0}
+    # Patch _suggest_bayesian (the first path tried) to capture focus_variables
+    with patch("causal_optimizer.optimizer.suggest._suggest_bayesian") as mock_bayesian:
+        mock_bayesian.return_value = {"x": 1.0, "y": 2.0, "z": 3.0}
         _suggest_optimization(
             ss,
             log,
@@ -221,13 +222,9 @@ def test_suggest_optimization_with_pomis_constrains_focus():
             objective_name="objective",
             pomis_sets=pomis_sets,
         )
-        # The focus_variables passed to the surrogate should be from the chosen POMIS set
-        call_args = mock_surrogate.call_args
-        focus = (
-            call_args[0][2]
-            if len(call_args[0]) > 2
-            else call_args.kwargs.get("focus_variables", [])
-        )
+        # The focus_variables passed to _suggest_bayesian should be from the chosen POMIS set
+        call_kwargs = mock_bayesian.call_args.kwargs
+        focus = call_kwargs.get("focus_variables", [])
         # Round-robin picks set at index 1: {"y", "z"}
         # No graph, so existing focus is all vars — intersection with POMIS = POMIS set
         focus_set = frozenset(focus)
@@ -245,8 +242,8 @@ def test_suggest_optimization_pomis_intersects_with_graph_focus():
     # With 5 experiments, round-robin index = 5 % 1 = 0
     pomis_sets = [frozenset({"x", "y"})]
 
-    with patch("causal_optimizer.optimizer.suggest._suggest_surrogate") as mock_surrogate:
-        mock_surrogate.return_value = {"x": 1.0, "y": 2.0, "z": 3.0}
+    with patch("causal_optimizer.optimizer.suggest._suggest_bayesian") as mock_bayesian:
+        mock_bayesian.return_value = {"x": 1.0, "y": 2.0, "z": 3.0}
         _suggest_optimization(
             ss,
             log,
@@ -255,12 +252,8 @@ def test_suggest_optimization_pomis_intersects_with_graph_focus():
             objective_name="objective",
             pomis_sets=pomis_sets,
         )
-        call_args = mock_surrogate.call_args
-        focus = (
-            call_args[0][2]
-            if len(call_args[0]) > 2
-            else call_args.kwargs.get("focus_variables", [])
-        )
+        call_kwargs = mock_bayesian.call_args.kwargs
+        focus = call_kwargs.get("focus_variables", [])
         # POMIS focus {x, y} intersected with graph focus {x} = {x}
         assert set(focus) == {"x"}
 
@@ -275,8 +268,8 @@ def test_suggest_optimization_pomis_fallback_when_no_intersection():
     # POMIS set has x and y, which don't overlap with graph focus {z}
     pomis_sets = [frozenset({"x", "y"})]
 
-    with patch("causal_optimizer.optimizer.suggest._suggest_surrogate") as mock_surrogate:
-        mock_surrogate.return_value = {"x": 1.0, "y": 2.0, "z": 3.0}
+    with patch("causal_optimizer.optimizer.suggest._suggest_bayesian") as mock_bayesian:
+        mock_bayesian.return_value = {"x": 1.0, "y": 2.0, "z": 3.0}
         _suggest_optimization(
             ss,
             log,
@@ -285,12 +278,8 @@ def test_suggest_optimization_pomis_fallback_when_no_intersection():
             objective_name="objective",
             pomis_sets=pomis_sets,
         )
-        call_args = mock_surrogate.call_args
-        focus = (
-            call_args[0][2]
-            if len(call_args[0]) > 2
-            else call_args.kwargs.get("focus_variables", [])
-        )
+        call_kwargs = mock_bayesian.call_args.kwargs
+        focus = call_kwargs.get("focus_variables", [])
         # No intersection, so fall back to POMIS-only {x, y}
         assert set(focus) == {"x", "y"}
 
@@ -300,8 +289,8 @@ def test_suggest_optimization_without_pomis_unchanged():
     ss = _make_search_space()
     log = _make_experiment_log(n=5)
 
-    with patch("causal_optimizer.optimizer.suggest._suggest_surrogate") as mock_surrogate:
-        mock_surrogate.return_value = {"x": 1.0, "y": 2.0, "z": 3.0}
+    with patch("causal_optimizer.optimizer.suggest._suggest_bayesian") as mock_bayesian:
+        mock_bayesian.return_value = {"x": 1.0, "y": 2.0, "z": 3.0}
         _suggest_optimization(
             ss,
             log,
@@ -310,12 +299,8 @@ def test_suggest_optimization_without_pomis_unchanged():
             objective_name="objective",
             pomis_sets=None,
         )
-        call_args = mock_surrogate.call_args
-        focus = (
-            call_args[0][2]
-            if len(call_args[0]) > 2
-            else call_args.kwargs.get("focus_variables", [])
-        )
+        call_kwargs = mock_bayesian.call_args.kwargs
+        focus = call_kwargs.get("focus_variables", [])
         # Without POMIS, all variables should be in focus (no graph either)
         assert set(focus) == {"x", "y", "z"}
 
