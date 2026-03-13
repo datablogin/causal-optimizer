@@ -228,6 +228,14 @@ def _suggest_bayesian(
         Propagated from :class:`AxBayesianOptimizer` when ax-platform is not
         installed.  The caller (``_suggest_optimization``) catches this and
         falls back to the RF surrogate.
+
+    Notes
+    -----
+    **Scalability**: a fresh ``AxBayesianOptimizer`` is created on every call
+    and all historical results are replayed via ``update()`` in O(N) time.
+    For typical experiment budgets (N < 200) this is negligible, but at larger
+    scales consider caching the optimizer instance on the engine so history is
+    loaded incrementally (one ``update()`` per new result rather than all N).
     """
     from causal_optimizer.optimizer.bayesian import AxBayesianOptimizer
 
@@ -239,7 +247,7 @@ def _suggest_bayesian(
         pomis_prior=pomis_sets,
     )
 
-    # Feed historical data into the optimizer
+    # Feed historical data into the optimizer (O(N) replay — see Notes above)
     for result in experiment_log.results:
         if objective_name in result.metrics:
             optimizer.update(result.parameters, result.metrics[objective_name])

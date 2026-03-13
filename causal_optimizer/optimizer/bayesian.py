@@ -195,6 +195,17 @@ class AxBayesianOptimizer:
         and immediately completed (historical data loading).
 
         Only the active-variable subset of ``params`` is forwarded to Ax.
+
+        .. warning::
+            When a pending trial exists, ``params`` may differ from the
+            parameters that ``suggest()`` proposed (e.g. if the caller modified
+            them before running the experiment).  Ax always records the
+            *generated* parameters for the pending trial; the caller-supplied
+            ``params`` are used only for the ``_observations`` list (which
+            powers ``best()``).  If you need Ax's model to reflect the actual
+            run parameters, call ``update()`` without a preceding ``suggest()``
+            so the observation is attached as a fresh trial with the correct
+            parameter values.
         """
         active_params = {k: v for k, v in params.items() if k in self._active_names}
 

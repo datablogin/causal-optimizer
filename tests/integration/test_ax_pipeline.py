@@ -9,6 +9,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+pytest.importorskip("ax", reason="ax-platform required; install with: uv sync --extra bayesian")
+
 from causal_optimizer.benchmarks.toy_graph import ToyGraphBenchmark
 from causal_optimizer.engine.loop import ExperimentEngine
 
@@ -29,9 +31,9 @@ def _run_strategy(strategy: str, seed: int, n_steps: int = 40) -> float:
     )
 
     if strategy == "bayesian":
-        # Monkey-patch engine to use AxBayesianOptimizer
-        # by ensuring ax is available; the suggest.py _suggest_bayesian already
-        # calls AxClient directly. We just run the engine as-is.
+        # The engine's optimization phase calls _suggest_bayesian in suggest.py,
+        # which instantiates AxBayesianOptimizer.  No patching needed — ax is
+        # available (guaranteed by the importorskip at module level).
         pass
     elif strategy == "surrogate":
         # Force ImportError on ax import so _suggest_bayesian falls back to RF
