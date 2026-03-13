@@ -273,7 +273,10 @@ class AxBayesianOptimizer:
                     {
                         "name": var.name,
                         "type": "range",
-                        "bounds": [var.lower or 0.0, var.upper or 1.0],
+                        "bounds": [
+                            var.lower if var.lower is not None else 0.0,
+                            var.upper if var.upper is not None else 1.0,
+                        ],
                         "value_type": "float",
                     }
                 )
@@ -282,7 +285,10 @@ class AxBayesianOptimizer:
                     {
                         "name": var.name,
                         "type": "range",
-                        "bounds": [int(var.lower or 0), int(var.upper or 10)],
+                        "bounds": [
+                            int(var.lower) if var.lower is not None else 0,
+                            int(var.upper) if var.upper is not None else 10,
+                        ],
                         "value_type": "int",
                     }
                 )

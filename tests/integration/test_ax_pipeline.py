@@ -6,7 +6,7 @@ Asserts Ax mean final objective ≤ RF mean final objective × 1.1.
 
 from __future__ import annotations
 
-from typing import Any
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -32,26 +32,21 @@ def _run_strategy(strategy: str, seed: int, n_steps: int = 40) -> float:
         max_skips=0,
     )
 
-    if strategy == "bayesian":
-        # The engine's optimization phase calls _suggest_bayesian in suggest.py,
-        # which instantiates AxBayesianOptimizer.  No patching needed — ax is
-        # available (guaranteed by the importorskip at module level).
-        pass
-    elif strategy == "surrogate":
-        # Force ImportError on ax import so _suggest_bayesian falls back to RF
-        import unittest.mock as mock
+    if strategy == "surrogate":
+        # Patch _suggest_bayesian to raise ImportError so _suggest_optimization
+        # falls back to the RF surrogate.  Patching sys.modules for 'ax' does not
+        # reliably work because bayesian.py caches _AX_AVAILABLE at import time.
+        # Raising ImportError directly simulates the Ax-unavailable condition that
+        # _suggest_optimization is designed to catch.
+        with patch(
+            "causal_optimizer.optimizer.suggest._suggest_bayesian",
+            side_effect=ImportError("ax-platform not available"),
+        ):
+            log = engine.run_loop(n_experiments=n_steps)
+    else:
+        # strategy == "bayesian": run as-is; optimization phase uses AxBayesianOptimizer
+        log = engine.run_loop(n_experiments=n_steps)
 
-        _orig_suggest = engine.suggest_next
-
-        def _rf_only_suggest() -> dict[str, Any]:
-            import sys
-
-            with mock.patch.dict(sys.modules, {"ax": None, "ax.service.ax_client": None}):
-                return _orig_suggest()
-
-        engine.suggest_next = _rf_only_suggest  # type: ignore[method-assign]
-
-    log = engine.run_loop(n_experiments=n_steps)
     best = log.best_result("objective", minimize=True)
     return best.metrics["objective"] if best is not None else float("inf")
 
