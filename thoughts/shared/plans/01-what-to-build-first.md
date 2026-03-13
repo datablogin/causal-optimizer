@@ -459,9 +459,9 @@ flag when results are fragile.
 After Week 3 (benchmarks), we should be able to show:
 
 1. **On ToyGraph**: causal-optimizer converges in ~5 experiments; random search takes ~20
-2. **On CompleteGraph**: causal-optimizer explores 5 POMIS members; naive explores 64 subsets
+2. ✓ **On CompleteGraph**: causal-optimizer explores 5 POMIS members; naive explores 64 subsets
 3. **On high-dim sparse**: causal-optimizer finds optimum in O(k) experiments where k is
    number of causal ancestors; naive takes O(d) where d >> k
-4. **On interaction benchmark**: factorial screening detects the A×B interaction; greedy misses it
+4. ✓ **On interaction benchmark**: factorial screening detects the A×B interaction; greedy misses it
 
 These results would constitute a publishable contribution.

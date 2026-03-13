@@ -7,11 +7,12 @@ import pytest
 
 from causal_optimizer.benchmarks.complete_graph import CompleteGraphBenchmark
 from causal_optimizer.benchmarks.interaction import InteractionBenchmark
+from causal_optimizer.benchmarks.interaction_scm import InteractionSCM
 from causal_optimizer.benchmarks.toy_graph import ToyGraphBenchmark
 from causal_optimizer.engine.loop import ExperimentEngine
 from causal_optimizer.types import CausalGraph, SearchSpace, VariableType
 
-ALL_BENCHMARKS = [ToyGraphBenchmark, CompleteGraphBenchmark, InteractionBenchmark]
+ALL_BENCHMARKS = [ToyGraphBenchmark, CompleteGraphBenchmark, InteractionBenchmark, InteractionSCM]
 
 
 class TestToyGraph:
@@ -190,7 +191,7 @@ class TestInteraction:
 @pytest.mark.parametrize(
     "benchmark_cls",
     ALL_BENCHMARKS,
-    ids=["toy_graph", "complete_graph", "interaction"],
+    ids=["toy_graph", "complete_graph", "interaction", "interaction_scm"],
 )
 class TestBenchmarkProtocol:
     """Tests that all benchmarks satisfy the ExperimentRunner protocol."""
