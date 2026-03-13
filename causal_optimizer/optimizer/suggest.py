@@ -237,6 +237,16 @@ def _suggest_bayesian(
     For typical experiment budgets (N < 200) this is negligible, but at larger
     scales consider caching the optimizer instance on the engine so history is
     loaded incrementally (one ``update()`` per new result rather than all N).
+
+    **Double POMIS enforcement**: The caller (``_suggest_optimization``) may
+    already constrain ``focus_variables`` to the POMIS intersection (hard
+    constraint — non-focus vars always at midpoint).  Passing ``pomis_sets``
+    here adds a second, *soft* layer: 80% of the time non-POMIS *active*
+    variables are clamped to midpoint, and the remaining 20% explore the full
+    active space.  The two levels are complementary: the hard constraint from
+    ``focus_variables`` eliminates clearly irrelevant variables, while the
+    soft POMIS prior guides Ax's acquisition function toward causally
+    identified intervention sets.
     """
     from causal_optimizer.optimizer.bayesian import AxBayesianOptimizer
 

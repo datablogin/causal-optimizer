@@ -239,8 +239,13 @@ class AxBayesianOptimizer:
             self._pending_trial_idx = None
         else:
             # Pre-load historical observation: attach a new trial and complete immediately.
-            # Only forward active-variable values to Ax.
-            active_params = {k: v for k, v in params.items() if k in self._active_names}
+            # Only forward active-variable values to Ax.  Boolean values must be
+            # cast to float because Ax represents them as a [0, 1] range parameter.
+            active_params = {
+                k: (float(v) if isinstance(v, bool) else v)
+                for k, v in params.items()
+                if k in self._active_names
+            }
             _, trial_idx = self._client.attach_trial(active_params)
             self._client.complete_trial(
                 trial_index=trial_idx,
