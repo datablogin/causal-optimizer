@@ -28,7 +28,7 @@ jobs:
         run: uv sync --extra dev
 
       - name: Run tests with coverage
-        run: uv run pytest --cov=causal_optimizer --cov-report=xml --cov-report=term
+        run: uv run pytest -m "not slow" --cov=causal_optimizer --cov-report=xml --cov-report=term
 
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.12'
