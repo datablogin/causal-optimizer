@@ -292,9 +292,7 @@ def test_ax_optimizer_boolean_variable_and_midpoints() -> None:
             Variable(name="cont", variable_type=VariableType.CONTINUOUS, lower=0.0, upper=4.0),
             Variable(name="flag", variable_type=VariableType.BOOLEAN),
             Variable(name="rank", variable_type=VariableType.INTEGER, lower=0, upper=10),
-            Variable(
-                name="cat", variable_type=VariableType.CATEGORICAL, choices=["a", "b", "c"]
-            ),
+            Variable(name="cat", variable_type=VariableType.CATEGORICAL, choices=["a", "b", "c"]),
         ]
     )
     # No focus_variables: all 4 types pass through _build_ax_params (covers BOOLEAN branch).
