@@ -176,14 +176,13 @@ class AxBayesianOptimizer:
             result[var.name] = self._midpoints[var.name]
 
         # Apply POMIS prior with 80% probability
-        if self._pomis_prior:
-            if random.random() < 0.8:  # noqa: S311
-                pomis_union: set[str] = set()
-                for s in self._pomis_prior:
-                    pomis_union |= s
-                for var in self._search_space.variables:
-                    if var.name not in pomis_union and var.name in self._midpoints:
-                        result[var.name] = self._midpoints[var.name]
+        if self._pomis_prior and random.random() < 0.8:  # noqa: S311
+            pomis_union: set[str] = set()
+            for s in self._pomis_prior:
+                pomis_union |= s
+            for var in self._search_space.variables:
+                if var.name not in pomis_union and var.name in self._midpoints:
+                    result[var.name] = self._midpoints[var.name]
 
         self._pending_full_params = dict(result)
         return result
