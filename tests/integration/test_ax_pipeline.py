@@ -6,6 +6,8 @@ Asserts Ax mean final objective ≤ RF mean final objective × 1.1.
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import pytest
 
@@ -41,7 +43,7 @@ def _run_strategy(strategy: str, seed: int, n_steps: int = 40) -> float:
 
         _orig_suggest = engine.suggest_next
 
-        def _rf_only_suggest() -> dict:  # type: ignore[type-arg]
+        def _rf_only_suggest() -> dict[str, Any]:
             import sys
 
             with mock.patch.dict(sys.modules, {"ax": None, "ax.service.ax_client": None}):

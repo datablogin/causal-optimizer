@@ -47,11 +47,11 @@ class AxBayesianOptimizer:
         If provided, only these variables are optimized by Ax; others are
         fixed at their midpoint value.
     pomis_prior:
-        When set, candidates that only touch POMIS variables receive a soft
-        bonus: non-POMIS variables are fixed at midpoint (equivalent to
-        treating the candidate as POMIS-only).  Implemented as a post-hoc
-        filter — 80% of the time a POMIS-only suggestion is returned,
-        20% a full-space suggestion.
+        When set, 80% of suggestions fix non-POMIS variables at their
+        midpoints so the optimizer only varies the POMIS intervention set;
+        the remaining 20% explore the full space.  This is a post-hoc
+        hard constraint applied after ``get_next_trial()``, not a soft
+        bonus in the acquisition function.
     seed:
         Random seed forwarded to ``AxClient`` for reproducibility.
 
@@ -186,10 +186,16 @@ class AxBayesianOptimizer:
 
         # Apply POMIS prior with 80% probability.
         # _pomis_non_focus was precomputed in __init__ from the POMIS union.
-        if self._pomis_prior and self._rng.random() < 0.8:
+        if self._pomis_non_focus and self._rng.random() < 0.8:
             for var_name in self._pomis_non_focus:
                 if var_name in self._midpoints:
                     result[var_name] = self._midpoints[var_name]
+
+        # Round boolean variables: Ax returns floats from the [0, 1] range;
+        # convert back to True/False so callers always receive actual booleans.
+        for var in self._search_space.variables:
+            if var.variable_type == VariableType.BOOLEAN and var.name in result:
+                result[var.name] = bool(result[var.name] > 0.5)
 
         return result
 
@@ -279,7 +285,8 @@ class AxBayesianOptimizer:
                     }
                 )
             elif var.variable_type == VariableType.BOOLEAN:
-                # Represent booleans as a FLOAT [0, 1] range; caller rounds as needed
+                # Represent booleans as a FLOAT [0, 1] range; suggest() rounds the
+                # raw float back to True/False after get_next_trial() returns.
                 ax_params.append(
                     {
                         "name": var.name,
