@@ -82,14 +82,17 @@ class InteractionSCM:
 
     @staticmethod
     def causal_graph() -> CausalGraph:
-        """Return a causal graph: X1, X2, X3, X4, X5 → objective."""
+        """Return the true causal graph: only X1 and X2 affect objective.
+
+        X3, X4, and X5 are independent dummy variables with no causal path
+        to the outcome, so they are omitted from the graph. This matches the
+        structural equation Y = -x1 - x2 + 3*x1*x2 + noise, which does not
+        reference x3, x4, or x5.
+        """
         return CausalGraph(
             edges=[
                 ("x1", "objective"),
                 ("x2", "objective"),
-                ("x3", "objective"),
-                ("x4", "objective"),
-                ("x5", "objective"),
             ],
             bidirected_edges=[],
         )

@@ -129,10 +129,12 @@ class TestPOMISPruning:
         # The causal engine must have computed POMIS sets
         assert len(pomis_sets_counts) > 0, "Engine never computed POMIS sets"
 
-        # POMIS sets count must be << NAIVE_SEARCH_SPACE_SIZE (64)
+        # POMIS sets count must be << NAIVE_SEARCH_SPACE_SIZE (64): require ≥5× reduction
+        max_allowed = NAIVE_SEARCH_SPACE_SIZE // 5  # 64 / 5 = 12
         for count in pomis_sets_counts:
-            assert count < NAIVE_SEARCH_SPACE_SIZE, (
-                f"POMIS sets count {count} is not less than naive {NAIVE_SEARCH_SPACE_SIZE}"
+            assert count <= max_allowed, (
+                f"POMIS sets count {count} exceeds {max_allowed} "
+                f"(≥5× reduction vs. naive {NAIVE_SEARCH_SPACE_SIZE} required)"
             )
 
         # Causal should achieve at least comparable (within 30%) performance vs random

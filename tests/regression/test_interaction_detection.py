@@ -31,6 +31,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import cross_val_score
 
 from causal_optimizer.benchmarks.interaction_scm import InteractionSCM
 from causal_optimizer.designer.screening import ScreeningDesigner
@@ -55,17 +56,19 @@ def _make_interaction_log(n: int = _LOG_SIZE, seed: int = 42) -> ExperimentLog:
     Samples are drawn uniformly from [0, 1]^5 to give the ScreeningDesigner
     the continuous variation needed to detect the x1*x2 interaction signal.
     """
-    rng = np.random.default_rng(seed)
-    scm = InteractionSCM(noise_scale=_NOISE_SCALE, rng=rng)
+    root_rng = np.random.default_rng(seed)
+    param_rng = np.random.default_rng(int(root_rng.integers(0, 2**32)))
+    noise_rng = np.random.default_rng(int(root_rng.integers(0, 2**32)))
+    scm = InteractionSCM(noise_scale=_NOISE_SCALE, rng=noise_rng)
 
     results: list[ExperimentResult] = []
     for _ in range(n):
         params = {
-            "x1": float(rng.uniform(0.0, 1.0)),
-            "x2": float(rng.uniform(0.0, 1.0)),
-            "x3": float(rng.uniform(0.0, 1.0)),
-            "x4": float(rng.uniform(0.0, 1.0)),
-            "x5": float(rng.uniform(0.0, 1.0)),
+            "x1": float(param_rng.uniform(0.0, 1.0)),
+            "x2": float(param_rng.uniform(0.0, 1.0)),
+            "x3": float(param_rng.uniform(0.0, 1.0)),
+            "x4": float(param_rng.uniform(0.0, 1.0)),
+            "x5": float(param_rng.uniform(0.0, 1.0)),
         }
         metrics = scm.run(params)
         results.append(
@@ -123,9 +126,12 @@ class TestGreedyMissesInteraction:
         lower than a model that includes the product term.
 
         We average across 3 seeds so the test is robust to dataset variance.
-        The mean R² improvement from adding the x1*x2 feature must exceed 0.02
-        (2 percentage points) — a conservative threshold well below the observed
-        mean gain of ~5pp.
+        The mean cross-validated R² improvement from adding the x1*x2 feature
+        must exceed 0.02 (2 percentage points) — a conservative threshold well
+        below the observed mean gain of ~5pp.
+
+        Cross-validation (cv=5) is used instead of in-sample R² to avoid
+        over-fitting artefacts that could inflate the apparent gap.
         """
         n_avg_seeds = 3
         gaps: list[float] = []
@@ -140,12 +146,14 @@ class TestGreedyMissesInteraction:
             y = df["objective"].values
 
             rf_without = RandomForestRegressor(n_estimators=100, max_depth=3, random_state=42)
-            rf_without.fit(x_main, y)
-            score_without = float(rf_without.score(x_main, y))
+            score_without = float(
+                np.mean(cross_val_score(rf_without, x_main, y, cv=5, scoring="r2"))
+            )
 
             rf_with = RandomForestRegressor(n_estimators=100, max_depth=3, random_state=42)
-            rf_with.fit(x_with_inter, y)
-            score_with = float(rf_with.score(x_with_inter, y))
+            score_with = float(
+                np.mean(cross_val_score(rf_with, x_with_inter, y, cv=5, scoring="r2"))
+            )
 
             gaps.append(score_with - score_without)
 
