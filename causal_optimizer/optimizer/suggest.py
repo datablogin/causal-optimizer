@@ -320,17 +320,7 @@ def _get_focus_variables(
     if causal_graph is None:
         return search_space.variable_names
 
-    # Find ancestors of the objective in the DAG
-    ancestors: set[str] = set()
-    frontier = {objective_name}
-    while frontier:
-        node = frontier.pop()
-        for u, v in causal_graph.edges:
-            if v == node and u not in ancestors:
-                ancestors.add(u)
-                frontier.add(u)
-
-    # Intersect with search space variables
+    ancestors = causal_graph.ancestors(objective_name)
     focus = [v for v in search_space.variable_names if v in ancestors]
     return focus if focus else search_space.variable_names
 
