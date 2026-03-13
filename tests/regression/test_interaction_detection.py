@@ -28,7 +28,6 @@ from __future__ import annotations
 import uuid
 
 import numpy as np
-import pandas as pd
 import pytest
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import cross_val_score
@@ -47,7 +46,9 @@ from causal_optimizer.types import (
 # ──────────────────────────────────────────────────────────────────────────────
 
 _NOISE_SCALE = 0.05
-_LOG_SIZE = 40  # experiments in the screening dataset (continuous, random)
+# 40 experiments for screening: well above ScreeningDesigner's minimum of 10,
+# provides robust signal for the x1*x2 interaction with 5-fold cross-validation.
+_LOG_SIZE = 40
 
 
 def _make_interaction_log(n: int = _LOG_SIZE, seed: int = 42) -> ExperimentLog:
@@ -142,7 +143,7 @@ class TestGreedyMissesInteraction:
             x1 = df["x1"].values
             x2 = df["x2"].values
             x_main = df[["x1", "x2"]].values
-            x_with_inter = pd.DataFrame({"x1": x1, "x2": x2, "interaction": x1 * x2}).values
+            x_with_inter = np.column_stack([x1, x2, x1 * x2])
             y = df["objective"].values
 
             rf_without = RandomForestRegressor(n_estimators=100, max_depth=3, random_state=42)
@@ -190,6 +191,9 @@ class TestCausalFindsInteraction:
             engine.step()
 
         kept = [r for r in engine.log.results if r.status == ExperimentStatus.KEEP]
+        # Require x1, x2 > 0.7 rather than 1.0: the engine only runs 30 steps,
+        # noise (scale=0.05) prevents exact convergence, and correlation-based
+        # discovery is a heuristic that may not fully constrain the search.
         found = any(
             float(r.parameters.get("x1", 0.0)) > 0.7 and float(r.parameters.get("x2", 0.0)) > 0.7
             for r in kept

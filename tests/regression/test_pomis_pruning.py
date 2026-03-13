@@ -147,13 +147,16 @@ class TestPOMISPruning:
                 f"on CompleteGraph. POMIS guidance may be causing harm."
             )
 
-    def test_pomis_pruning_ratio(self, bench: CompleteGraphBenchmark) -> None:
+    def test_pomis_pruning_ratio(self) -> None:
         """POMIS reduces the effective search space by ≥ 5× vs. naive 64 subsets.
 
         The engine's computed POMIS sets must number ≤ 64 / 5 = 12 sets.
         This verifies the POMIS algorithm provides meaningful pruning:
         the causal optimizer considers at most ~20% of the variable subsets
         that a naive strategy would try.
+
+        This is a focused single-seed test for the pruning ratio claim.
+        For multi-seed performance validation, see test_pomis_prunes_search_space.
         """
         graph = CompleteGraphBenchmark.causal_graph()
         space = CompleteGraphBenchmark.search_space()
