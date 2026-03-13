@@ -14,10 +14,12 @@ modules — each test class must be decorated with ``@pytest.mark.slow``.
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
 from causal_optimizer.benchmarks import CompleteGraphBenchmark
 from causal_optimizer.benchmarks.runner import BenchmarkRunner
+from causal_optimizer.engine.loop import ExperimentEngine
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Constants
@@ -51,9 +53,7 @@ class TestCompleteGraphPOMIS:
         Table 1 in Aglietti et al. (AISTATS 2020).
         """
         pomis = CompleteGraphBenchmark.known_pomis()
-        assert len(pomis) == 5, (
-            f"Expected 5 POMIS sets, got {len(pomis)}: {pomis}"
-        )
+        assert len(pomis) == 5, f"Expected 5 POMIS sets, got {len(pomis)}: {pomis}"
 
     def test_complete_graph_pomis_members(self) -> None:
         """known_pomis() must list exactly the 5 paper-defined sets."""
@@ -94,15 +94,10 @@ class TestPOMISPruning:
         We also verify that the causal engine's final best objective is at least
         as good as random search, confirming the POMIS guidance is helpful.
         """
-        import numpy as np
-
-        from causal_optimizer.engine.loop import ExperimentEngine
-
         graph = CompleteGraphBenchmark.causal_graph()
         space = CompleteGraphBenchmark.search_space()
 
         causal_finals: list[float] = []
-        random_finals: list[float] = []
         pomis_sets_counts: list[int] = []
 
         for seed in range(N_SEEDS):
@@ -158,10 +153,6 @@ class TestPOMISPruning:
         the causal optimizer considers at most ~20% of the variable subsets
         that a naive strategy would try.
         """
-        import numpy as np
-
-        from causal_optimizer.engine.loop import ExperimentEngine
-
         graph = CompleteGraphBenchmark.causal_graph()
         space = CompleteGraphBenchmark.search_space()
 
@@ -178,9 +169,7 @@ class TestPOMISPruning:
             engine.step()
 
         pomis_sets = engine.pomis_sets
-        assert pomis_sets is not None, (
-            "Engine did not compute POMIS sets after exploration phase."
-        )
+        assert pomis_sets is not None, "Engine did not compute POMIS sets after exploration phase."
 
         pomis_count = len(pomis_sets)
         max_allowed = NAIVE_SEARCH_SPACE_SIZE // 5  # 64 / 5 = 12

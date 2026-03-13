@@ -28,11 +28,13 @@ from __future__ import annotations
 import uuid
 
 import numpy as np
+import pandas as pd
 import pytest
 from sklearn.ensemble import RandomForestRegressor
 
 from causal_optimizer.benchmarks.interaction_scm import InteractionSCM
 from causal_optimizer.designer.screening import ScreeningDesigner
+from causal_optimizer.engine.loop import ExperimentEngine
 from causal_optimizer.types import (
     ExperimentLog,
     ExperimentResult,
@@ -125,8 +127,6 @@ class TestGreedyMissesInteraction:
         (2 percentage points) — a conservative threshold well below the observed
         mean gain of ~5pp.
         """
-        import pandas as pd
-
         n_avg_seeds = 3
         gaps: list[float] = []
 
@@ -136,9 +136,7 @@ class TestGreedyMissesInteraction:
             x1 = df["x1"].values
             x2 = df["x2"].values
             x_main = df[["x1", "x2"]].values
-            x_with_inter = pd.DataFrame(
-                {"x1": x1, "x2": x2, "interaction": x1 * x2}
-            ).values
+            x_with_inter = pd.DataFrame({"x1": x1, "x2": x2, "interaction": x1 * x2}).values
             y = df["objective"].values
 
             rf_without = RandomForestRegressor(n_estimators=100, max_depth=3, random_state=42)
@@ -170,8 +168,6 @@ class TestCausalFindsInteraction:
         correlated inputs and converge toward X1=1, X2=1 (objective ≈ -1).
         At least one kept result must have X1 > 0.7 and X2 > 0.7.
         """
-        from causal_optimizer.engine.loop import ExperimentEngine
-
         rng = np.random.default_rng(0)
         scm = InteractionSCM(noise_scale=_NOISE_SCALE, rng=rng)
         space = InteractionSCM.search_space()
@@ -185,14 +181,9 @@ class TestCausalFindsInteraction:
         for _ in range(30):
             engine.step()
 
-        kept = [
-            r
-            for r in engine.log.results
-            if r.status == ExperimentStatus.KEEP
-        ]
+        kept = [r for r in engine.log.results if r.status == ExperimentStatus.KEEP]
         found = any(
-            float(r.parameters.get("x1", 0.0)) > 0.7
-            and float(r.parameters.get("x2", 0.0)) > 0.7
+            float(r.parameters.get("x1", 0.0)) > 0.7 and float(r.parameters.get("x2", 0.0)) > 0.7
             for r in kept
         )
 
