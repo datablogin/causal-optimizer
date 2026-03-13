@@ -146,12 +146,12 @@ class TestGreedyMissesInteraction:
             x_with_inter = np.column_stack([x1, x2, x1 * x2])
             y = df["objective"].values
 
-            rf_without = RandomForestRegressor(n_estimators=100, max_depth=3, random_state=42)
+            rf_without = RandomForestRegressor(n_estimators=100, max_depth=3, random_state=seed)
             score_without = float(
                 np.mean(cross_val_score(rf_without, x_main, y, cv=5, scoring="r2"))
             )
 
-            rf_with = RandomForestRegressor(n_estimators=100, max_depth=3, random_state=42)
+            rf_with = RandomForestRegressor(n_estimators=100, max_depth=3, random_state=seed)
             score_with = float(
                 np.mean(cross_val_score(rf_with, x_with_inter, y, cv=5, scoring="r2"))
             )
