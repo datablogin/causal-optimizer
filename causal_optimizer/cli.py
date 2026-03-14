@@ -167,6 +167,7 @@ def _cmd_report(args: argparse.Namespace) -> None:
 
     obj_flag = getattr(args, "objective_name", None)
     objective_name: str = obj_flag if obj_flag is not None else "objective"
+    # --maximize → minimize=False; otherwise default to minimize=True
     minimize = not getattr(args, "maximize", False)
     n_kept = sum(1 for r in log.results if r.status == ExperimentStatus.KEEP)
     n_discarded = sum(1 for r in log.results if r.status == ExperimentStatus.DISCARD)

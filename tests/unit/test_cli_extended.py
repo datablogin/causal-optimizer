@@ -461,12 +461,57 @@ class TestReportUsesCorrectObjective:
             db="test.db",
             format="table",
             objective_name="custom_obj",
+            minimize=False,
+            maximize=False,
         )
         _cmd_report(args)
 
         captured = capsys.readouterr()
         # The report should show the actual objective value, not 'N/A'
         assert "1.23" in captured.out
+
+    @patch("causal_optimizer.cli.ExperimentStore")
+    def test_report_maximize_selects_largest(
+        self,
+        mock_store_cls: MagicMock,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Report with --maximize should select the result with the largest value."""
+        low = ExperimentResult(
+            experiment_id="r-low",
+            parameters={"x": 0.1},
+            metrics={"score": 1.0},
+            status=ExperimentStatus.KEEP,
+            metadata={"phase": "exploration"},
+        )
+        high = ExperimentResult(
+            experiment_id="r-high",
+            parameters={"x": 0.9},
+            metrics={"score": 9.0},
+            status=ExperimentStatus.KEEP,
+            metadata={"phase": "exploration"},
+        )
+        log = ExperimentLog(results=[low, high])
+
+        mock_store = MagicMock()
+        mock_store.__enter__ = MagicMock(return_value=mock_store)
+        mock_store.__exit__ = MagicMock(return_value=False)
+        mock_store.load_log.return_value = log
+        mock_store_cls.return_value = mock_store
+
+        args = argparse.Namespace(
+            id="test-exp",
+            db="test.db",
+            format="table",
+            objective_name="score",
+            minimize=False,
+            maximize=True,
+        )
+        _cmd_report(args)
+
+        captured = capsys.readouterr()
+        # With --maximize, the best result should be 9.0, not 1.0
+        assert "9.0" in captured.out
 
     @patch("causal_optimizer.cli._load_adapter")
     @patch("causal_optimizer.cli.ExperimentEngine")
