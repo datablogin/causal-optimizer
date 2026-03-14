@@ -103,7 +103,14 @@ class CausalGPSurrogate:
         for node in self._topo_order:
             parents = sorted(self._causal_graph.parents(node))
             if not parents:
-                # Root node — no GP needed; will use observed distribution or intervention
+                # Root node — no GP needed, but store observed stats for
+                # predict_interventional fallback when node is not intervened on.
+                if node in df.columns:
+                    root_data = df[node].values.astype(np.float64)
+                    self._node_stats[node] = (
+                        float(np.mean(root_data)),
+                        max(float(np.std(root_data)), 1e-10),
+                    )
                 continue
 
             # Check all parents and node are in the dataframe
@@ -201,6 +208,9 @@ class CausalGPSurrogate:
         interventional prediction for each, and selects the one with
         the highest Expected Improvement.
         """
+        if n_candidates < 1:
+            raise ValueError(f"n_candidates must be >= 1, got {n_candidates}")
+
         # Generate random candidates
         candidates: list[dict[str, float]] = []
         for _ in range(n_candidates):

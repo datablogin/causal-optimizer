@@ -190,6 +190,8 @@ def _suggest_optimization(
             )
         except ImportError:
             logger.info("botorch/gpytorch not available for causal_gp, falling back to bayesian")
+        except Exception as exc:
+            logger.warning("causal_gp surrogate failed (%s), falling back to bayesian", exc)
             # Fall through to bayesian / RF surrogate
 
     # Try Bayesian optimization via Ax
