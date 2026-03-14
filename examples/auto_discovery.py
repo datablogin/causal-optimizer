@@ -16,8 +16,9 @@ from causal_optimizer.types import SearchSpace, Variable, VariableType
 
 
 class _DiscoveryRunner:
-    """3-variable SCM: X1 -> X2 -> objective. X3 is noise (irrelevant).
+    """3-variable SCM where X1 and X2 both affect objective; X3 is noise.
 
+    X1 modulates X2's effect on the objective: obj = (x2 + 0.5*x1 - 2)^2.
     The engine should discover that X1 and X2 matter but X3 does not.
     """
 
