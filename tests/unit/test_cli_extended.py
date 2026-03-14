@@ -16,6 +16,7 @@ from unittest.mock import MagicMock, patch
 
 from causal_optimizer.cli import (
     _adapter_engine_kwargs,
+    _apply_cli_overrides,
     _cmd_report,
     _cmd_resume,
     _cmd_run,
@@ -514,3 +515,104 @@ class TestReportUsesCorrectObjective:
 
         captured = capsys.readouterr()
         assert "3.14" in captured.out
+
+
+class TestApplyCliOverrides:
+    """Direct unit tests for _apply_cli_overrides."""
+
+    def test_no_flags_set_preserves_kwargs(self) -> None:
+        kwargs: dict[str, Any] = {
+            "objective_name": "loss",
+            "minimize": False,
+            "strategy": "causal_gp",
+            "discovery_method": "correlation",
+        }
+        args = argparse.Namespace(
+            objective_name=None,
+            minimize=False,
+            maximize=False,
+            strategy=None,
+            discovery_method=None,
+        )
+        _apply_cli_overrides(kwargs, args)
+        # All values should be preserved from the adapter
+        assert kwargs["objective_name"] == "loss"
+        assert kwargs["minimize"] is False
+        assert kwargs["strategy"] == "causal_gp"
+        assert kwargs["discovery_method"] == "correlation"
+
+    def test_all_flags_override(self) -> None:
+        kwargs: dict[str, Any] = {
+            "objective_name": "loss",
+            "minimize": False,
+            "strategy": "causal_gp",
+        }
+        args = argparse.Namespace(
+            objective_name="revenue",
+            minimize=True,
+            maximize=False,
+            strategy="bayesian",
+            discovery_method="pc",
+        )
+        _apply_cli_overrides(kwargs, args)
+        assert kwargs["objective_name"] == "revenue"
+        assert kwargs["minimize"] is True
+        assert kwargs["strategy"] == "bayesian"
+        assert kwargs["discovery_method"] == "pc"
+
+    def test_neither_minimize_nor_maximize_preserves_adapter(self) -> None:
+        """When neither --minimize nor --maximize is set, adapter value is kept."""
+        kwargs: dict[str, Any] = {"minimize": False}
+        args = argparse.Namespace(
+            objective_name=None,
+            minimize=False,
+            maximize=False,
+            strategy=None,
+            discovery_method=None,
+        )
+        _apply_cli_overrides(kwargs, args)
+        assert kwargs["minimize"] is False
+
+
+class TestBestResultUsesObjective:
+    """Test that best_result() is called with configured objective and minimize."""
+
+    @patch("causal_optimizer.cli._load_adapter")
+    @patch("causal_optimizer.cli.ExperimentEngine")
+    @patch("causal_optimizer.cli.ExperimentStore")
+    def test_run_calls_best_result_with_objective(
+        self,
+        mock_store_cls: MagicMock,
+        mock_engine_cls: MagicMock,
+        mock_load: MagicMock,
+    ) -> None:
+        adapter = _StubAdapter()
+        mock_load.return_value = adapter
+
+        mock_store = MagicMock()
+        mock_store.__enter__ = MagicMock(return_value=mock_store)
+        mock_store.__exit__ = MagicMock(return_value=False)
+        mock_store.experiment_exists.return_value = False
+        mock_store_cls.return_value = mock_store
+
+        mock_engine = MagicMock()
+        mock_engine.log.best_result.return_value = None
+        mock_engine_cls.return_value = mock_engine
+
+        with tempfile.NamedTemporaryFile(suffix=".db") as f:
+            args = argparse.Namespace(
+                adapter="mod:Cls",
+                budget=1,
+                db=f.name,
+                id=None,
+                seed=None,
+                objective_name="custom",
+                minimize=False,
+                maximize=True,
+                strategy=None,
+                discovery_method=None,
+            )
+            _cmd_run(args)
+
+        # Verify best_result was called with the correct objective_name and minimize
+        mock_engine.log.best_result.assert_called_once_with(objective_name="custom", minimize=False)

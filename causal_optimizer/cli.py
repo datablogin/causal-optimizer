@@ -123,7 +123,8 @@ def _cmd_run(args: argparse.Namespace) -> None:
         engine.run_loop(args.budget)
 
     objective_name = engine_kwargs.get("objective_name", "objective")
-    best = engine.log.best_result()
+    minimize = engine_kwargs.get("minimize", True)
+    best = engine.log.best_result(objective_name=objective_name, minimize=minimize)
     if best is not None:
         print(f"Best {objective_name}: {best.metrics.get(objective_name, 'N/A')}")
     print(f"Experiment ID: {experiment_id}")
@@ -149,7 +150,8 @@ def _cmd_resume(args: argparse.Namespace) -> None:
         engine.run_loop(args.budget)
 
     objective_name = engine_kwargs.get("objective_name", "objective")
-    best = engine.log.best_result()
+    minimize = engine_kwargs.get("minimize", True)
+    best = engine.log.best_result(objective_name=objective_name, minimize=minimize)
     if best is not None:
         print(f"Best {objective_name}: {best.metrics.get(objective_name, 'N/A')}")
 
@@ -168,7 +170,7 @@ def _cmd_report(args: argparse.Namespace) -> None:
     n_discarded = sum(1 for r in log.results if r.status == ExperimentStatus.DISCARD)
     n_crash = sum(1 for r in log.results if r.status == ExperimentStatus.CRASH)
     phases = sorted({r.metadata.get("phase", "unknown") for r in log.results})
-    best = log.best_result()
+    best = log.best_result(objective_name=objective_name)
 
     if args.format == "json":
         data: dict[str, Any] = {
