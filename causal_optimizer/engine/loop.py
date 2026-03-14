@@ -473,6 +473,18 @@ class ExperimentEngine:
             A ``(status, constraint_violated)`` tuple.  ``constraint_violated`` is
             ``True`` only when the result was discarded due to a constraint violation.
         """
+        # Multi-objective: check that at least one objective metric is present
+        if self._objectives is not None and len(self._objectives) > 1:
+            if not any(obj.name in metrics for obj in self._objectives):
+                return ExperimentStatus.CRASH, False
+
+            # Check constraints first — violated results are always discarded.
+            if not self._check_constraints(metrics):
+                return ExperimentStatus.DISCARD, True
+
+            return self._evaluate_multi_objective(metrics), False
+
+        # Single-objective: require the primary objective metric
         current_objective = metrics.get(self.objective_name)
         if current_objective is None:
             return ExperimentStatus.CRASH, False
@@ -480,10 +492,6 @@ class ExperimentEngine:
         # Check constraints first — violated results are always discarded.
         if not self._check_constraints(metrics):
             return ExperimentStatus.DISCARD, True
-
-        # Multi-objective: use Pareto dominance
-        if self._objectives is not None and len(self._objectives) > 1:
-            return self._evaluate_multi_objective(metrics), False
 
         # Single-objective path (unchanged from before)
         best = self.log.best_result(self.objective_name, self.minimize)

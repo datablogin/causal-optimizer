@@ -426,9 +426,11 @@ def _scalarize_log(
     for result in experiment_log.results:
         scalar = 0.0
         for obj in objectives:
-            # Missing metrics default to worst-case for the direction,
-            # consistent with ParetoResult.dominated_by semantics.
-            worst = float("inf") if obj.minimize else float("-inf")
+            # Missing metrics default to a large finite worst-case value for
+            # the direction, consistent with ParetoResult.dominated_by semantics.
+            # We use 1e10 instead of inf to keep surrogate training numerically
+            # stable (RF trees handle finite extremes better than inf).
+            worst = 1e10 if obj.minimize else -1e10
             val = result.metrics.get(obj.name, worst)
             # Negate maximize objectives so the surrogate always minimizes
             scalar += obj.weight * (val if obj.minimize else -val)
