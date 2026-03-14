@@ -83,10 +83,18 @@ class Constraint(BaseModel):
     lower_bound: float | None = None
 
     def is_satisfied(self, metrics: dict[str, float]) -> bool:
-        """Return True if the constraint is satisfied by the given metrics."""
+        """Return True if the constraint is satisfied by the given metrics.
+
+        If the constrained metric is absent from *metrics*, the constraint is
+        treated as satisfied (not violated).  A missing metric indicates the
+        runner did not produce it — this is a partial failure, not a bound
+        exceedance.  Callers that need to distinguish missing metrics should
+        inspect ``metrics`` directly.
+        """
         value = metrics.get(self.metric_name)
         if value is None:
-            return False
+            # Metric not produced — not a constraint violation.
+            return True
         if self.upper_bound is not None and value > self.upper_bound:
             return False
         return not (self.lower_bound is not None and value < self.lower_bound)
