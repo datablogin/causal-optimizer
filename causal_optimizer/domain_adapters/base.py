@@ -11,7 +11,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from causal_optimizer.types import CausalGraph, SearchSpace
+    from causal_optimizer.types import CausalGraph, Constraint, ObjectiveSpec, SearchSpace
 
 
 class DomainAdapter(ABC):
@@ -34,3 +34,46 @@ class DomainAdapter(ABC):
     def get_descriptor_names(self) -> list[str]:
         """Return behavioral descriptor names for MAP-Elites diversity."""
         return []
+
+    def get_objective_name(self) -> str:
+        """Return the primary objective metric name.
+
+        Default is ``"objective"``.  Override to match domain-specific metric names.
+        """
+        return "objective"
+
+    def get_minimize(self) -> bool:
+        """Return whether the objective should be minimized.
+
+        Default is ``True``.  Override to ``False`` for maximization problems.
+        """
+        return True
+
+    def get_strategy(self) -> str:
+        """Return the optimization strategy to use.
+
+        Default is ``"bayesian"``.  Valid values: ``"bayesian"``, ``"causal_gp"``.
+        """
+        return "bayesian"
+
+    def get_objectives(self) -> list[ObjectiveSpec] | None:
+        """Return multi-objective specifications, or None for single-objective.
+
+        Default is ``None`` (single-objective mode).
+        """
+        return None
+
+    def get_constraints(self) -> list[Constraint] | None:
+        """Return optimization constraints, or None for unconstrained.
+
+        Default is ``None`` (unconstrained).
+        """
+        return None
+
+    def get_discovery_method(self) -> str | None:
+        """Return the causal discovery method to use, or None to disable.
+
+        Default is ``None`` (disabled).  Valid values: ``"correlation"``,
+        ``"pc"``, ``"notears"``.
+        """
+        return None
