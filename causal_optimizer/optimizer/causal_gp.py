@@ -125,6 +125,18 @@ class CausalGPSurrogate:
                 # Node or parent not in data; skip
                 continue
 
+            # Skip non-numeric columns (CausalGP requires continuous data)
+            non_numeric = [
+                c for c in required_cols if not np.issubdtype(df[c].dtype, np.number)
+            ]
+            if non_numeric:
+                logger.warning(
+                    "Skipping GP for node %s: non-numeric columns %s",
+                    node,
+                    non_numeric,
+                )
+                continue
+
             parent_data = df[parents].values.astype(np.float64)
             node_data = df[node].values.astype(np.float64)
 
