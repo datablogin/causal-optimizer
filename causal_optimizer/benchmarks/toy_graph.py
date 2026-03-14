@@ -60,3 +60,24 @@ class ToyGraphBenchmark:
 
         y = np.cos(z) - np.exp(-z / 20) + self.rng.normal(0, self.noise_scale)
         return {"objective": -y}  # negate because we minimize; optimal Y is maximized
+
+
+class ToyGraphBiObjective(ToyGraphBenchmark):
+    """Bi-objective version of ToyGraph: objective + cost.
+
+    Same causal structure as ToyGraph (X -> Z -> Y), but returns two metrics:
+    - ``objective``: the original negated Y (minimize)
+    - ``cost``: sum of absolute parameter values (minimize)
+
+    Both objectives should be minimized.
+    """
+
+    def run(self, parameters: dict[str, Any]) -> dict[str, float]:
+        """Run the SCM and return both objective and cost metrics."""
+        x = parameters.get("x", self.rng.normal(0, 1))
+        z_structural = np.exp(-x) + self.rng.normal(0, self.noise_scale)
+        z = parameters.get("z", z_structural)
+
+        y = np.cos(z) - np.exp(-z / 20) + self.rng.normal(0, self.noise_scale)
+        cost = abs(float(x)) + abs(float(z))
+        return {"objective": -y, "cost": cost}

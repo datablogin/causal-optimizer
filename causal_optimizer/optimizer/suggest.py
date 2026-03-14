@@ -14,9 +14,19 @@ from typing import Any
 import numpy as np
 
 from causal_optimizer.predictor.encoding import encode_dataframe_for_rf, encode_params_for_rf
-from causal_optimizer.types import CausalGraph, ExperimentLog, SearchSpace, VariableType
+from causal_optimizer.types import (
+    CausalGraph,
+    ExperimentLog,
+    ObjectiveSpec,
+    SearchSpace,
+    VariableType,
+)
 
 logger = logging.getLogger(__name__)
+
+#: Reserved metric key for scalarized multi-objective values.
+#: Uses a leading underscore to avoid collision with user-defined metric names.
+_SCALARIZED_KEY = "__scalarized_objective__"
 
 
 def suggest_parameters(
@@ -29,6 +39,7 @@ def suggest_parameters(
     screened_variables: list[str] | None = None,
     base_parameters: dict[str, Any] | None = None,
     pomis_sets: list[frozenset[str]] | None = None,
+    objectives: list[ObjectiveSpec] | None = None,
 ) -> dict[str, Any]:
     """Suggest next experiment parameters based on current phase and history.
 
@@ -39,31 +50,56 @@ def suggest_parameters(
             Used in exploitation phase instead of the overall best.
         pomis_sets: POMIS intervention sets from causal graph analysis.
             When provided, constrains optimization to intervene on POMIS members.
+        objectives: Multi-objective specifications. When provided with >1 entry,
+            a scalarized objective is used for surrogate-based suggestion.
     """
     if phase == "exploration":
         return _suggest_exploration(search_space, experiment_log)
-    elif phase == "optimization":
-        return _suggest_optimization(
-            search_space,
-            experiment_log,
-            causal_graph,
-            minimize,
-            objective_name,
-            screened_variables=screened_variables,
-            pomis_sets=pomis_sets,
-        )
-    elif phase == "exploitation":
-        focus_variables = _get_focus_variables(search_space, causal_graph, objective_name)
-        return _suggest_exploitation(
-            search_space,
-            experiment_log,
-            minimize,
-            objective_name,
-            focus_variables=focus_variables,
-            base_parameters=base_parameters,
-        )
-    else:
-        return _suggest_exploration(search_space, experiment_log)
+
+    # When multi-objective, scalarize the experiment log so the surrogate
+    # has a single target to optimize.  The scalarized value is written to a
+    # reserved key to avoid overwriting any user-defined objective metric.
+    # Placed after the exploration early-return to avoid unnecessary work.
+    # The key is cleaned up after suggestion to avoid leaking internal state
+    # into user-visible data (e.g., ExperimentLog.to_dataframe()).
+    surrogate_objective = objective_name
+    # When using the scalarized key, the surrogate must always *minimize*
+    # because _scalarize_log negates maximize objectives so lower = better.
+    surrogate_minimize = minimize
+    needs_cleanup = False
+    if objectives is not None and len(objectives) > 1:
+        _scalarize_log(experiment_log, objectives, _SCALARIZED_KEY)
+        surrogate_objective = _SCALARIZED_KEY
+        surrogate_minimize = True
+        needs_cleanup = True
+
+    try:
+        if phase == "optimization":
+            return _suggest_optimization(
+                search_space,
+                experiment_log,
+                causal_graph,
+                surrogate_minimize,
+                surrogate_objective,
+                screened_variables=screened_variables,
+                pomis_sets=pomis_sets,
+            )
+        elif phase == "exploitation":
+            focus_variables = _get_focus_variables(search_space, causal_graph, objective_name)
+            return _suggest_exploitation(
+                search_space,
+                experiment_log,
+                surrogate_minimize,
+                surrogate_objective,
+                focus_variables=focus_variables,
+                base_parameters=base_parameters,
+            )
+        else:
+            return _suggest_exploration(search_space, experiment_log)
+    finally:
+        if needs_cleanup:
+            for result in experiment_log.results:
+                result.metrics.pop(_SCALARIZED_KEY, None)
 
 
 def _suggest_exploration(
@@ -381,3 +417,34 @@ def _random_sample(search_space: SearchSpace) -> dict[str, Any]:
         elif var.variable_type == VariableType.CATEGORICAL and var.choices:
             params[var.name] = rng.choice(var.choices)
     return params
+
+
+def _scalarize_log(
+    experiment_log: ExperimentLog,
+    objectives: list[ObjectiveSpec],
+    target_name: str,
+) -> None:
+    """Add a scalarized objective to each result's metrics for surrogate training.
+
+    Uses a weighted sum of (possibly sign-flipped) objectives so the surrogate
+    always *minimizes* the scalar target.  Weights come from
+    :attr:`ObjectiveSpec.weight`.  Objectives with ``minimize=False`` are negated
+    before summing so that maximization objectives contribute correctly.
+
+    The scalarized value is written to ``result.metrics[target_name]`` for every
+    result in the log.  ``target_name`` should be a reserved key (e.g.
+    :data:`_SCALARIZED_KEY`) that does not collide with any user-defined
+    objective name, so that original metric values are never overwritten.
+    """
+    for result in experiment_log.results:
+        scalar = 0.0
+        for obj in objectives:
+            # Missing metrics default to a large finite worst-case value for
+            # the direction, consistent with ParetoResult.dominated_by semantics.
+            # We use 1e10 instead of inf to keep surrogate training numerically
+            # stable (RF trees handle finite extremes better than inf).
+            worst = 1e10 if obj.minimize else -1e10
+            val = result.metrics.get(obj.name, worst)
+            # Negate maximize objectives so the surrogate always minimizes
+            scalar += obj.weight * (val if obj.minimize else -val)
+        result.metrics[target_name] = scalar
