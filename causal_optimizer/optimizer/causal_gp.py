@@ -71,7 +71,6 @@ class CausalGPSurrogate:
         self._causal_graph = causal_graph
         self._objective_name = objective_name
         self._minimize = minimize
-        self._seed = seed
         self._rng = np.random.default_rng(seed)
 
         # Compute topological order of all graph nodes
@@ -87,9 +86,6 @@ class CausalGPSurrogate:
 
     def fit(self, experiment_log: ExperimentLog) -> None:
         """Fit one GP per node using observed parent values."""
-        if not _BOTORCH_AVAILABLE:
-            raise ImportError("botorch/gpytorch not available")
-
         df = experiment_log.to_dataframe()
         if len(df) < 2:
             logger.warning("Not enough data to fit GPs (need >= 2 rows)")
@@ -160,9 +156,6 @@ class CausalGPSurrogate:
         already-computed parent values (working in topological order).
         Final prediction: evaluate objective GP at the propagated values.
         """
-        if not _BOTORCH_AVAILABLE:
-            raise ImportError("botorch/gpytorch not available")
-
         # Current values for each node, populated as we traverse topological order
         node_values: dict[str, float] = {}
         node_stds: dict[str, float] = {}
@@ -176,24 +169,11 @@ class CausalGPSurrogate:
 
             parents = sorted(self._causal_graph.parents(node))
 
-            if not parents:
-                # Root node, not intervened — use marginal mean from data
-                if node in self._node_stats:
-                    node_values[node] = self._node_stats[node][0]
-                    node_stds[node] = self._node_stats[node][1]
-                else:
-                    node_values[node] = 0.0
-                    node_stds[node] = 1.0
-                continue
-
-            if node not in self._gp_models:
-                # No GP for this node — use observed mean
-                if node in self._node_stats:
-                    node_values[node] = self._node_stats[node][0]
-                    node_stds[node] = self._node_stats[node][1]
-                else:
-                    node_values[node] = 0.0
-                    node_stds[node] = 1.0
+            if not parents or node not in self._gp_models:
+                # Root node or no GP fitted — fall back to observed statistics
+                mean, std = self._node_stats.get(node, (0.0, 1.0))
+                node_values[node] = mean
+                node_stds[node] = std
                 continue
 
             # Predict using GP: parent values → node value
@@ -222,9 +202,6 @@ class CausalGPSurrogate:
         interventional prediction for each, and selects the one with
         the highest Expected Improvement.
         """
-        if not _BOTORCH_AVAILABLE:
-            raise ImportError("botorch/gpytorch not available")
-
         # Generate random candidates
         candidates: list[dict[str, float]] = []
         for _ in range(n_candidates):
