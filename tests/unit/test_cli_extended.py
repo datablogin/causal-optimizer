@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import argparse
 import tempfile
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from causal_optimizer.cli import (
     _adapter_engine_kwargs,
@@ -21,9 +23,6 @@ from causal_optimizer.cli import (
     _cmd_resume,
     _cmd_run,
 )
-
-if TYPE_CHECKING:
-    import pytest
 from causal_optimizer.domain_adapters.base import DomainAdapter
 from causal_optimizer.types import (
     Constraint,
@@ -661,3 +660,283 @@ class TestBestResultUsesObjective:
 
         # Verify best_result was called with the correct objective_name and minimize
         mock_engine.log.best_result.assert_called_once_with(objective_name="custom", minimize=False)
+
+
+class TestResumePrintsObjective:
+    """Test that _cmd_resume prints the correct objective value."""
+
+    @patch("causal_optimizer.cli._load_adapter")
+    @patch("causal_optimizer.cli.ExperimentEngine")
+    @patch("causal_optimizer.cli.ExperimentStore")
+    def test_resume_prints_correct_objective(
+        self,
+        mock_store_cls: MagicMock,
+        mock_engine_cls: MagicMock,
+        mock_load: MagicMock,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        adapter = _StubAdapter()
+        mock_load.return_value = adapter
+
+        mock_store = MagicMock()
+        mock_store.__enter__ = MagicMock(return_value=mock_store)
+        mock_store.__exit__ = MagicMock(return_value=False)
+        mock_store_cls.return_value = mock_store
+
+        best = ExperimentResult(
+            experiment_id="r3",
+            parameters={"x": 0.5},
+            metrics={"my_metric": 7.77},
+            status=ExperimentStatus.KEEP,
+            metadata={},
+        )
+        mock_engine = MagicMock()
+        mock_engine.log.best_result.return_value = best
+        mock_engine_cls.resume.return_value = mock_engine
+
+        args = argparse.Namespace(
+            adapter="mod:Cls",
+            budget=5,
+            db="test.db",
+            id="existing-exp",
+            objective_name="my_metric",
+            minimize=False,
+            maximize=True,
+            strategy=None,
+            discovery_method=None,
+        )
+        _cmd_resume(args)
+
+        captured = capsys.readouterr()
+        assert "7.77" in captured.out
+        assert "my_metric" in captured.out
+
+    @patch("causal_optimizer.cli._load_adapter")
+    @patch("causal_optimizer.cli.ExperimentEngine")
+    @patch("causal_optimizer.cli.ExperimentStore")
+    def test_resume_not_found_exits(
+        self,
+        mock_store_cls: MagicMock,
+        mock_engine_cls: MagicMock,
+        mock_load: MagicMock,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """_cmd_resume exits with error when experiment ID is not found."""
+        adapter = _StubAdapter()
+        mock_load.return_value = adapter
+
+        mock_store = MagicMock()
+        mock_store.__enter__ = MagicMock(return_value=mock_store)
+        mock_store.__exit__ = MagicMock(return_value=False)
+        mock_store_cls.return_value = mock_store
+
+        mock_engine_cls.resume.side_effect = KeyError("not found")
+
+        args = argparse.Namespace(
+            adapter="mod:Cls",
+            budget=5,
+            db="test.db",
+            id="nonexistent",
+            objective_name=None,
+            minimize=False,
+            maximize=False,
+            strategy=None,
+            discovery_method=None,
+        )
+        with pytest.raises(SystemExit) as exc_info:
+            _cmd_resume(args)
+
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "not found" in captured.err
+
+
+class TestReportJsonFormat:
+    """Test _cmd_report with JSON output format."""
+
+    @patch("causal_optimizer.cli.ExperimentStore")
+    def test_report_json_includes_experiment_data(
+        self,
+        mock_store_cls: MagicMock,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        result = ExperimentResult(
+            experiment_id="r1",
+            parameters={"x": 0.5},
+            metrics={"loss": 0.42},
+            status=ExperimentStatus.KEEP,
+            metadata={"phase": "exploration"},
+        )
+        log = ExperimentLog(results=[result])
+
+        mock_store = MagicMock()
+        mock_store.__enter__ = MagicMock(return_value=mock_store)
+        mock_store.__exit__ = MagicMock(return_value=False)
+        mock_store.load_log.return_value = log
+        mock_store_cls.return_value = mock_store
+
+        args = argparse.Namespace(
+            id="test-exp",
+            db="test.db",
+            format="json",
+            objective_name="loss",
+            minimize=False,
+            maximize=False,
+        )
+        _cmd_report(args)
+
+        captured = capsys.readouterr()
+        import json
+
+        data = json.loads(captured.out)
+        assert data["experiment_id"] == "test-exp"
+        assert data["total_steps"] == 1
+        assert data["n_kept"] == 1
+        assert data["best_result"] is not None
+
+    @patch("causal_optimizer.cli.ExperimentStore")
+    def test_report_no_kept_results(
+        self,
+        mock_store_cls: MagicMock,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Report shows 'No kept results' when all experiments are discarded."""
+        result = ExperimentResult(
+            experiment_id="r1",
+            parameters={"x": 0.5},
+            metrics={"obj": 0.9},
+            status=ExperimentStatus.DISCARD,
+            metadata={"phase": "exploration"},
+        )
+        log = ExperimentLog(results=[result])
+
+        mock_store = MagicMock()
+        mock_store.__enter__ = MagicMock(return_value=mock_store)
+        mock_store.__exit__ = MagicMock(return_value=False)
+        mock_store.load_log.return_value = log
+        mock_store_cls.return_value = mock_store
+
+        args = argparse.Namespace(
+            id="test-exp",
+            db="test.db",
+            format="table",
+            objective_name=None,
+            minimize=False,
+            maximize=False,
+        )
+        _cmd_report(args)
+
+        captured = capsys.readouterr()
+        assert "No kept results." in captured.out
+
+    @patch("causal_optimizer.cli.ExperimentStore")
+    def test_report_not_found_exits(
+        self,
+        mock_store_cls: MagicMock,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """_cmd_report exits with error when experiment ID is not found."""
+        mock_store = MagicMock()
+        mock_store.__enter__ = MagicMock(return_value=mock_store)
+        mock_store.__exit__ = MagicMock(return_value=False)
+        mock_store.load_log.side_effect = KeyError("not found")
+        mock_store_cls.return_value = mock_store
+
+        args = argparse.Namespace(
+            id="nonexistent",
+            db="test.db",
+            format="table",
+            objective_name=None,
+            minimize=False,
+            maximize=False,
+        )
+        with pytest.raises(SystemExit) as exc_info:
+            _cmd_report(args)
+
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "not found" in captured.err
+
+
+class TestRunWithSeed:
+    """Test _cmd_run with --seed flag."""
+
+    @patch("causal_optimizer.cli._load_adapter")
+    @patch("causal_optimizer.cli.ExperimentEngine")
+    @patch("causal_optimizer.cli.ExperimentStore")
+    def test_run_passes_seed_to_engine(
+        self,
+        mock_store_cls: MagicMock,
+        mock_engine_cls: MagicMock,
+        mock_load: MagicMock,
+    ) -> None:
+        adapter = _StubAdapter()
+        mock_load.return_value = adapter
+
+        mock_store = MagicMock()
+        mock_store.__enter__ = MagicMock(return_value=mock_store)
+        mock_store.__exit__ = MagicMock(return_value=False)
+        mock_store.experiment_exists.return_value = False
+        mock_store_cls.return_value = mock_store
+
+        mock_engine = MagicMock()
+        mock_engine.log.best_result.return_value = None
+        mock_engine_cls.return_value = mock_engine
+
+        with tempfile.NamedTemporaryFile(suffix=".db") as f:
+            args = argparse.Namespace(
+                adapter="mod:Cls",
+                budget=1,
+                db=f.name,
+                id=None,
+                seed=42,
+                objective_name=None,
+                minimize=False,
+                maximize=False,
+                strategy=None,
+                discovery_method=None,
+            )
+            _cmd_run(args)
+
+        _, call_kwargs = mock_engine_cls.call_args
+        assert call_kwargs["seed"] == 42
+
+    @patch("causal_optimizer.cli._load_adapter")
+    @patch("causal_optimizer.cli.ExperimentEngine")
+    @patch("causal_optimizer.cli.ExperimentStore")
+    def test_run_existing_id_exits(
+        self,
+        mock_store_cls: MagicMock,
+        mock_engine_cls: MagicMock,
+        mock_load: MagicMock,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """_cmd_run exits with error when experiment ID already exists."""
+        adapter = _StubAdapter()
+        mock_load.return_value = adapter
+
+        mock_store = MagicMock()
+        mock_store.__enter__ = MagicMock(return_value=mock_store)
+        mock_store.__exit__ = MagicMock(return_value=False)
+        mock_store.experiment_exists.return_value = True
+        mock_store_cls.return_value = mock_store
+
+        with tempfile.NamedTemporaryFile(suffix=".db") as f:
+            args = argparse.Namespace(
+                adapter="mod:Cls",
+                budget=1,
+                db=f.name,
+                id="existing-id",
+                seed=None,
+                objective_name=None,
+                minimize=False,
+                maximize=False,
+                strategy=None,
+                discovery_method=None,
+            )
+            with pytest.raises(SystemExit) as exc_info:
+                _cmd_run(args)
+
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "already exists" in captured.err
