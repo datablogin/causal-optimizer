@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from causal_optimizer.engine.loop import ExperimentEngine
 from causal_optimizer.storage.sqlite import ExperimentStore
 from causal_optimizer.types import (
@@ -198,6 +200,27 @@ def test_engine_resume_continues_from_step() -> None:
     assert len(log.results) == 10
     # Engine2 should also have 10 results in its in-memory log
     assert len(engine2.log.results) == 10
+
+
+def test_engine_rejects_store_without_experiment_id() -> None:
+    """Passing store without experiment_id raises ValueError."""
+    store = ExperimentStore(":memory:")
+    with pytest.raises(ValueError, match="store and experiment_id must be provided together"):
+        ExperimentEngine(
+            search_space=_make_search_space(),
+            runner=QuadraticRunner(),
+            store=store,
+        )
+
+
+def test_engine_rejects_experiment_id_without_store() -> None:
+    """Passing experiment_id without store raises ValueError."""
+    with pytest.raises(ValueError, match="store and experiment_id must be provided together"):
+        ExperimentEngine(
+            search_space=_make_search_space(),
+            runner=QuadraticRunner(),
+            experiment_id="test-id",
+        )
 
 
 def test_engine_resume_infers_optimization_phase() -> None:

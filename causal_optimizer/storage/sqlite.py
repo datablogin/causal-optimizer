@@ -58,6 +58,9 @@ class ExperimentStore:
             # Set after executescript because it issues an implicit COMMIT
             # that can reset connection-level pragmas.
             self._conn.execute("PRAGMA foreign_keys = ON")
+            # WAL mode improves concurrent read performance and reduces
+            # write contention when multiple processes access the same DB.
+            self._conn.execute("PRAGMA journal_mode = WAL")
 
     def experiment_exists(self, experiment_id: str) -> bool:
         """Check if an experiment with the given ID exists."""
