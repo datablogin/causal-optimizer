@@ -259,6 +259,18 @@ class ExperimentEngine:
         if n > 0:
             engine._predictor.fit(engine.log, engine.search_space, engine.objective_name)
 
+            # Repopulate MAP-Elites archive so exploitation diversity is preserved
+            if engine._archive is not None and engine._descriptor_names:
+                for past_result in engine.log.results:
+                    if past_result.status != ExperimentStatus.CRASH:
+                        fitness = past_result.metrics.get(
+                            engine.objective_name,
+                            float("inf") if engine.minimize else float("-inf"),
+                        )
+                        descriptors = engine._extract_descriptors(past_result.metrics)
+                        if descriptors:
+                            engine._archive.add(past_result, fitness, descriptors)
+
         return engine
 
     @property

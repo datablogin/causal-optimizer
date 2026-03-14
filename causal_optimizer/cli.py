@@ -60,20 +60,20 @@ def _adapter_engine_kwargs(adapter: DomainAdapter) -> dict[str, Any]:
 def _cmd_run(args: argparse.Namespace) -> None:
     """Run a new experiment."""
     adapter = _load_adapter(args.adapter)
-    store = ExperimentStore(args.db)
     experiment_id: str = args.id or str(uuid.uuid4())
 
-    engine_kwargs = _adapter_engine_kwargs(adapter)
-    engine_kwargs.update(
-        runner=_AdapterRunner(adapter),
-        store=store,
-        experiment_id=experiment_id,
-    )
-    if args.seed is not None:
-        engine_kwargs["seed"] = args.seed
+    with ExperimentStore(args.db) as store:
+        engine_kwargs = _adapter_engine_kwargs(adapter)
+        engine_kwargs.update(
+            runner=_AdapterRunner(adapter),
+            store=store,
+            experiment_id=experiment_id,
+        )
+        if args.seed is not None:
+            engine_kwargs["seed"] = args.seed
 
-    engine = ExperimentEngine(**engine_kwargs)
-    engine.run_loop(args.budget)
+        engine = ExperimentEngine(**engine_kwargs)
+        engine.run_loop(args.budget)
 
     best = engine.log.best_result()
     if best is not None:
@@ -84,16 +84,16 @@ def _cmd_run(args: argparse.Namespace) -> None:
 def _cmd_resume(args: argparse.Namespace) -> None:
     """Resume an interrupted experiment."""
     adapter = _load_adapter(args.adapter)
-    store = ExperimentStore(args.db)
 
-    engine_kwargs = _adapter_engine_kwargs(adapter)
-    engine = ExperimentEngine.resume(
-        store=store,
-        experiment_id=args.id,
-        runner=_AdapterRunner(adapter),
-        **engine_kwargs,
-    )
-    engine.run_loop(args.budget)
+    with ExperimentStore(args.db) as store:
+        engine_kwargs = _adapter_engine_kwargs(adapter)
+        engine = ExperimentEngine.resume(
+            store=store,
+            experiment_id=args.id,
+            runner=_AdapterRunner(adapter),
+            **engine_kwargs,
+        )
+        engine.run_loop(args.budget)
 
     best = engine.log.best_result()
     if best is not None:
@@ -102,12 +102,12 @@ def _cmd_resume(args: argparse.Namespace) -> None:
 
 def _cmd_report(args: argparse.Namespace) -> None:
     """Print a report for an experiment."""
-    store = ExperimentStore(args.db)
-    try:
-        log = store.load_log(args.id)
-    except KeyError:
-        print(f"Error: experiment {args.id!r} not found", file=sys.stderr)
-        sys.exit(1)
+    with ExperimentStore(args.db) as store:
+        try:
+            log = store.load_log(args.id)
+        except KeyError:
+            print(f"Error: experiment {args.id!r} not found", file=sys.stderr)
+            sys.exit(1)
 
     n_kept = sum(1 for r in log.results if r.status == ExperimentStatus.KEEP)
     n_discarded = sum(1 for r in log.results if r.status == ExperimentStatus.DISCARD)
@@ -141,18 +141,19 @@ def _cmd_report(args: argparse.Namespace) -> None:
 
 def _cmd_list(args: argparse.Namespace) -> None:
     """List all experiments in the DB."""
-    store = ExperimentStore(args.db)
-    experiments = store.list_experiments()
+    with ExperimentStore(args.db) as store:
+        experiments = store.list_experiments()
 
     if not experiments:
         print("No experiments found.")
         return
 
-    # Print table
-    print(f"{'ID':<20} {'Created':<28} {'Steps':>6}")
-    print("-" * 56)
+    # Print table with dynamic ID column width
+    id_width = max((len(exp["id"]) for exp in experiments), default=20)
+    print(f"{'ID':<{id_width}} {'Created':<28} {'Steps':>6}")
+    print("-" * (id_width + 36))
     for exp in experiments:
-        print(f"{exp['id']:<20} {exp['created_at']:<28} {exp['step_count']:>6}")
+        print(f"{exp['id']:<{id_width}} {exp['created_at']:<28} {exp['step_count']:>6}")
 
 
 def main() -> None:

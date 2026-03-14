@@ -50,7 +50,8 @@ class ExperimentStore:
                     status TEXT NOT NULL,
                     metadata_json TEXT NOT NULL,
                     timestamp TEXT NOT NULL,
-                    FOREIGN KEY (experiment_id) REFERENCES experiments(id)
+                    FOREIGN KEY (experiment_id) REFERENCES experiments(id),
+                    UNIQUE(experiment_id, step)
                 );
                 """
             )
@@ -149,6 +150,12 @@ class ExperimentStore:
     def close(self) -> None:
         """Close the database connection."""
         self._conn.close()
+
+    def __enter__(self) -> ExperimentStore:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.close()
 
     def __del__(self) -> None:
         with contextlib.suppress(Exception):
