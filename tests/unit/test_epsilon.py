@@ -594,35 +594,12 @@ class TestOffPolicyPredictorEpsilonMode:
 class TestEngineEpsilonIntegration:
     """Integration tests for ExperimentEngine with epsilon_mode."""
 
-    def test_missing_bounds_warns(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Variables without explicit bounds should produce a warning."""
-        import logging
+    def test_missing_bounds_rejected_at_construction(self) -> None:
+        """Continuous variables without bounds are rejected by Variable validation."""
+        import pydantic
 
-        from causal_optimizer.types import ExperimentLog, ExperimentResult, ExperimentStatus
-
-        space = SearchSpace(
-            variables=[
-                Variable(name="x", variable_type=VariableType.CONTINUOUS, lower=0.0, upper=1.0),
-                Variable(name="y", variable_type=VariableType.CONTINUOUS, lower=None, upper=None),
-            ]
-        )
-        predictor = OffPolicyPredictor(epsilon_mode=True, n_max=100)
-        log = ExperimentLog()
-        rng = np.random.default_rng(42)
-        for i in range(5):
-            x_val = float(rng.random())
-            y_val = float(rng.random())
-            log.results.append(
-                ExperimentResult(
-                    experiment_id=str(i),
-                    parameters={"x": x_val, "y": y_val},
-                    metrics={"objective": x_val**2 + y_val**2},
-                    status=ExperimentStatus.KEEP,
-                )
-            )
-        with caplog.at_level(logging.WARNING):
-            predictor.fit(log, space, "objective")
-        assert "Variable 'y' has no bounds" in caplog.text
+        with pytest.raises(pydantic.ValidationError, match="requires both 'lower' and 'upper'"):
+            Variable(name="y", variable_type=VariableType.CONTINUOUS, lower=None, upper=None)
 
     def test_engine_accepts_epsilon_params(self) -> None:
         """Engine should accept epsilon_mode and n_max parameters."""

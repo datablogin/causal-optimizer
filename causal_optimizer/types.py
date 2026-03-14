@@ -8,7 +8,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ExperimentStatus(str, Enum):
@@ -37,6 +37,23 @@ class Variable(BaseModel):
     lower: float | None = None
     upper: float | None = None
     choices: list[Any] | None = None
+
+    @model_validator(mode="after")
+    def _validate_type_constraints(self) -> Variable:
+        if self.variable_type in (VariableType.CONTINUOUS, VariableType.INTEGER):
+            if self.lower is None or self.upper is None:
+                raise ValueError(
+                    f"{self.variable_type.value} variable {self.name!r} requires both"
+                    " 'lower' and 'upper' bounds"
+                )
+            if self.lower >= self.upper:
+                raise ValueError(
+                    f"Variable {self.name!r}: lower ({self.lower}) must be < upper ({self.upper})"
+                )
+        elif self.variable_type == VariableType.CATEGORICAL:
+            if not self.choices:
+                raise ValueError(f"Categorical variable {self.name!r} requires non-empty 'choices'")
+        return self
 
     def validate_value(self, value: Any) -> bool:
         if self.variable_type == VariableType.CATEGORICAL:
