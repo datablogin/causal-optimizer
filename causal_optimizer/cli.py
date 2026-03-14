@@ -17,6 +17,16 @@ if TYPE_CHECKING:
     from causal_optimizer.domain_adapters.base import DomainAdapter
 
 
+class _AdapterRunner:
+    """Wraps a DomainAdapter into the ExperimentRunner protocol."""
+
+    def __init__(self, adapter: DomainAdapter) -> None:
+        self._adapter = adapter
+
+    def run(self, parameters: dict[str, Any]) -> dict[str, float]:
+        return self._adapter.run_experiment(parameters)
+
+
 def _load_adapter(spec: str) -> DomainAdapter:
     """Load a DomainAdapter from a 'module:ClassName' string."""
     if ":" not in spec:
@@ -35,34 +45,32 @@ def _load_adapter(spec: str) -> DomainAdapter:
     return cls()  # type: ignore[no-any-return]
 
 
+def _adapter_engine_kwargs(adapter: DomainAdapter) -> dict[str, Any]:
+    """Build common engine kwargs from a domain adapter."""
+    kwargs: dict[str, Any] = {"search_space": adapter.get_search_space()}
+    graph = adapter.get_prior_graph()
+    if graph is not None:
+        kwargs["causal_graph"] = graph
+    descriptors = adapter.get_descriptor_names()
+    if descriptors:
+        kwargs["descriptor_names"] = descriptors
+    return kwargs
+
+
 def _cmd_run(args: argparse.Namespace) -> None:
     """Run a new experiment."""
     adapter = _load_adapter(args.adapter)
-    search_space = adapter.get_search_space()
     store = ExperimentStore(args.db)
     experiment_id: str = args.id or str(uuid.uuid4())[:8]
 
-    # Build a runner that wraps the adapter
-    class _AdapterRunner:
-        def run(self, parameters: dict[str, Any]) -> dict[str, float]:
-            return adapter.run_experiment(parameters)
-
-    engine_kwargs: dict[str, Any] = {
-        "search_space": search_space,
-        "runner": _AdapterRunner(),
-        "store": store,
-        "experiment_id": experiment_id,
-    }
+    engine_kwargs = _adapter_engine_kwargs(adapter)
+    engine_kwargs.update(
+        runner=_AdapterRunner(adapter),
+        store=store,
+        experiment_id=experiment_id,
+    )
     if args.seed is not None:
         engine_kwargs["seed"] = args.seed
-
-    graph = adapter.get_prior_graph()
-    if graph is not None:
-        engine_kwargs["causal_graph"] = graph
-
-    descriptors = adapter.get_descriptor_names()
-    if descriptors:
-        engine_kwargs["descriptor_names"] = descriptors
 
     engine = ExperimentEngine(**engine_kwargs)
     engine.run_loop(args.budget)
@@ -76,27 +84,13 @@ def _cmd_run(args: argparse.Namespace) -> None:
 def _cmd_resume(args: argparse.Namespace) -> None:
     """Resume an interrupted experiment."""
     adapter = _load_adapter(args.adapter)
-    search_space = adapter.get_search_space()
     store = ExperimentStore(args.db)
 
-    class _AdapterRunner:
-        def run(self, parameters: dict[str, Any]) -> dict[str, float]:
-            return adapter.run_experiment(parameters)
-
-    engine_kwargs: dict[str, Any] = {"search_space": search_space}
-
-    graph = adapter.get_prior_graph()
-    if graph is not None:
-        engine_kwargs["causal_graph"] = graph
-
-    descriptors = adapter.get_descriptor_names()
-    if descriptors:
-        engine_kwargs["descriptor_names"] = descriptors
-
+    engine_kwargs = _adapter_engine_kwargs(adapter)
     engine = ExperimentEngine.resume(
         store=store,
         experiment_id=args.id,
-        runner=_AdapterRunner(),
+        runner=_AdapterRunner(adapter),
         **engine_kwargs,
     )
     engine.run_loop(args.budget)

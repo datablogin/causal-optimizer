@@ -42,6 +42,10 @@ logger = logging.getLogger(__name__)
 _MIN_KEPT = 5
 _MIN_DISCARDED = 2
 
+# Phase transition thresholds (by result count)
+_EXPLORATION_LIMIT = 10
+_OPTIMIZATION_LIMIT = 50
+
 
 @dataclass(frozen=True)
 class ValidationRecord:
@@ -244,9 +248,9 @@ class ExperimentEngine:
         # Restore log and infer phase from result count
         engine.log = log
         n = len(log.results)
-        if n < 10:
+        if n < _EXPLORATION_LIMIT:
             engine._phase = "exploration"
-        elif n < 50:
+        elif n < _OPTIMIZATION_LIMIT:
             engine._phase = "optimization"
         else:
             engine._phase = "exploitation"
@@ -631,9 +635,9 @@ class ExperimentEngine:
         n = len(self.log.results)
         old_phase = self._phase
 
-        if n < 10:
+        if n < _EXPLORATION_LIMIT:
             self._phase = "exploration"
-        elif n < 50:
+        elif n < _OPTIMIZATION_LIMIT:
             self._phase = "optimization"
         else:
             self._phase = "exploitation"
