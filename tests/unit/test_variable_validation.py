@@ -18,6 +18,13 @@ class TestVariableValidation:
         ):
             Variable(name="x", variable_type=VariableType.CONTINUOUS)
 
+    def test_continuous_requires_both_bounds(self) -> None:
+        """CONTINUOUS with only one bound should raise ValidationError."""
+        with pytest.raises(pydantic.ValidationError, match="requires both"):
+            Variable(name="x", variable_type=VariableType.CONTINUOUS, lower=0.0)
+        with pytest.raises(pydantic.ValidationError, match="requires both"):
+            Variable(name="x", variable_type=VariableType.CONTINUOUS, upper=10.0)
+
     def test_continuous_requires_lower_lt_upper(self) -> None:
         """CONTINUOUS variable with lower >= upper should raise ValidationError."""
         with pytest.raises(pydantic.ValidationError, match="lower.*must be < upper"):
