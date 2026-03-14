@@ -91,23 +91,24 @@ class TestConstrainedRuns:
                     "cost": float((x1**2 + x2**2) ** 0.5),
                 }
 
+        # Use [-5,5]^2 with cost upper_bound=1.0 to guarantee violations.
+        # Any point with sqrt(x1^2+x2^2)>1 violates. LHS over [-5,5]^2
+        # will sample almost entirely outside the unit circle.
         engine = ExperimentEngine(
             search_space=SearchSpace(
                 variables=[
-                    Variable(name="x1", variable_type=VariableType.CONTINUOUS, lower=-2, upper=2),
-                    Variable(name="x2", variable_type=VariableType.CONTINUOUS, lower=-2, upper=2),
+                    Variable(name="x1", variable_type=VariableType.CONTINUOUS, lower=-5, upper=5),
+                    Variable(name="x2", variable_type=VariableType.CONTINUOUS, lower=-5, upper=5),
                 ]
             ),
             runner=Runner(),
             objective_name="objective",
             minimize=True,
-            constraints=[Constraint(metric_name="cost", upper_bound=2.0)],
+            constraints=[Constraint(metric_name="cost", upper_bound=1.0)],
             seed=42,
         )
         engine.run_loop(n_experiments=15)
         violated = [r for r in engine.log.results if r.metadata.get("constraint_violated")]
-        # With [-2,2]^2 and cost=sqrt(x1^2+x2^2), corners have cost ~2.83 > 2.0.
-        # LHS exploration over 15 experiments reliably hits high-cost regions.
         assert len(violated) >= 1, "Expected at least one constraint violation"
         assert len(engine.log.results) == 15
 
