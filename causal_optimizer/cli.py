@@ -220,17 +220,16 @@ def _add_optimization_flags(parser: argparse.ArgumentParser) -> None:
         default=None,
         help="Name of the primary objective metric (overrides adapter)",
     )
+    # --minimize and --maximize are mutually exclusive; argparse enforces at most one.
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--minimize",
         action="store_true",
-        default=False,
         help="Minimize the objective (overrides adapter)",
     )
     group.add_argument(
         "--maximize",
         action="store_true",
-        default=False,
         help="Maximize the objective (overrides adapter)",
     )
     parser.add_argument(

@@ -17,6 +17,7 @@ from unittest.mock import MagicMock, patch
 from causal_optimizer.cli import (
     _adapter_engine_kwargs,
     _cmd_report,
+    _cmd_resume,
     _cmd_run,
 )
 
@@ -383,6 +384,48 @@ class TestCLIFlagOverridesAdapter:
 
         _, call_kwargs = mock_engine_cls.call_args
         assert call_kwargs["objective_name"] == "my_metric"
+        assert call_kwargs["minimize"] is True
+        assert call_kwargs["strategy"] == "bayesian"
+        assert call_kwargs["discovery_method"] == "notears"
+
+    @patch("causal_optimizer.cli._load_adapter")
+    @patch("causal_optimizer.cli.ExperimentEngine")
+    @patch("causal_optimizer.cli.ExperimentStore")
+    def test_cli_flag_overrides_adapter_resume(
+        self,
+        mock_store_cls: MagicMock,
+        mock_engine_cls: MagicMock,
+        mock_load: MagicMock,
+    ) -> None:
+        """Verify CLI flags override adapter hooks in the resume path too."""
+        adapter = _CustomAdapter()
+        mock_load.return_value = adapter
+
+        mock_store = MagicMock()
+        mock_store.__enter__ = MagicMock(return_value=mock_store)
+        mock_store.__exit__ = MagicMock(return_value=False)
+        mock_store_cls.return_value = mock_store
+
+        mock_engine = MagicMock()
+        mock_engine.log.best_result.return_value = None
+        mock_engine_cls.resume.return_value = mock_engine
+
+        args = argparse.Namespace(
+            adapter="mod:Cls",
+            budget=5,
+            db="test.db",
+            id="existing-exp",
+            # CLI flags override adapter hooks
+            objective_name="override_obj",
+            minimize=True,
+            maximize=False,
+            strategy="bayesian",
+            discovery_method="notears",
+        )
+        _cmd_resume(args)
+
+        _, call_kwargs = mock_engine_cls.resume.call_args
+        assert call_kwargs["objective_name"] == "override_obj"
         assert call_kwargs["minimize"] is True
         assert call_kwargs["strategy"] == "bayesian"
         assert call_kwargs["discovery_method"] == "notears"
