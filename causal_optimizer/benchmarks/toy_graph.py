@@ -60,3 +60,44 @@ class ToyGraphBenchmark:
 
         y = np.cos(z) - np.exp(-z / 20) + self.rng.normal(0, self.noise_scale)
         return {"objective": -y}  # negate because we minimize; optimal Y is maximized
+
+
+class ToyGraphBiObjective:
+    """Bi-objective version of ToyGraph: objective + cost.
+
+    Same causal structure as ToyGraph (X -> Z -> Y), but returns two metrics:
+    - ``objective``: the original negated Y (minimize)
+    - ``cost``: sum of absolute parameter values (minimize)
+
+    Both objectives should be minimized.
+    """
+
+    def __init__(self, noise_scale: float = 0.1, rng: np.random.Generator | None = None) -> None:
+        self.noise_scale = noise_scale
+        self.rng = rng or np.random.default_rng()
+
+    @staticmethod
+    def search_space() -> SearchSpace:
+        return SearchSpace(
+            variables=[
+                Variable(name="x", variable_type=VariableType.CONTINUOUS, lower=-5.0, upper=5.0),
+                Variable(name="z", variable_type=VariableType.CONTINUOUS, lower=-5.0, upper=20.0),
+            ]
+        )
+
+    @staticmethod
+    def causal_graph() -> CausalGraph:
+        return CausalGraph(
+            edges=[("x", "z"), ("z", "objective")],
+            bidirected_edges=[],
+        )
+
+    def run(self, parameters: dict[str, Any]) -> dict[str, float]:
+        """Run the SCM and return both objective and cost metrics."""
+        x = parameters.get("x", self.rng.normal(0, 1))
+        z_structural = np.exp(-x) + self.rng.normal(0, self.noise_scale)
+        z = parameters.get("z", z_structural)
+
+        y = np.cos(z) - np.exp(-z / 20) + self.rng.normal(0, self.noise_scale)
+        cost = abs(float(x)) + abs(float(z))
+        return {"objective": -y, "cost": cost}

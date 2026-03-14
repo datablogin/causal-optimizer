@@ -14,7 +14,13 @@ from typing import Any
 import numpy as np
 
 from causal_optimizer.predictor.encoding import encode_dataframe_for_rf, encode_params_for_rf
-from causal_optimizer.types import CausalGraph, ExperimentLog, SearchSpace, VariableType
+from causal_optimizer.types import (
+    CausalGraph,
+    ExperimentLog,
+    ObjectiveSpec,
+    SearchSpace,
+    VariableType,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +35,7 @@ def suggest_parameters(
     screened_variables: list[str] | None = None,
     base_parameters: dict[str, Any] | None = None,
     pomis_sets: list[frozenset[str]] | None = None,
+    objectives: list[ObjectiveSpec] | None = None,
 ) -> dict[str, Any]:
     """Suggest next experiment parameters based on current phase and history.
 
@@ -39,7 +46,15 @@ def suggest_parameters(
             Used in exploitation phase instead of the overall best.
         pomis_sets: POMIS intervention sets from causal graph analysis.
             When provided, constrains optimization to intervene on POMIS members.
+        objectives: Multi-objective specifications. When provided with >1 entry,
+            a scalarized objective is used for surrogate-based suggestion.
     """
+    # When multi-objective, scalarize the experiment log so the surrogate
+    # has a single target to optimize.  The scalarized column is added
+    # in-place to each result's metrics dict (idempotent).
+    if objectives is not None and len(objectives) > 1:
+        _scalarize_log(experiment_log, objectives, objective_name)
+    _ = objectives  # consumed above; rest of pipeline uses objective_name
     if phase == "exploration":
         return _suggest_exploration(search_space, experiment_log)
     elif phase == "optimization":
@@ -381,3 +396,28 @@ def _random_sample(search_space: SearchSpace) -> dict[str, Any]:
         elif var.variable_type == VariableType.CATEGORICAL and var.choices:
             params[var.name] = rng.choice(var.choices)
     return params
+
+
+def _scalarize_log(
+    experiment_log: ExperimentLog,
+    objectives: list[ObjectiveSpec],
+    target_name: str,
+) -> None:
+    """Add a scalarized objective to each result's metrics for surrogate training.
+
+    Uses a weighted sum of (possibly sign-flipped) objectives so the surrogate
+    always *minimizes* the scalar target.  Weights come from
+    :attr:`ObjectiveSpec.weight`.  Objectives with ``minimize=False`` are negated
+    before summing so that maximization objectives contribute correctly.
+
+    The scalarized value is written to ``result.metrics[target_name]`` for every
+    result in the log.  This is idempotent — calling it multiple times with the
+    same objectives overwrites the same key.
+    """
+    for result in experiment_log.results:
+        scalar = 0.0
+        for obj in objectives:
+            val = result.metrics.get(obj.name, 0.0)
+            # Negate maximize objectives so the surrogate always minimizes
+            scalar += obj.weight * (val if obj.minimize else -val)
+        result.metrics[target_name] = scalar

@@ -19,9 +19,12 @@ from causal_optimizer.evolution.map_elites import MAPElites
 from causal_optimizer.predictor.off_policy import OffPolicyPredictor
 from causal_optimizer.types import (
     CausalGraph,
+    Constraint,
     ExperimentLog,
     ExperimentResult,
     ExperimentStatus,
+    ObjectiveSpec,
+    ParetoResult,
     SearchSpace,
 )
 from causal_optimizer.validator.sensitivity import RobustnessReport, SensitivityValidator
@@ -94,6 +97,8 @@ class ExperimentEngine:
         effect_method: str = "bootstrap",
         confidence_level: float = 0.95,
         n_bootstrap: int = 1000,
+        objectives: list[ObjectiveSpec] | None = None,
+        constraints: list[Constraint] | None = None,
     ) -> None:
         """Initialize the experiment engine.
 
@@ -188,6 +193,11 @@ class ExperimentEngine:
         #: :class:`RobustnessReport` with the phase-transition context.
         self.validation_records: list[ValidationRecord] = []
 
+        #: Multi-objective specifications.  If ``None``, single-objective mode.
+        self._objectives: list[ObjectiveSpec] | None = objectives
+        #: Optimization constraints.  If ``None``, no constraints applied.
+        self._constraints: list[Constraint] | None = constraints
+
     @property
     def validation_results(self) -> list[RobustnessReport]:
         """Convenience accessor: just the reports from all validation records.
@@ -219,6 +229,21 @@ class ExperimentEngine:
         # and protect against being overwritten by _run_auto_discovery.
         self._prior_causal_graph = graph
 
+    @property
+    def pareto_front(self) -> list[ExperimentResult]:
+        """Return the Pareto front of KEEP results.
+
+        If multi-objective mode is active, returns non-dominated results.
+        In single-objective mode, falls back to the single best result.
+        """
+        if self._objectives is not None and len(self._objectives) > 1:
+            return self.log.pareto_front(self._objectives)
+        # Single-objective: wrap best result as a 1-element list
+        objectives = self._objectives or [
+            ObjectiveSpec(name=self.objective_name, minimize=self.minimize)
+        ]
+        return self.log.pareto_front(objectives)
+
     def run_experiment(self, parameters: dict[str, Any]) -> ExperimentResult:
         """Execute a single experiment and log the result."""
         experiment_id = str(uuid.uuid4())[:8]
@@ -232,12 +257,18 @@ class ExperimentEngine:
             metrics = {self.objective_name: float("inf") if self.minimize else float("-inf")}
             status = ExperimentStatus.CRASH
 
+        metadata: dict[str, Any] = {"phase": self._phase}
+        # Tag constraint-violated results so downstream code can distinguish
+        # constraint violations from ordinary DISCARD (e.g., no improvement).
+        if status == ExperimentStatus.DISCARD and not self._check_constraints(metrics):
+            metadata["constraint_violated"] = True
+
         result = ExperimentResult(
             experiment_id=experiment_id,
             parameters=parameters,
             metrics=metrics,
             status=status,
-            metadata={"phase": self._phase},
+            metadata=metadata,
         )
         self.log.results.append(result)
 
@@ -285,6 +316,7 @@ class ExperimentEngine:
                         objective_name=self.objective_name,
                         screened_variables=self._screened_focus_variables,
                         base_parameters=elite.parameters,
+                        objectives=self._objectives,
                     )
 
         # Only pass pomis_sets during optimization phase (not used in exploitation)
@@ -298,6 +330,7 @@ class ExperimentEngine:
             objective_name=self.objective_name,
             screened_variables=self._screened_focus_variables,
             pomis_sets=pomis_sets,
+            objectives=self._objectives,
         )
 
     def step(self) -> ExperimentResult:
@@ -421,16 +454,35 @@ class ExperimentEngine:
 
         return estimate.is_significant
 
+    def _check_constraints(self, metrics: dict[str, float]) -> bool:
+        """Return True if all constraints are satisfied."""
+        if self._constraints is None:
+            return True
+        return all(c.is_satisfied(metrics) for c in self._constraints)
+
     def _evaluate_status(self, metrics: dict[str, float]) -> ExperimentStatus:
         """Determine if this result should be kept.
 
         Uses bootstrap-based statistical testing when enough history is available.
-        Falls back to simple greedy comparison otherwise.
+        Falls back to simple greedy comparison otherwise.  Constraints are checked
+        first — any violation causes an immediate DISCARD.
+
+        In multi-objective mode, Pareto dominance replaces scalar comparison:
+        a result is KEEP if no existing KEEP result dominates it on all objectives.
         """
         current_objective = metrics.get(self.objective_name)
         if current_objective is None:
             return ExperimentStatus.CRASH
 
+        # Check constraints first — violated results are always discarded.
+        if not self._check_constraints(metrics):
+            return ExperimentStatus.DISCARD
+
+        # Multi-objective: use Pareto dominance
+        if self._objectives is not None and len(self._objectives) > 1:
+            return self._evaluate_multi_objective(metrics)
+
+        # Single-objective path (unchanged from before)
         best = self.log.best_result(self.objective_name, self.minimize)
         if best is None:
             return ExperimentStatus.KEEP
@@ -469,6 +521,26 @@ class ExperimentEngine:
         else:
             is_better = current_objective > best_objective
         return ExperimentStatus.KEEP if is_better else ExperimentStatus.DISCARD
+
+    def _evaluate_multi_objective(self, metrics: dict[str, float]) -> ExperimentStatus:
+        """Evaluate a result using Pareto dominance for multi-objective mode.
+
+        A new result is KEEP if no existing KEEP result dominates it on all
+        objectives.  This builds the Pareto front incrementally.
+        """
+        assert self._objectives is not None  # noqa: S101
+        # Create a temporary result to test dominance against
+        temp = ExperimentResult(
+            experiment_id="__temp__",
+            parameters={},
+            metrics=metrics,
+            status=ExperimentStatus.KEEP,
+        )
+        kept = [r for r in self.log.results if r.status == ExperimentStatus.KEEP]
+        for existing in kept:
+            if ParetoResult.dominated_by(temp, existing, self._objectives):
+                return ExperimentStatus.DISCARD
+        return ExperimentStatus.KEEP
 
     def _update_phase(self) -> None:
         """Transition between optimization phases based on experiment count."""

@@ -62,6 +62,36 @@ class SearchSpace(BaseModel):
         return len(self.variables)
 
 
+class ObjectiveSpec(BaseModel):
+    """Specification for a single optimization objective."""
+
+    name: str
+    minimize: bool = True
+    weight: float = 1.0  # for scalarization fallback
+
+
+class Constraint(BaseModel):
+    """Constraint on a metric value.
+
+    A result violates this constraint if:
+    - ``upper_bound`` is set and the metric exceeds it, or
+    - ``lower_bound`` is set and the metric is below it.
+    """
+
+    metric_name: str
+    upper_bound: float | None = None
+    lower_bound: float | None = None
+
+    def is_satisfied(self, metrics: dict[str, float]) -> bool:
+        """Return True if the constraint is satisfied by the given metrics."""
+        value = metrics.get(self.metric_name)
+        if value is None:
+            return False
+        if self.upper_bound is not None and value > self.upper_bound:
+            return False
+        return not (self.lower_bound is not None and value < self.lower_bound)
+
+
 class ExperimentResult(BaseModel):
     """Result of a single experiment."""
 
@@ -70,6 +100,40 @@ class ExperimentResult(BaseModel):
     metrics: dict[str, float]
     status: ExperimentStatus
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ParetoResult(BaseModel):
+    """Non-dominated Pareto front from multi-objective optimization."""
+
+    front: list[ExperimentResult]
+
+    @staticmethod
+    def dominated_by(
+        candidate: ExperimentResult,
+        other: ExperimentResult,
+        objectives: list[ObjectiveSpec],
+    ) -> bool:
+        """Return True if *other* dominates *candidate* on all objectives.
+
+        *other* dominates *candidate* iff *other* is at least as good on every
+        objective and strictly better on at least one.
+        """
+        all_at_least_as_good = True
+        strictly_better = False
+        for obj in objectives:
+            c_val = candidate.metrics.get(obj.name, float("inf"))
+            o_val = other.metrics.get(obj.name, float("inf"))
+            if obj.minimize:
+                if o_val > c_val:
+                    all_at_least_as_good = False
+                if o_val < c_val:
+                    strictly_better = True
+            else:
+                if o_val < c_val:
+                    all_at_least_as_good = False
+                if o_val > c_val:
+                    strictly_better = True
+        return all_at_least_as_good and strictly_better
 
 
 @dataclass
@@ -228,6 +292,29 @@ class ExperimentLog(BaseModel):
         if minimize:
             return min(kept, key=lambda r: r.metrics.get(objective_name, float("inf")))
         return max(kept, key=lambda r: r.metrics.get(objective_name, float("-inf")))
+
+    def pareto_front(self, objectives: list[ObjectiveSpec]) -> list[ExperimentResult]:
+        """Return the non-dominated subset of KEEP results.
+
+        A result A dominates B if A is at least as good on all objectives
+        and strictly better on at least one.
+        """
+        kept = [r for r in self.results if r.status == ExperimentStatus.KEEP]
+        if not kept:
+            return []
+
+        front: list[ExperimentResult] = []
+        for candidate in kept:
+            dominated = False
+            for other in kept:
+                if other is candidate:
+                    continue
+                if ParetoResult.dominated_by(candidate, other, objectives):
+                    dominated = True
+                    break
+            if not dominated:
+                front.append(candidate)
+        return front
 
     def to_dataframe(self) -> pd.DataFrame:
         rows = []
