@@ -7,8 +7,6 @@ import subprocess
 import sys
 from typing import Any
 
-import pytest
-
 from causal_optimizer.storage.sqlite import ExperimentStore
 from causal_optimizer.types import SearchSpace, Variable, VariableType
 
