@@ -63,7 +63,7 @@ def main() -> None:
     print("\n=== Constraint summary ===")
     print(f"  Total experiments: {len(engine.log.results)}")
     print(f"  Kept:              {len(kept)}")
-    print(f"  Discarded:         {len(discarded)}")
+    print(f"  Discarded:         {len(discarded)}  (includes dominated + violated)")
     print(f"  Constraint violated: {len(violated)}")
 
     # Show a few violated experiments

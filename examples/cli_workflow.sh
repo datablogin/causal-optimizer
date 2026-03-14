@@ -13,6 +13,8 @@ DB="demo.db"
 ID="demo-1"
 ADAPTER="examples.demo_adapter:DemoAdapter"
 
+trap "rm -f '$DB'" EXIT
+
 # Clean up from any previous run
 rm -f "$DB"
 
@@ -44,7 +46,5 @@ echo ""
 echo "=== Step 5: List all experiments ==="
 uv run causal-optimizer list --db "$DB"
 
-# Clean up
-rm -f "$DB"
 echo ""
 echo "Done."
