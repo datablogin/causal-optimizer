@@ -165,12 +165,14 @@ def _cmd_report(args: argparse.Namespace) -> None:
             print(f"Error: experiment {args.id!r} not found", file=sys.stderr)
             sys.exit(1)
 
-    objective_name: str = getattr(args, "objective_name", None) or "objective"
+    obj_flag = getattr(args, "objective_name", None)
+    objective_name: str = obj_flag if obj_flag is not None else "objective"
+    minimize = not getattr(args, "maximize", False)
     n_kept = sum(1 for r in log.results if r.status == ExperimentStatus.KEEP)
     n_discarded = sum(1 for r in log.results if r.status == ExperimentStatus.DISCARD)
     n_crash = sum(1 for r in log.results if r.status == ExperimentStatus.CRASH)
     phases = sorted({r.metadata.get("phase", "unknown") for r in log.results})
-    best = log.best_result(objective_name=objective_name)
+    best = log.best_result(objective_name=objective_name, minimize=minimize)
 
     if args.format == "json":
         data: dict[str, Any] = {
@@ -286,6 +288,18 @@ def main() -> None:
         "--objective-name",
         default=None,
         help="Name of the primary objective metric",
+    )
+    # --minimize/--maximize for correct best-result selection in reports
+    report_group = report_parser.add_mutually_exclusive_group()
+    report_group.add_argument(
+        "--minimize",
+        action="store_true",
+        help="Select best result by minimization",
+    )
+    report_group.add_argument(
+        "--maximize",
+        action="store_true",
+        help="Select best result by maximization",
     )
 
     # list
