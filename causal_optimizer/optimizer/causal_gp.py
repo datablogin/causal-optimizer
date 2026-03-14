@@ -67,6 +67,12 @@ class CausalGPSurrogate:
                 "Install them with: uv sync --extra bayesian"
             )
 
+        if objective_name not in causal_graph.nodes:
+            raise ValueError(
+                f"objective_name={objective_name!r} is not a node in the causal graph. "
+                f"Available nodes: {sorted(causal_graph.nodes)}"
+            )
+
         self._search_space = search_space
         self._causal_graph = causal_graph
         self._objective_name = objective_name
@@ -122,8 +128,9 @@ class CausalGPSurrogate:
             parent_data = df[parents].values.astype(np.float64)
             node_data = df[node].values.astype(np.float64)
 
-            # Skip if constant
+            # Skip GP fitting if constant, but store the constant value
             if np.std(node_data) < 1e-10:
+                self._node_stats[node] = (float(np.mean(node_data)), 0.0)
                 continue
 
             # Convert to torch tensors
