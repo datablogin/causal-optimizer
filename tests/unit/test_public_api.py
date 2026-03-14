@@ -56,6 +56,11 @@ class TestTopLevelImports:
 
         assert VariableType is not None
 
+    def test_validation_record(self) -> None:
+        from causal_optimizer import ValidationRecord
+
+        assert ValidationRecord is not None
+
     def test_all_imports_at_once(self) -> None:
         """Verify all public API names can be imported in a single statement."""
         from causal_optimizer import (
@@ -67,6 +72,7 @@ class TestTopLevelImports:
             ExperimentStatus,
             ObjectiveSpec,
             SearchSpace,
+            ValidationRecord,
             Variable,
             VariableType,
         )
@@ -81,6 +87,7 @@ class TestTopLevelImports:
             ExperimentStatus,
             ObjectiveSpec,
             SearchSpace,
+            ValidationRecord,
             Variable,
             VariableType,
         ]:
@@ -145,6 +152,7 @@ class TestDunderAll:
             "ExperimentStatus",
             "ObjectiveSpec",
             "SearchSpace",
+            "ValidationRecord",
             "Variable",
             "VariableType",
         }
