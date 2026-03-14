@@ -61,6 +61,12 @@ class TestVariableValidation:
         assert var.lower == 0.0
         assert var.upper == 10.0
 
+    def test_valid_integer_passes(self) -> None:
+        """INTEGER variable with valid bounds should construct successfully."""
+        var = Variable(name="n", variable_type=VariableType.INTEGER, lower=1, upper=10)
+        assert var.lower == 1
+        assert var.upper == 10
+
     def test_valid_categorical_passes(self) -> None:
         """CATEGORICAL variable with non-empty choices should construct successfully."""
         var = Variable(
