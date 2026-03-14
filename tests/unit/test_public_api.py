@@ -148,4 +148,4 @@ class TestDunderAll:
             "Variable",
             "VariableType",
         }
-        assert expected <= set(causal_optimizer.__all__)
+        assert expected == set(causal_optimizer.__all__)
