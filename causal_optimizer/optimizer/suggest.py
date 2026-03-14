@@ -53,17 +53,19 @@ def suggest_parameters(
         objectives: Multi-objective specifications. When provided with >1 entry,
             a scalarized objective is used for surrogate-based suggestion.
     """
+    if phase == "exploration":
+        return _suggest_exploration(search_space, experiment_log)
+
     # When multi-objective, scalarize the experiment log so the surrogate
     # has a single target to optimize.  The scalarized value is written to a
     # reserved key to avoid overwriting any user-defined objective metric.
+    # Placed after the exploration early-return to avoid unnecessary work.
     surrogate_objective = objective_name
     if objectives is not None and len(objectives) > 1:
         _scalarize_log(experiment_log, objectives, _SCALARIZED_KEY)
         surrogate_objective = _SCALARIZED_KEY
 
-    if phase == "exploration":
-        return _suggest_exploration(search_space, experiment_log)
-    elif phase == "optimization":
+    if phase == "optimization":
         return _suggest_optimization(
             search_space,
             experiment_log,

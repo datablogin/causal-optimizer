@@ -530,7 +530,9 @@ class ExperimentEngine:
         """Evaluate a result using Pareto dominance for multi-objective mode.
 
         A new result is KEEP if no existing KEEP result dominates it on all
-        objectives.  This builds the Pareto front incrementally.
+        objectives.  When a new result is accepted, any existing KEEP results
+        that the new result dominates are downgraded to DISCARD so that
+        ``status == KEEP`` remains consistent with Pareto non-dominance.
         """
         assert self._objectives is not None  # noqa: S101
         # Create a temporary result to test dominance against
@@ -544,6 +546,11 @@ class ExperimentEngine:
         for existing in kept:
             if ParetoResult.dominated_by(temp, existing, self._objectives):
                 return ExperimentStatus.DISCARD
+
+        # Downgrade existing KEEP results that the new result dominates
+        for existing in kept:
+            if ParetoResult.dominated_by(existing, temp, self._objectives):
+                existing.status = ExperimentStatus.DISCARD
         return ExperimentStatus.KEEP
 
     def _update_phase(self) -> None:
