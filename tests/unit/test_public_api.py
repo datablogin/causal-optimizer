@@ -156,5 +156,6 @@ class TestDunderAll:
             "ValidationRecord",
             "Variable",
             "VariableType",
+            "__version__",
         }
         assert expected == set(causal_optimizer.__all__)

@@ -27,6 +27,7 @@ __all__ = [
     "ValidationRecord",
     "Variable",
     "VariableType",
+    "__version__",
 ]
 
 __version__ = "0.1.0"
