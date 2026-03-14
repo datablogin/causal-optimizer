@@ -87,12 +87,16 @@ def _cmd_resume(args: argparse.Namespace) -> None:
 
     with ExperimentStore(args.db) as store:
         engine_kwargs = _adapter_engine_kwargs(adapter)
-        engine = ExperimentEngine.resume(
-            store=store,
-            experiment_id=args.id,
-            runner=_AdapterRunner(adapter),
-            **engine_kwargs,
-        )
+        try:
+            engine = ExperimentEngine.resume(
+                store=store,
+                experiment_id=args.id,
+                runner=_AdapterRunner(adapter),
+                **engine_kwargs,
+            )
+        except KeyError:
+            print(f"Error: experiment {args.id!r} not found", file=sys.stderr)
+            sys.exit(1)
         engine.run_loop(args.budget)
 
     best = engine.log.best_result()
