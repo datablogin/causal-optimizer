@@ -80,6 +80,9 @@ class ExperimentEngine:
     #: Valid values for the ``discovery_method`` parameter.
     _VALID_DISCOVERY_METHODS: frozenset[str] = frozenset({"correlation", "pc", "notears"})
 
+    #: Valid values for the ``strategy`` parameter.
+    _VALID_STRATEGIES: frozenset[str] = frozenset({"bayesian", "causal_gp"})
+
     #: Valid values for the ``effect_method`` parameter.
     _VALID_EFFECT_METHODS: frozenset[str] = frozenset(
         {"difference", "bootstrap", "aipw", "observational"}
@@ -108,6 +111,7 @@ class ExperimentEngine:
         constraints: list[Constraint] | None = None,
         store: ExperimentStore | None = None,
         experiment_id: str | None = None,
+        strategy: str = "bayesian",
     ) -> None:
         """Initialize the experiment engine.
 
@@ -140,6 +144,11 @@ class ExperimentEngine:
             n_bootstrap: Number of bootstrap samples used when
                 ``effect_method="bootstrap"`` (default 1000).  Passed to
                 :class:`~causal_optimizer.estimator.effects.EffectEstimator`.
+            strategy: Optimization strategy for the optimization phase.
+                ``"bayesian"`` (default) uses Ax/BoTorch; ``"causal_gp"``
+                uses the experimental CBO surrogate with separate GPs per
+                causal mechanism.  Requires a causal graph; falls back to
+                ``"bayesian"`` if no graph is provided.
         """
         if discovery_method is not None and discovery_method not in self._VALID_DISCOVERY_METHODS:
             raise ValueError(
@@ -163,6 +172,11 @@ class ExperimentEngine:
                 f"{[o.name for o in objectives]}; the primary objective must "
                 f"appear in the objectives list"
             )
+        if strategy not in self._VALID_STRATEGIES:
+            raise ValueError(
+                f"strategy={strategy!r} is not valid; "
+                f"choose one of {sorted(self._VALID_STRATEGIES)}"
+            )
 
         self.search_space = search_space
         self.runner = runner
@@ -182,6 +196,8 @@ class ExperimentEngine:
         self._discovery_threshold: float = discovery_threshold
         self._discovery_bidir_threshold: float = discovery_bidir_threshold
         self._discovered_graph: CausalGraph | None = None
+        self._strategy: str = strategy
+        self._seed: int | None = seed
         self.log = ExperimentLog()
         self._phase: str = "exploration"
         self._effect_method = effect_method
@@ -394,6 +410,8 @@ class ExperimentEngine:
                         screened_variables=self._screened_focus_variables,
                         base_parameters=elite.parameters,
                         objectives=self._objectives,
+                        strategy=self._strategy,
+                        seed=self._seed,
                     )
 
         # Only pass pomis_sets during optimization phase (not used in exploitation)
@@ -408,6 +426,8 @@ class ExperimentEngine:
             screened_variables=self._screened_focus_variables,
             pomis_sets=pomis_sets,
             objectives=self._objectives,
+            strategy=self._strategy,
+            seed=self._seed,
         )
 
     def step(self) -> ExperimentResult:

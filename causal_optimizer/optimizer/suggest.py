@@ -40,6 +40,8 @@ def suggest_parameters(
     base_parameters: dict[str, Any] | None = None,
     pomis_sets: list[frozenset[str]] | None = None,
     objectives: list[ObjectiveSpec] | None = None,
+    strategy: str = "bayesian",
+    seed: int | None = None,
 ) -> dict[str, Any]:
     """Suggest next experiment parameters based on current phase and history.
 
@@ -52,6 +54,10 @@ def suggest_parameters(
             When provided, constrains optimization to intervene on POMIS members.
         objectives: Multi-objective specifications. When provided with >1 entry,
             a scalarized objective is used for surrogate-based suggestion.
+        strategy: Optimization strategy for the optimization phase.
+            ``"bayesian"`` (default) or ``"causal_gp"`` (experimental CBO).
+        seed: Random seed forwarded to strategy-specific optimizers for
+            reproducibility.
     """
     if phase == "exploration":
         return _suggest_exploration(search_space, experiment_log)
@@ -83,6 +89,8 @@ def suggest_parameters(
                 surrogate_objective,
                 screened_variables=screened_variables,
                 pomis_sets=pomis_sets,
+                strategy=strategy,
+                seed=seed,
             )
         elif phase == "exploitation":
             focus_variables = _get_focus_variables(search_space, causal_graph, objective_name)
@@ -121,6 +129,8 @@ def _suggest_optimization(
     objective_name: str,
     screened_variables: list[str] | None = None,
     pomis_sets: list[frozenset[str]] | None = None,
+    strategy: str = "bayesian",
+    seed: int | None = None,
 ) -> dict[str, Any]:
     """Optimization: Bayesian optimization with optional causal guidance.
 
@@ -161,6 +171,28 @@ def _suggest_optimization(
                 intersected = [v for v in pomis_focus if v in focus_variables]
                 focus_variables = intersected if intersected else pomis_focus
                 logger.info("POMIS constraining focus to: %s", focus_variables)
+
+    # Route to causal_gp strategy if requested and a causal graph is available
+    if strategy == "causal_gp" and causal_graph is not None:
+        if pomis_sets:
+            logger.info(
+                "causal_gp strategy uses graph topology directly; "
+                "POMIS focus constraints are not applied"
+            )
+        try:
+            return _suggest_causal_gp(
+                search_space,
+                experiment_log,
+                causal_graph,
+                minimize,
+                objective_name,
+                seed=seed,
+            )
+        except ImportError:
+            logger.info("botorch/gpytorch not available for causal_gp, falling back to bayesian")
+        except Exception as exc:
+            logger.warning("causal_gp surrogate failed (%s), falling back to bayesian", exc)
+            # Fall through to bayesian / RF surrogate
 
     # Try Bayesian optimization via Ax
     try:
@@ -396,6 +428,37 @@ def _select_pomis_set(
     opt_count = sum(1 for r in experiment_log.results if r.metadata.get("phase") == "optimization")
     idx = opt_count % len(pomis_sets)
     return pomis_sets[idx]
+
+
+def _suggest_causal_gp(
+    search_space: SearchSpace,
+    experiment_log: ExperimentLog,
+    causal_graph: CausalGraph,
+    minimize: bool,
+    objective_name: str,
+    seed: int | None = None,
+) -> dict[str, Any]:
+    """Causal GP surrogate: separate GP per mechanism, interventional EI acquisition.
+
+    Raises
+    ------
+    ImportError
+        If botorch/gpytorch is not installed.
+    """
+    from causal_optimizer.optimizer.causal_gp import CausalGPSurrogate
+
+    # Vary the seed per call so each step explores a fresh candidate pool
+    # while preserving reproducibility (seed + n_observations is deterministic).
+    step_seed = (seed + len(experiment_log.results)) if seed is not None else None
+    surrogate = CausalGPSurrogate(
+        search_space=search_space,
+        causal_graph=causal_graph,
+        objective_name=objective_name,
+        minimize=minimize,
+        seed=step_seed,
+    )
+    surrogate.fit(experiment_log)
+    return surrogate.suggest()
 
 
 def _random_sample(search_space: SearchSpace) -> dict[str, Any]:
