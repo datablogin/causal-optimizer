@@ -144,3 +144,41 @@ class TestConstraintBackwardCompat:
         assert best is not None
         kept = [r for r in engine.log.results if r.status == ExperimentStatus.KEEP]
         assert len(kept) >= 1
+
+
+class TestConstraintWithMultiObjective:
+    def test_constraint_plus_multi_objective(self) -> None:
+        """Constraints and multi-objective work together correctly."""
+        from causal_optimizer.engine.loop import ExperimentEngine
+        from causal_optimizer.types import ObjectiveSpec
+
+        constraints = [Constraint(metric_name="cost", upper_bound=5.0)]
+        runner = SequenceRunner(
+            [
+                {"objective": 3.0, "cost": 2.0},  # satisfies constraint
+                {"objective": 1.0, "cost": 8.0},  # violates constraint (cost > 5)
+                {"objective": 2.0, "cost": 3.0},  # satisfies, non-dominated
+            ]
+        )
+        objectives = [
+            ObjectiveSpec(name="objective", minimize=True),
+            ObjectiveSpec(name="cost", minimize=True),
+        ]
+        engine = ExperimentEngine(
+            search_space=_make_space(),
+            runner=runner,
+            objectives=objectives,
+            constraints=constraints,
+            seed=42,
+        )
+        engine.step()  # KEEP (first result)
+        result2 = engine.step()  # DISCARD (constraint violated)
+        engine.step()  # KEEP (non-dominated, satisfies constraint)
+
+        assert result2.status == ExperimentStatus.DISCARD
+        assert result2.metadata.get("constraint_violated") is True
+
+        kept = [r for r in engine.log.results if r.status == ExperimentStatus.KEEP]
+        assert len(kept) >= 1
+        # Verify constraint-violating result is not in kept
+        assert all(r.metrics.get("cost", 0.0) <= 5.0 for r in kept)

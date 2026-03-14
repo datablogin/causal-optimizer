@@ -63,10 +63,14 @@ def suggest_parameters(
     # The key is cleaned up after suggestion to avoid leaking internal state
     # into user-visible data (e.g., ExperimentLog.to_dataframe()).
     surrogate_objective = objective_name
+    # When using the scalarized key, the surrogate must always *minimize*
+    # because _scalarize_log negates maximize objectives so lower = better.
+    surrogate_minimize = minimize
     needs_cleanup = False
     if objectives is not None and len(objectives) > 1:
         _scalarize_log(experiment_log, objectives, _SCALARIZED_KEY)
         surrogate_objective = _SCALARIZED_KEY
+        surrogate_minimize = True
         needs_cleanup = True
 
     try:
@@ -75,7 +79,7 @@ def suggest_parameters(
                 search_space,
                 experiment_log,
                 causal_graph,
-                minimize,
+                surrogate_minimize,
                 surrogate_objective,
                 screened_variables=screened_variables,
                 pomis_sets=pomis_sets,
@@ -85,7 +89,7 @@ def suggest_parameters(
             return _suggest_exploitation(
                 search_space,
                 experiment_log,
-                minimize,
+                surrogate_minimize,
                 surrogate_objective,
                 focus_variables=focus_variables,
                 base_parameters=base_parameters,
