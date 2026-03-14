@@ -70,6 +70,9 @@ dev = [
     "pre-commit>=3.0",
 ]
 
+[project.scripts]
+causal-optimizer = "causal_optimizer.cli:main"
+
 [project.urls]
 Repository = "https://github.com/datablogin/causal-optimizer"
 

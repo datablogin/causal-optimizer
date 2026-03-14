@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass, replace
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import numpy as np
 
@@ -29,6 +29,9 @@ from causal_optimizer.types import (
 )
 from causal_optimizer.validator.sensitivity import RobustnessReport, SensitivityValidator
 
+if TYPE_CHECKING:
+    from causal_optimizer.storage.sqlite import ExperimentStore
+
 logger = logging.getLogger(__name__)
 
 # Minimum requirements before calling estimate_improvement() for keep/discard.
@@ -38,6 +41,10 @@ logger = logging.getLogger(__name__)
 # add no statistical value over the engine's own greedy fallback.
 _MIN_KEPT = 5
 _MIN_DISCARDED = 2
+
+# Phase transition thresholds (by result count)
+_EXPLORATION_LIMIT = 10
+_OPTIMIZATION_LIMIT = 50
 
 
 @dataclass(frozen=True)
@@ -99,6 +106,8 @@ class ExperimentEngine:
         n_bootstrap: int = 1000,
         objectives: list[ObjectiveSpec] | None = None,
         constraints: list[Constraint] | None = None,
+        store: ExperimentStore | None = None,
+        experiment_id: str | None = None,
     ) -> None:
         """Initialize the experiment engine.
 
@@ -203,6 +212,69 @@ class ExperimentEngine:
         self._objectives: list[ObjectiveSpec] | None = objectives
         #: Optimization constraints.  If ``None``, no constraints applied.
         self._constraints: list[Constraint] | None = constraints
+
+        # Persistence support — validate that store and experiment_id are
+        # either both provided or both omitted.
+        if (store is None) != (experiment_id is None):
+            raise ValueError("store and experiment_id must be provided together or both omitted")
+        self._store: ExperimentStore | None = store
+        self._experiment_id: str | None = experiment_id
+        if store is not None and experiment_id is not None:
+            store.create_experiment(experiment_id, search_space)
+
+    @classmethod
+    def resume(
+        cls,
+        store: ExperimentStore,
+        experiment_id: str,
+        runner: ExperimentRunner,
+        **engine_kwargs: Any,
+    ) -> ExperimentEngine:
+        """Resume an interrupted experiment from a persistent store.
+
+        Loads the ``ExperimentLog`` from *store*, reconstructs phase from
+        result count, and returns a ready-to-continue engine.
+        """
+        log = store.load_log(experiment_id)
+
+        # Ensure search_space is passed (required for engine construction)
+        if "search_space" not in engine_kwargs:
+            raise TypeError("resume() requires 'search_space' keyword argument")
+
+        engine = cls(
+            runner=runner,
+            store=store,
+            experiment_id=experiment_id,
+            **engine_kwargs,
+        )
+
+        # Restore log and infer phase from result count
+        engine.log = log
+        n = len(log.results)
+        if n < _EXPLORATION_LIMIT:
+            engine._phase = "exploration"
+        elif n < _OPTIMIZATION_LIMIT:
+            engine._phase = "optimization"
+        else:
+            engine._phase = "exploitation"
+
+        # Refit the off-policy predictor with restored history
+        if n > 0:
+            engine._predictor.fit(engine.log, engine.search_space, engine.objective_name)
+
+            # Repopulate MAP-Elites archive so exploitation diversity is preserved
+            if engine._archive is not None and engine._descriptor_names:
+                for past_result in engine.log.results:
+                    if past_result.status != ExperimentStatus.CRASH:
+                        fitness = past_result.metrics.get(
+                            engine.objective_name,
+                            float("inf") if engine.minimize else float("-inf"),
+                        )
+                        descriptors = engine._extract_descriptors(past_result.metrics)
+                        if descriptors:
+                            engine._archive.add(past_result, fitness, descriptors)
+
+        return engine
 
     @property
     def validation_results(self) -> list[RobustnessReport]:
@@ -381,6 +453,12 @@ class ExperimentEngine:
             break
 
         result = self.run_experiment(parameters)
+
+        # Persist to store if configured
+        if self._store is not None and self._experiment_id is not None:
+            step_index = len(self.log.results) - 1
+            self._store.append_result(self._experiment_id, result, step_index)
+
         self._update_phase()
         return result
 
@@ -572,9 +650,9 @@ class ExperimentEngine:
         n = len(self.log.results)
         old_phase = self._phase
 
-        if n < 10:
+        if n < _EXPLORATION_LIMIT:
             self._phase = "exploration"
-        elif n < 50:
+        elif n < _OPTIMIZATION_LIMIT:
             self._phase = "optimization"
         else:
             self._phase = "exploitation"
