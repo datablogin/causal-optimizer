@@ -60,33 +60,42 @@ def suggest_parameters(
     # has a single target to optimize.  The scalarized value is written to a
     # reserved key to avoid overwriting any user-defined objective metric.
     # Placed after the exploration early-return to avoid unnecessary work.
+    # The key is cleaned up after suggestion to avoid leaking internal state
+    # into user-visible data (e.g., ExperimentLog.to_dataframe()).
     surrogate_objective = objective_name
+    needs_cleanup = False
     if objectives is not None and len(objectives) > 1:
         _scalarize_log(experiment_log, objectives, _SCALARIZED_KEY)
         surrogate_objective = _SCALARIZED_KEY
+        needs_cleanup = True
 
-    if phase == "optimization":
-        return _suggest_optimization(
-            search_space,
-            experiment_log,
-            causal_graph,
-            minimize,
-            surrogate_objective,
-            screened_variables=screened_variables,
-            pomis_sets=pomis_sets,
-        )
-    elif phase == "exploitation":
-        focus_variables = _get_focus_variables(search_space, causal_graph, objective_name)
-        return _suggest_exploitation(
-            search_space,
-            experiment_log,
-            minimize,
-            surrogate_objective,
-            focus_variables=focus_variables,
-            base_parameters=base_parameters,
-        )
-    else:
-        return _suggest_exploration(search_space, experiment_log)
+    try:
+        if phase == "optimization":
+            return _suggest_optimization(
+                search_space,
+                experiment_log,
+                causal_graph,
+                minimize,
+                surrogate_objective,
+                screened_variables=screened_variables,
+                pomis_sets=pomis_sets,
+            )
+        elif phase == "exploitation":
+            focus_variables = _get_focus_variables(search_space, causal_graph, objective_name)
+            return _suggest_exploitation(
+                search_space,
+                experiment_log,
+                minimize,
+                surrogate_objective,
+                focus_variables=focus_variables,
+                base_parameters=base_parameters,
+            )
+        else:
+            return _suggest_exploration(search_space, experiment_log)
+    finally:
+        if needs_cleanup:
+            for result in experiment_log.results:
+                result.metrics.pop(_SCALARIZED_KEY, None)
 
 
 def _suggest_exploration(

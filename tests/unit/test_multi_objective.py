@@ -235,3 +235,125 @@ class TestEngineMultiObjective:
         kept = [r for r in engine.log.results if r.status == ExperimentStatus.KEEP]
         # Both trade-off patterns should be kept since neither dominates the other
         assert len(kept) >= 2
+
+
+class TestParetoFrontMixedObjectives:
+    """Tests for mixed minimize/maximize multi-objective."""
+
+    def test_pareto_front_mixed_min_max(self) -> None:
+        """Mixed minimize/maximize: non-dominated results are correct."""
+        objectives = [
+            ObjectiveSpec(name="loss", minimize=True),
+            ObjectiveSpec(name="throughput", minimize=False),
+        ]
+        log = ExperimentLog(
+            results=[
+                # Low loss, high throughput — clearly best
+                _make_result("best", {"loss": 1.0, "throughput": 10.0}),
+                # High loss, low throughput — dominated
+                _make_result("worst", {"loss": 5.0, "throughput": 2.0}),
+                # Trade-off: low loss but low throughput
+                _make_result("trade", {"loss": 0.5, "throughput": 1.0}),
+            ]
+        )
+        front = log.pareto_front(objectives)
+        front_ids = {r.experiment_id for r in front}
+        # "best" dominates "worst" (lower loss AND higher throughput)
+        assert "worst" not in front_ids
+        # "best" and "trade" are non-dominated (trade has lower loss)
+        assert "best" in front_ids
+        assert "trade" in front_ids
+
+
+class TestParetoFrontEdgeCases:
+    """Edge case tests for pareto_front."""
+
+    def test_pareto_front_empty_log(self) -> None:
+        """pareto_front with no results returns empty list."""
+        objectives = [ObjectiveSpec(name="a", minimize=True)]
+        log = ExperimentLog(results=[])
+        assert log.pareto_front(objectives) == []
+
+    def test_engine_pareto_front_empty(self) -> None:
+        """engine.pareto_front before any experiments returns empty list."""
+        from causal_optimizer.engine.loop import ExperimentEngine
+
+        space = SearchSpace(
+            variables=[
+                Variable(name="x", variable_type=VariableType.CONTINUOUS, lower=0.0, upper=1.0)
+            ]
+        )
+
+        class NullRunner:
+            def run(self, parameters: dict[str, object]) -> dict[str, float]:
+                return {"objective": 0.0}
+
+        engine = ExperimentEngine(
+            search_space=space,
+            runner=NullRunner(),
+            seed=42,
+        )
+        assert engine.pareto_front == []
+
+    def test_scalarized_key_not_in_metrics_after_suggest(self) -> None:
+        """Internal scalarized key should not leak into result metrics."""
+        from causal_optimizer.engine.loop import ExperimentEngine
+
+        space = SearchSpace(
+            variables=[
+                Variable(name="x", variable_type=VariableType.CONTINUOUS, lower=0.0, upper=1.0)
+            ]
+        )
+
+        class SimpleRunner:
+            def run(self, parameters: dict[str, object]) -> dict[str, float]:
+                return {"objective": 1.0, "cost": 2.0}
+
+        objectives = [
+            ObjectiveSpec(name="objective", minimize=True),
+            ObjectiveSpec(name="cost", minimize=True),
+        ]
+        engine = ExperimentEngine(
+            search_space=space,
+            runner=SimpleRunner(),
+            objectives=objectives,
+            seed=42,
+        )
+        engine.run_loop(5)
+
+        # Verify no internal scalarized key leaked into metrics
+        for result in engine.log.results:
+            assert "__scalarized_objective__" not in result.metrics
+
+
+class TestObjectiveNameValidation:
+    """Tests for objective_name validation against objectives."""
+
+    def test_objective_name_not_in_objectives_raises(self) -> None:
+        """Engine raises ValueError if objective_name not in objectives."""
+        import pytest
+
+        from causal_optimizer.engine.loop import ExperimentEngine
+
+        space = SearchSpace(
+            variables=[
+                Variable(name="x", variable_type=VariableType.CONTINUOUS, lower=0.0, upper=1.0)
+            ]
+        )
+
+        class NullRunner:
+            def run(self, parameters: dict[str, object]) -> dict[str, float]:
+                return {"loss": 0.0}
+
+        objectives = [
+            ObjectiveSpec(name="loss", minimize=True),
+            ObjectiveSpec(name="cost", minimize=True),
+        ]
+        with pytest.raises(ValueError, match="objective_name.*not found"):
+            ExperimentEngine(
+                search_space=space,
+                runner=NullRunner(),
+                objectives=objectives,
+                objective_name="objective",  # not in objectives
+                seed=42,
+            )

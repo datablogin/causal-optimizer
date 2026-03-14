@@ -148,6 +148,12 @@ class ExperimentEngine:
                 f"effect_method={effect_method!r} is not valid; "
                 f"choose one of {sorted(self._VALID_EFFECT_METHODS)}"
             )
+        if objectives is not None and not any(o.name == objective_name for o in objectives):
+            raise ValueError(
+                f"objective_name={objective_name!r} not found in objectives "
+                f"{[o.name for o in objectives]}; the primary objective must "
+                f"appear in the objectives list"
+            )
 
         self.search_space = search_space
         self.runner = runner
