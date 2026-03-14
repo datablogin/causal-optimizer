@@ -29,6 +29,16 @@ logger = logging.getLogger(__name__)
 _SCALARIZED_KEY = "__scalarized_objective__"
 
 
+def _derive_seed(seed: int | None, step: int) -> int | None:
+    """Derive a step-specific seed from a base seed.
+
+    Returns ``seed + step`` when *seed* is not ``None``, ensuring each call
+    gets unique but deterministic randomness.  When *seed* is ``None`` the
+    result is ``None`` (unseeded / non-deterministic).
+    """
+    return (seed + step) if seed is not None else None
+
+
 def suggest_parameters(
     search_space: SearchSpace,
     experiment_log: ExperimentLog,
@@ -60,9 +70,7 @@ def suggest_parameters(
             reproducibility.
     """
     if phase == "exploration":
-        # Derive a step-specific seed so each exploration call is unique
-        # but deterministic when a global seed is provided.
-        step_seed = (seed + len(experiment_log.results)) if seed is not None else None
+        step_seed = _derive_seed(seed, len(experiment_log.results))
         return _suggest_exploration(search_space, experiment_log, seed=step_seed)
 
     # When multi-objective, scalarize the experiment log so the surrogate
@@ -97,9 +105,7 @@ def suggest_parameters(
             )
         elif phase == "exploitation":
             focus_variables = _get_focus_variables(search_space, causal_graph, objective_name)
-            # Derive a step-specific seed so each call gets unique but
-            # deterministic randomness when a global seed is provided.
-            step_seed = (seed + len(experiment_log.results)) if seed is not None else None
+            step_seed = _derive_seed(seed, len(experiment_log.results))
             return _suggest_exploitation(
                 search_space,
                 experiment_log,
@@ -110,7 +116,7 @@ def suggest_parameters(
                 seed=step_seed,
             )
         else:
-            step_seed = (seed + len(experiment_log.results)) if seed is not None else None
+            step_seed = _derive_seed(seed, len(experiment_log.results))
             return _suggest_exploration(search_space, experiment_log, seed=step_seed)
     finally:
         if needs_cleanup:
@@ -154,7 +160,7 @@ def _suggest_optimization(
     """
     df = experiment_log.to_dataframe()
     if len(df) < 3:
-        step_seed = (seed + len(experiment_log.results)) if seed is not None else None
+        step_seed = _derive_seed(seed, len(experiment_log.results))
         return _suggest_exploration(search_space, experiment_log, seed=step_seed)
 
     # Identify which variables to focus on
