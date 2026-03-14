@@ -15,6 +15,8 @@ from causal_optimizer.types import (
     VariableType,
 )
 
+__version__ = "0.1.0"
+
 __all__ = [
     "CausalGraph",
     "Constraint",
@@ -29,5 +31,3 @@ __all__ = [
     "VariableType",
     "__version__",
 ]
-
-__version__ = "0.1.0"

@@ -114,8 +114,8 @@ class TestStorageImport:
 
         assert isinstance(ExperimentStore, type)
 
-    def test_storage_reexport_identity(self) -> None:
-        """Verify storage sub-package re-export matches top-level boundary."""
+    def test_storage_export_is_a_type(self) -> None:
+        """Verify ExperimentStore exported from storage sub-package is a real class."""
         from causal_optimizer.storage import ExperimentStore
 
         assert isinstance(ExperimentStore, type)
