@@ -1,7 +1,9 @@
-"""Multi-objective optimization: minimize cost and maximize performance.
+"""Multi-objective optimization: trade off objective vs cost.
 
-Demonstrates how to define two objectives and inspect the Pareto front
-using the ToyGraphBiObjective benchmark (X -> Z -> Y with cost).
+Demonstrates how to define two objectives (both minimized) and inspect
+the Pareto front using the ToyGraphBiObjective benchmark (X -> Z -> Y
+with cost). The underlying Y is negated in the benchmark so that
+minimizing 'objective' maximizes the true output.
 """
 
 from __future__ import annotations
