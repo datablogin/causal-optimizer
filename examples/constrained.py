@@ -77,7 +77,9 @@ def main() -> None:
     best = engine.log.best_result("objective", minimize=True)
     if best:
         print("\n=== Best kept result ===")
-        print(f"  objective={best.metrics['objective']:.4f}  cost={best.metrics['cost']:.4f}")
+        obj = best.metrics.get("objective", float("nan"))
+        cost = best.metrics.get("cost", float("nan"))
+        print(f"  objective={obj:.4f}  cost={cost:.4f}")
         print(f"  params={best.parameters}")
 
 
