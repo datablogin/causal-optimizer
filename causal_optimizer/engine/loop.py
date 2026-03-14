@@ -396,10 +396,14 @@ class ExperimentEngine:
         # In exploitation phase, 50% of the time sample from MAP-Elites archive
         if self._phase == "exploitation" and self._archive is not None and self._archive.archive:
             step_count = len(self.log.results)
-            flip_seed = (self._seed + step_count) if self._seed is not None else None
+            # Use large prime offsets to avoid seed collisions with
+            # _derive_seed(seed, step_count) inside suggest_parameters.
+            flip_seed = (self._seed + step_count * 3 + 100003) if self._seed is not None else None
             rng = np.random.default_rng(flip_seed)
             if rng.random() < 0.5:
-                elite_seed = (self._seed + step_count + 1) if self._seed is not None else None
+                elite_seed = (
+                    (self._seed + step_count * 3 + 200003) if self._seed is not None else None
+                )
                 elite = self._archive.sample_elite(seed=elite_seed)
                 if elite is not None:
                     logger.info("Sampling from MAP-Elites archive for diversity")
