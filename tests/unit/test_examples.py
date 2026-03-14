@@ -55,9 +55,14 @@ class TestMultiObjectiveRuns:
             ObjectiveSpec(name="objective", minimize=True),
             ObjectiveSpec(name="cost", minimize=True),
         ]
+
+        class Runner:
+            def run(self, parameters: dict[str, Any]) -> dict[str, float]:
+                return bench.run(parameters)
+
         engine = ExperimentEngine(
             search_space=bench.search_space(),
-            runner=type("R", (), {"run": lambda self, p: bench.run(p)})(),
+            runner=Runner(),
             objective_name="objective",
             minimize=True,
             causal_graph=bench.causal_graph(),
@@ -81,11 +86,9 @@ class TestConstrainedRuns:
         class Runner:
             def run(self, parameters: dict[str, Any]) -> dict[str, float]:
                 x1, x2 = parameters["x1"], parameters["x2"]
-                import numpy as np
-
                 return {
                     "objective": float((1 - x1) ** 2 + 100 * (x2 - x1**2) ** 2),
-                    "cost": float(np.sqrt(x1**2 + x2**2)),
+                    "cost": float((x1**2 + x2**2) ** 0.5),
                 }
 
         engine = ExperimentEngine(
@@ -103,9 +106,9 @@ class TestConstrainedRuns:
         )
         engine.run_loop(n_experiments=15)
         violated = [r for r in engine.log.results if r.metadata.get("constraint_violated")]
-        # With the search space [-2, 2]^2, some experiments should exceed cost=2.0
-        assert len(violated) >= 0  # may or may not have violations depending on seed
-        # But we should have at least some results
+        # With [-2,2]^2 and cost=sqrt(x1^2+x2^2), corners have cost ~2.83 > 2.0.
+        # LHS exploration over 15 experiments reliably hits high-cost regions.
+        assert len(violated) >= 1, "Expected at least one constraint violation"
         assert len(engine.log.results) == 15
 
 
