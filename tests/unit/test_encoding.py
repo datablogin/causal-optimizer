@@ -178,11 +178,15 @@ class TestEncodeParamsForRf:
         result = encode_params_for_rf({"lr": "not_a_number"}, ["lr"], mixed_search_space)
         assert result[0, 0] == pytest.approx(0.0)
 
-    def test_missing_choices_encodes_as_zero(self) -> None:
-        """Categorical var with no choices should encode as 0.0."""
+    def test_unlisted_choice_encodes_as_zero(self) -> None:
+        """Categorical var with a value not in choices should encode as 0.0."""
         space = SearchSpace(
             variables=[
-                Variable(name="cat_var", variable_type=VariableType.CATEGORICAL),
+                Variable(
+                    name="cat_var",
+                    variable_type=VariableType.CATEGORICAL,
+                    choices=["a", "b"],
+                ),
             ]
         )
         result = encode_params_for_rf({"cat_var": "anything"}, ["cat_var"], space)
