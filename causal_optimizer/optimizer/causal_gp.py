@@ -99,13 +99,16 @@ class CausalGPSurrogate:
             logger.warning("Not enough data to fit GPs (need >= 2 rows)")
             return
 
-        # Track best observed objective
-        if self._objective_name in df.columns:
-            obj_vals = df[self._objective_name].values
-            if self._minimize:
-                self._best_objective = float(np.min(obj_vals))
-            else:
-                self._best_objective = float(np.max(obj_vals))
+        # Track best observed objective (KEEP status only, consistent with
+        # ExperimentLog.best_result() which filters to KEEP)
+        if self._objective_name in df.columns and "status" in df.columns:
+            keep_mask = df["status"] == "keep"
+            keep_vals = df.loc[keep_mask, self._objective_name].values
+            if len(keep_vals) > 0:
+                if self._minimize:
+                    self._best_objective = float(np.min(keep_vals))
+                else:
+                    self._best_objective = float(np.max(keep_vals))
 
         # Fit a GP for each node that has parents
         for node in self._topo_order:
@@ -124,7 +127,11 @@ class CausalGPSurrogate:
             # Check all parents and node are in the dataframe
             required_cols = parents + [node]
             if not all(c in df.columns for c in required_cols):
-                # Node or parent not in data; skip
+                logger.warning(
+                    "Skipping GP for node %s: missing columns %s in data",
+                    node,
+                    [c for c in required_cols if c not in df.columns],
+                )
                 continue
 
             # Skip non-numeric columns (CausalGP requires continuous data)

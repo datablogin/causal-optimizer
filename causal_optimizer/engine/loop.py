@@ -410,6 +410,8 @@ class ExperimentEngine:
                         screened_variables=self._screened_focus_variables,
                         base_parameters=elite.parameters,
                         objectives=self._objectives,
+                        strategy=self._strategy,
+                        seed=self._seed,
                     )
 
         # Only pass pomis_sets during optimization phase (not used in exploitation)
