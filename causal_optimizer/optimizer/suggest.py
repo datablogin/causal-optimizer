@@ -54,7 +54,7 @@ def suggest_parameters(
     # in-place to each result's metrics dict (idempotent).
     if objectives is not None and len(objectives) > 1:
         _scalarize_log(experiment_log, objectives, objective_name)
-    _ = objectives  # consumed above; rest of pipeline uses objective_name
+
     if phase == "exploration":
         return _suggest_exploration(search_space, experiment_log)
     elif phase == "optimization":

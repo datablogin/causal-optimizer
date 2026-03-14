@@ -147,10 +147,12 @@ class TestEngineMultiObjective:
 
     def test_engine_multi_objective_keeps_nondominated(self) -> None:
         """Run 20 steps on ToyGraphBiObjective; pareto_front is non-empty and non-dominated."""
+        import numpy as np
+
         from causal_optimizer.benchmarks.toy_graph import ToyGraphBiObjective
         from causal_optimizer.engine.loop import ExperimentEngine
 
-        bench = ToyGraphBiObjective(rng=__import__("numpy").random.default_rng(42))
+        bench = ToyGraphBiObjective(rng=np.random.default_rng(42))
         objectives = [
             ObjectiveSpec(name="objective", minimize=True),
             ObjectiveSpec(name="cost", minimize=True),
@@ -170,33 +172,19 @@ class TestEngineMultiObjective:
             for j, b in enumerate(front):
                 if i == j:
                     continue
-                # b should NOT dominate a
-                all_at_least = True
-                strictly_better = False
-                for obj in objectives:
-                    va = a.metrics.get(obj.name, float("inf"))
-                    vb = b.metrics.get(obj.name, float("inf"))
-                    if obj.minimize:
-                        if vb > va:
-                            all_at_least = False
-                        if vb < va:
-                            strictly_better = True
-                    else:
-                        if vb < va:
-                            all_at_least = False
-                        if vb > va:
-                            strictly_better = True
-                assert not (all_at_least and strictly_better), (
+                assert not ParetoResult.dominated_by(a, b, objectives), (
                     f"Result {b.experiment_id} dominates {a.experiment_id} "
                     f"but both are in the Pareto front"
                 )
 
     def test_engine_single_objective_backward_compat(self) -> None:
         """Engine with no objectives param behaves identically to current behavior."""
+        import numpy as np
+
         from causal_optimizer.benchmarks.toy_graph import ToyGraphBenchmark
         from causal_optimizer.engine.loop import ExperimentEngine
 
-        bench = ToyGraphBenchmark(rng=__import__("numpy").random.default_rng(42))
+        bench = ToyGraphBenchmark(rng=np.random.default_rng(42))
         engine = ExperimentEngine(
             search_space=bench.search_space(),
             runner=bench,

@@ -62,7 +62,7 @@ class ToyGraphBenchmark:
         return {"objective": -y}  # negate because we minimize; optimal Y is maximized
 
 
-class ToyGraphBiObjective:
+class ToyGraphBiObjective(ToyGraphBenchmark):
     """Bi-objective version of ToyGraph: objective + cost.
 
     Same causal structure as ToyGraph (X -> Z -> Y), but returns two metrics:
@@ -71,26 +71,6 @@ class ToyGraphBiObjective:
 
     Both objectives should be minimized.
     """
-
-    def __init__(self, noise_scale: float = 0.1, rng: np.random.Generator | None = None) -> None:
-        self.noise_scale = noise_scale
-        self.rng = rng or np.random.default_rng()
-
-    @staticmethod
-    def search_space() -> SearchSpace:
-        return SearchSpace(
-            variables=[
-                Variable(name="x", variable_type=VariableType.CONTINUOUS, lower=-5.0, upper=5.0),
-                Variable(name="z", variable_type=VariableType.CONTINUOUS, lower=-5.0, upper=20.0),
-            ]
-        )
-
-    @staticmethod
-    def causal_graph() -> CausalGraph:
-        return CausalGraph(
-            edges=[("x", "z"), ("z", "objective")],
-            bidirected_edges=[],
-        )
 
     def run(self, parameters: dict[str, Any]) -> dict[str, float]:
         """Run the SCM and return both objective and cost metrics."""

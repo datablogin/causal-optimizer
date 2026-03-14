@@ -17,16 +17,6 @@ def _make_space() -> SearchSpace:
     )
 
 
-class DummyRunner:
-    """Runner that returns fixed metrics."""
-
-    def __init__(self, metrics: dict[str, float]) -> None:
-        self._metrics = metrics
-
-    def run(self, parameters: dict[str, object]) -> dict[str, float]:
-        return dict(self._metrics)
-
-
 class SequenceRunner:
     """Runner that returns metrics from a predefined sequence."""
 
