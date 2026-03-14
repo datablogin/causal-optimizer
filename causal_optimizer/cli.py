@@ -63,6 +63,14 @@ def _cmd_run(args: argparse.Namespace) -> None:
     experiment_id: str = args.id or str(uuid.uuid4())
 
     with ExperimentStore(args.db) as store:
+        if args.id is not None and store.experiment_exists(experiment_id):
+            print(
+                f"Error: experiment {experiment_id!r} already exists. "
+                "Use 'resume' to continue an existing experiment.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
         engine_kwargs = _adapter_engine_kwargs(adapter)
         engine_kwargs.update(
             runner=_AdapterRunner(adapter),
