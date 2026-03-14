@@ -395,9 +395,12 @@ class ExperimentEngine:
 
         # In exploitation phase, 50% of the time sample from MAP-Elites archive
         if self._phase == "exploitation" and self._archive is not None and self._archive.archive:
-            rng = np.random.default_rng()
+            step_count = len(self.log.results)
+            flip_seed = (self._seed + step_count) if self._seed is not None else None
+            rng = np.random.default_rng(flip_seed)
             if rng.random() < 0.5:
-                elite = self._archive.sample_elite()
+                elite_seed = (self._seed + step_count + 1) if self._seed is not None else None
+                elite = self._archive.sample_elite(seed=elite_seed)
                 if elite is not None:
                     logger.info("Sampling from MAP-Elites archive for diversity")
                     return suggest_parameters(

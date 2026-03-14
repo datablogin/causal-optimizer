@@ -9,8 +9,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import numpy as np
-
 from causal_optimizer.engine.loop import ExperimentEngine
 from causal_optimizer.evolution.map_elites import MAPElites
 from causal_optimizer.optimizer.suggest import (

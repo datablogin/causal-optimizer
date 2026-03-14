@@ -67,12 +67,12 @@ class FactorialDesigner:
 
         return self._matrix_to_designs(design_matrix)
 
-    def latin_hypercube(self, n_samples: int) -> list[dict[str, Any]]:
+    def latin_hypercube(self, n_samples: int, seed: int | None = None) -> list[dict[str, Any]]:
         """Generate a Latin Hypercube design for space-filling exploration."""
         from scipy.stats.qmc import LatinHypercube
 
         k = self.search_space.dimensionality
-        sampler = LatinHypercube(d=k)
+        sampler = LatinHypercube(d=k, seed=seed)
         samples = sampler.random(n=n_samples)  # values in [0, 1]
 
         designs = []

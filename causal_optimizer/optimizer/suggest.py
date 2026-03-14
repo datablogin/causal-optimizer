@@ -60,7 +60,10 @@ def suggest_parameters(
             reproducibility.
     """
     if phase == "exploration":
-        return _suggest_exploration(search_space, experiment_log)
+        # Derive a step-specific seed so each exploration call is unique
+        # but deterministic when a global seed is provided.
+        step_seed = (seed + len(experiment_log.results)) if seed is not None else None
+        return _suggest_exploration(search_space, experiment_log, seed=step_seed)
 
     # When multi-objective, scalarize the experiment log so the surrogate
     # has a single target to optimize.  The scalarized value is written to a
@@ -94,6 +97,9 @@ def suggest_parameters(
             )
         elif phase == "exploitation":
             focus_variables = _get_focus_variables(search_space, causal_graph, objective_name)
+            # Derive a step-specific seed so each call gets unique but
+            # deterministic randomness when a global seed is provided.
+            step_seed = (seed + len(experiment_log.results)) if seed is not None else None
             return _suggest_exploitation(
                 search_space,
                 experiment_log,
@@ -101,9 +107,11 @@ def suggest_parameters(
                 surrogate_objective,
                 focus_variables=focus_variables,
                 base_parameters=base_parameters,
+                seed=step_seed,
             )
         else:
-            return _suggest_exploration(search_space, experiment_log)
+            step_seed = (seed + len(experiment_log.results)) if seed is not None else None
+            return _suggest_exploration(search_space, experiment_log, seed=step_seed)
     finally:
         if needs_cleanup:
             for result in experiment_log.results:
@@ -111,14 +119,16 @@ def suggest_parameters(
 
 
 def _suggest_exploration(
-    search_space: SearchSpace, experiment_log: ExperimentLog
+    search_space: SearchSpace,
+    experiment_log: ExperimentLog,
+    seed: int | None = None,
 ) -> dict[str, Any]:
     """Exploration: Latin Hypercube sampling for space-filling coverage."""
     from causal_optimizer.designer.factorial import FactorialDesigner
 
     designer = FactorialDesigner(search_space)
-    designs = designer.latin_hypercube(n_samples=1)
-    return designs[0] if designs else _random_sample(search_space)
+    designs = designer.latin_hypercube(n_samples=1, seed=seed)
+    return designs[0] if designs else _random_sample(search_space, seed=seed)
 
 
 def _suggest_optimization(
@@ -144,7 +154,8 @@ def _suggest_optimization(
     """
     df = experiment_log.to_dataframe()
     if len(df) < 3:
-        return _suggest_exploration(search_space, experiment_log)
+        step_seed = (seed + len(experiment_log.results)) if seed is not None else None
+        return _suggest_exploration(search_space, experiment_log, seed=step_seed)
 
     # Identify which variables to focus on
     graph_focus = _get_focus_variables(search_space, causal_graph, objective_name)
@@ -218,6 +229,7 @@ def _suggest_exploitation(
     objective_name: str,
     focus_variables: list[str] | None = None,
     base_parameters: dict[str, Any] | None = None,
+    seed: int | None = None,
 ) -> dict[str, Any]:
     """Exploitation: perturb the best known configuration or a provided base.
 
@@ -231,10 +243,10 @@ def _suggest_exploitation(
     else:
         best = experiment_log.best_result(objective_name, minimize)
         if best is None:
-            return _random_sample(search_space)
+            return _random_sample(search_space, seed=seed)
         params = dict(best.parameters)
 
-    rng = np.random.default_rng()
+    rng = np.random.default_rng(seed)
 
     # Determine which variables are eligible for perturbation
     if focus_variables:
@@ -461,9 +473,9 @@ def _suggest_causal_gp(
     return surrogate.suggest()
 
 
-def _random_sample(search_space: SearchSpace) -> dict[str, Any]:
+def _random_sample(search_space: SearchSpace, seed: int | None = None) -> dict[str, Any]:
     """Generate a random sample from the search space."""
-    rng = np.random.default_rng()
+    rng = np.random.default_rng(seed)
     params: dict[str, Any] = {}
     for var in search_space.variables:
         is_cont = var.variable_type == VariableType.CONTINUOUS
