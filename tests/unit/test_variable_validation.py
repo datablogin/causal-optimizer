@@ -27,6 +27,13 @@ class TestVariableValidation:
         with pytest.raises(ValueError, match="requires both 'lower' and 'upper' bounds"):
             Variable(name="n", variable_type=VariableType.INTEGER)
 
+    def test_integer_requires_lower_lt_upper(self) -> None:
+        """INTEGER variable with lower >= upper should raise ValueError."""
+        with pytest.raises(ValueError, match="lower.*must be < upper"):
+            Variable(name="n", variable_type=VariableType.INTEGER, lower=5, upper=5)
+        with pytest.raises(ValueError, match="lower.*must be < upper"):
+            Variable(name="n", variable_type=VariableType.INTEGER, lower=10, upper=5)
+
     def test_categorical_requires_choices(self) -> None:
         """CATEGORICAL variable without choices should raise ValueError."""
         with pytest.raises(ValueError, match="requires non-empty 'choices'"):
