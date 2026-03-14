@@ -64,11 +64,9 @@ def test_causal_gp_matches_ax_on_toygraph() -> None:
     cgp_mean = float(np.mean(causal_gp_finals))
     ax_mean = float(np.mean(ax_finals))
 
-    # CausalGP should be competitive: within 15% of Ax performance
-    # For minimization, lower is better. We allow cgp_mean <= ax_mean * 1.15
-    # Handle negative values: if ax_mean is negative, ax_mean * 1.15 is more negative (worse),
-    # so we need to compare absolute performance
-    assert cgp_mean <= ax_mean * 1.15 or cgp_mean <= ax_mean + abs(ax_mean) * 0.15, (
+    # For minimization, lower is better.
+    # Allow CausalGP to be at most 15% worse than Ax in absolute terms.
+    assert cgp_mean <= ax_mean + abs(ax_mean) * 0.15, (
         f"CausalGP (mean={cgp_mean:.4f}) not competitive with Ax (mean={ax_mean:.4f}); "
         f"seeds: cgp={causal_gp_finals}, ax={ax_finals}"
     )

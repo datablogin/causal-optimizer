@@ -147,7 +147,6 @@ class CausalGPSurrogate:
     def predict_interventional(
         self,
         intervention: dict[str, float],
-        n_samples: int = 100,
     ) -> tuple[float, float]:
         """Return (mean, std) of E[Y | do(intervention)] via graph composition.
 

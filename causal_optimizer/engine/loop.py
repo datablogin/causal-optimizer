@@ -80,6 +80,9 @@ class ExperimentEngine:
     #: Valid values for the ``discovery_method`` parameter.
     _VALID_DISCOVERY_METHODS: frozenset[str] = frozenset({"correlation", "pc", "notears"})
 
+    #: Valid values for the ``strategy`` parameter.
+    _VALID_STRATEGIES: frozenset[str] = frozenset({"bayesian", "causal_gp"})
+
     #: Valid values for the ``effect_method`` parameter.
     _VALID_EFFECT_METHODS: frozenset[str] = frozenset(
         {"difference", "bootstrap", "aipw", "observational"}
@@ -169,6 +172,11 @@ class ExperimentEngine:
                 f"{[o.name for o in objectives]}; the primary objective must "
                 f"appear in the objectives list"
             )
+        if strategy not in self._VALID_STRATEGIES:
+            raise ValueError(
+                f"strategy={strategy!r} is not valid; "
+                f"choose one of {sorted(self._VALID_STRATEGIES)}"
+            )
 
         self.search_space = search_space
         self.runner = runner
@@ -189,6 +197,7 @@ class ExperimentEngine:
         self._discovery_bidir_threshold: float = discovery_bidir_threshold
         self._discovered_graph: CausalGraph | None = None
         self._strategy: str = strategy
+        self._seed: int | None = seed
         self.log = ExperimentLog()
         self._phase: str = "exploration"
         self._effect_method = effect_method
@@ -416,6 +425,7 @@ class ExperimentEngine:
             pomis_sets=pomis_sets,
             objectives=self._objectives,
             strategy=self._strategy,
+            seed=self._seed,
         )
 
     def step(self) -> ExperimentResult:
