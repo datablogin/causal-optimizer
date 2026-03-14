@@ -31,9 +31,6 @@ class ExperimentStore:
         self._conn.row_factory = sqlite3.Row
         self._lock = threading.Lock()
         self._create_tables()
-        # Set after _create_tables because executescript issues an implicit COMMIT
-        # that can reset connection-level pragmas in some SQLite versions.
-        self._conn.execute("PRAGMA foreign_keys = ON")
 
     def _create_tables(self) -> None:
         with self._lock:
@@ -58,6 +55,9 @@ class ExperimentStore:
                 );
                 """
             )
+            # Set after executescript because it issues an implicit COMMIT
+            # that can reset connection-level pragmas.
+            self._conn.execute("PRAGMA foreign_keys = ON")
 
     def experiment_exists(self, experiment_id: str) -> bool:
         """Check if an experiment with the given ID exists."""

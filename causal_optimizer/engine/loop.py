@@ -213,7 +213,10 @@ class ExperimentEngine:
         #: Optimization constraints.  If ``None``, no constraints applied.
         self._constraints: list[Constraint] | None = constraints
 
-        # Persistence support
+        # Persistence support — validate that store and experiment_id are
+        # either both provided or both omitted.
+        if (store is None) != (experiment_id is None):
+            raise ValueError("store and experiment_id must be provided together or both omitted")
         self._store: ExperimentStore | None = store
         self._experiment_id: str | None = experiment_id
         if store is not None and experiment_id is not None:

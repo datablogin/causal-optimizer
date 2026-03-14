@@ -198,3 +198,30 @@ def test_engine_resume_continues_from_step() -> None:
     assert len(log.results) == 10
     # Engine2 should also have 10 results in its in-memory log
     assert len(engine2.log.results) == 10
+
+
+def test_engine_resume_infers_optimization_phase() -> None:
+    """Resume with 15 results infers optimization phase."""
+    store = ExperimentStore(":memory:")
+    ss = _make_search_space()
+
+    # Create experiment and manually insert 15 results to simulate past run
+    store.create_experiment("opt-phase", ss)
+    for i in range(15):
+        result = _make_result(
+            exp_id=f"r-{i}",
+            params={"x": float(i), "y": float(i)},
+            metrics={"objective": float(i * i)},
+            metadata={"phase": "exploration" if i < 10 else "optimization"},
+        )
+        store.append_result("opt-phase", result, step=i)
+
+    engine = ExperimentEngine.resume(
+        store=store,
+        experiment_id="opt-phase",
+        runner=QuadraticRunner(),
+        search_space=ss,
+    )
+
+    assert engine._phase == "optimization"
+    assert len(engine.log.results) == 15

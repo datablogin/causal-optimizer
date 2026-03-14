@@ -8,24 +8,14 @@ import sys
 from typing import Any
 
 from causal_optimizer.storage.sqlite import ExperimentStore
-from causal_optimizer.types import SearchSpace, Variable, VariableType
-
-
-def _make_search_space() -> SearchSpace:
-    return SearchSpace(
-        variables=[
-            Variable(name="x", variable_type=VariableType.CONTINUOUS, lower=-5.0, upper=5.0),
-            Variable(name="y", variable_type=VariableType.CONTINUOUS, lower=-5.0, upper=5.0),
-        ]
-    )
 
 
 def test_cli_list_empty_db(tmp_path: Any) -> None:
     """causal-optimizer list --db <path> exits 0 on empty DB."""
     db_path = str(tmp_path / "test.db")
     # Create the DB with a store so the tables exist
-    store = ExperimentStore(db_path)
-    del store
+    with ExperimentStore(db_path):
+        pass
 
     result = subprocess.run(
         [sys.executable, "-m", "causal_optimizer", "list", "--db", db_path],
@@ -57,11 +47,11 @@ def test_cli_run_toy_adapter(tmp_path: Any) -> None:
     assert result.returncode == 0, f"CLI failed: {result.stderr}"
 
     # Verify DB has 5 results
-    store = ExperimentStore(db_path)
-    experiments = store.list_experiments()
-    assert len(experiments) == 1
-    log = store.load_log(experiments[0]["id"])
-    assert len(log.results) == 5
+    with ExperimentStore(db_path) as store:
+        experiments = store.list_experiments()
+        assert len(experiments) == 1
+        log = store.load_log(experiments[0]["id"])
+        assert len(log.results) == 5
 
 
 def test_cli_report_json(tmp_path: Any) -> None:
@@ -153,6 +143,6 @@ def test_cli_resume_adds_steps(tmp_path: Any) -> None:
     )
     assert result.returncode == 0, f"CLI failed: {result.stderr}"
 
-    store = ExperimentStore(db_path)
-    log = store.load_log("resume-test")
-    assert len(log.results) == 6
+    with ExperimentStore(db_path) as store:
+        log = store.load_log("resume-test")
+        assert len(log.results) == 6
