@@ -16,8 +16,8 @@ from causal_optimizer.types import ObjectiveSpec
 class _BiObjectiveRunner:
     """Wraps ToyGraphBiObjective into the ExperimentRunner protocol."""
 
-    def __init__(self) -> None:
-        self._bench = ToyGraphBiObjective(noise_scale=0.05, rng=None)
+    def __init__(self, bench: ToyGraphBiObjective) -> None:
+        self._bench = bench
 
     def run(self, parameters: dict[str, Any]) -> dict[str, float]:
         return self._bench.run(parameters)
@@ -36,7 +36,7 @@ def main() -> None:
 
     engine = ExperimentEngine(
         search_space=search_space,
-        runner=_BiObjectiveRunner(),
+        runner=_BiObjectiveRunner(bench),
         objective_name="objective",
         minimize=True,
         causal_graph=graph,
