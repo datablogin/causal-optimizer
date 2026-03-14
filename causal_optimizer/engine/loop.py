@@ -116,9 +116,10 @@ class ExperimentEngine:
         """Initialize the experiment engine.
 
         Args:
-            seed: Seed for reproducibility of random operations in
-                ``OffPolicyPredictor`` and ``EffectEstimator`` bootstrap
-                sampling.  Does **not** seed MAP-Elites archive sampling.
+            seed: Seed for reproducibility of all random operations,
+                including parameter suggestions, MAP-Elites archive
+                sampling, ``OffPolicyPredictor``, and ``EffectEstimator``
+                bootstrap sampling.
             discovery_method: Algorithm used to learn a causal graph from
                 experiment data at the exploration→optimization phase
                 transition.  Valid values are ``"correlation"``, ``"pc"``,

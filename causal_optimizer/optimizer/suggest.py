@@ -467,7 +467,7 @@ def _suggest_causal_gp(
 
     # Vary the seed per call so each step explores a fresh candidate pool
     # while preserving reproducibility (seed + n_observations is deterministic).
-    step_seed = (seed + len(experiment_log.results)) if seed is not None else None
+    step_seed = _derive_seed(seed, len(experiment_log.results))
     surrogate = CausalGPSurrogate(
         search_space=search_space,
         causal_graph=causal_graph,
