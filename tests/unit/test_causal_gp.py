@@ -259,3 +259,88 @@ def test_causal_gp_in_engine_with_strategy() -> None:
     assert len(engine.log.results) == 15
     # Should have passed into optimization phase (10+ experiments)
     assert engine._phase == "optimization"
+
+
+# ---------------------------------------------------------------------------
+# Test 7: topological sort raises on cycle
+# ---------------------------------------------------------------------------
+
+
+def test_causal_gp_cycle_detection() -> None:
+    """_topological_sort raises ValueError on a cyclic graph."""
+    from causal_optimizer.optimizer.causal_gp import CausalGPSurrogate
+
+    cyclic_graph = CausalGraph(
+        edges=[("A", "B"), ("B", "A")],
+        nodes=["A", "B"],
+    )
+    with pytest.raises(ValueError, match="cycle"):
+        CausalGPSurrogate._topological_sort(cyclic_graph, {"A", "B"})
+
+
+# ---------------------------------------------------------------------------
+# Test 8: n_candidates < 1 raises ValueError
+# ---------------------------------------------------------------------------
+
+
+def test_causal_gp_suggest_invalid_n_candidates() -> None:
+    """suggest(n_candidates=0) raises ValueError."""
+    from causal_optimizer.optimizer.causal_gp import CausalGPSurrogate
+
+    surrogate = CausalGPSurrogate(
+        search_space=ToyGraphBenchmark.search_space(),
+        causal_graph=ToyGraphBenchmark.causal_graph(),
+        objective_name="objective",
+        minimize=True,
+        seed=42,
+    )
+    log = _make_toygraph_log(n=10, seed=42)
+    surrogate.fit(log)
+
+    with pytest.raises(ValueError, match="n_candidates must be >= 1"):
+        surrogate.suggest(n_candidates=0)
+
+
+# ---------------------------------------------------------------------------
+# Test 9: objective_name not in graph raises ValueError
+# ---------------------------------------------------------------------------
+
+
+def test_causal_gp_invalid_objective_name() -> None:
+    """Constructor raises ValueError if objective_name is not a graph node."""
+    from causal_optimizer.optimizer.causal_gp import CausalGPSurrogate
+
+    with pytest.raises(ValueError, match="not a node"):
+        CausalGPSurrogate(
+            search_space=ToyGraphBenchmark.search_space(),
+            causal_graph=ToyGraphBenchmark.causal_graph(),
+            objective_name="nonexistent",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Test 10: strategy="causal_gp" without causal graph falls back
+# ---------------------------------------------------------------------------
+
+
+def test_causal_gp_no_graph_falls_back() -> None:
+    """Engine with strategy='causal_gp' but no graph runs without crash."""
+    from causal_optimizer.engine.loop import ExperimentEngine
+
+    bench = ToyGraphBenchmark(noise_scale=0.1, rng=np.random.default_rng(0))
+    engine = ExperimentEngine(
+        search_space=ToyGraphBenchmark.search_space(),
+        runner=bench,
+        causal_graph=None,
+        objective_name="objective",
+        minimize=True,
+        seed=0,
+        max_skips=0,
+        strategy="causal_gp",
+    )
+
+    # Run 15 steps — should fall back to bayesian/RF without crash
+    for _ in range(15):
+        engine.step()
+
+    assert len(engine.log.results) == 15

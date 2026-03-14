@@ -23,6 +23,7 @@ from collections import deque
 from typing import Any
 
 import numpy as np
+from scipy.stats import norm
 
 from causal_optimizer.types import CausalGraph, ExperimentLog, SearchSpace, VariableType
 
@@ -35,6 +36,7 @@ logger = logging.getLogger(__name__)
 try:
     import gpytorch  # noqa: F401
     import torch
+    from botorch.fit import fit_gpytorch_mll
     from botorch.models import SingleTaskGP
     from gpytorch.mlls import ExactMarginalLogLikelihood
 
@@ -126,9 +128,7 @@ class CausalGPSurrogate:
                 continue
 
             # Skip non-numeric columns (CausalGP requires continuous data)
-            non_numeric = [
-                c for c in required_cols if not np.issubdtype(df[c].dtype, np.number)
-            ]
+            non_numeric = [c for c in required_cols if not np.issubdtype(df[c].dtype, np.number)]
             if non_numeric:
                 logger.warning(
                     "Skipping GP for node %s: non-numeric columns %s",
@@ -160,9 +160,6 @@ class CausalGPSurrogate:
                 # Simple training loop
                 model.train()
                 mll.train()
-
-                from botorch.fit import fit_gpytorch_mll
-
                 fit_gpytorch_mll(mll)
 
                 model.eval()
@@ -196,6 +193,11 @@ class CausalGPSurrogate:
 
             if not parents or node not in self._gp_models:
                 # Root node or no GP fitted — fall back to observed statistics
+                if node not in self._node_stats:
+                    logger.warning(
+                        "No observed statistics for node %s; using default (0.0, 1.0)",
+                        node,
+                    )
                 mean, std = self._node_stats.get(node, (0.0, 1.0))
                 node_values[node] = mean
                 node_stds[node] = std
@@ -286,8 +288,6 @@ class CausalGPSurrogate:
 
     def _expected_improvement(self, mean: float, std: float) -> float:
         """Compute Expected Improvement."""
-        from scipy.stats import norm
-
         if self._best_objective is None:
             # No best observed yet — just use predicted value
             return -mean if self._minimize else mean
