@@ -447,12 +447,15 @@ def _suggest_causal_gp(
     """
     from causal_optimizer.optimizer.causal_gp import CausalGPSurrogate
 
+    # Vary the seed per call so each step explores a fresh candidate pool
+    # while preserving reproducibility (seed + n_observations is deterministic).
+    step_seed = (seed + len(experiment_log.results)) if seed is not None else None
     surrogate = CausalGPSurrogate(
         search_space=search_space,
         causal_graph=causal_graph,
         objective_name=objective_name,
         minimize=minimize,
-        seed=seed,
+        seed=step_seed,
     )
     surrogate.fit(experiment_log)
     return surrogate.suggest()

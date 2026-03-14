@@ -230,6 +230,12 @@ class CausalGPSurrogate:
         if n_candidates < 1:
             raise ValueError(f"n_candidates must be >= 1, got {n_candidates}")
 
+        if not self._gp_models:
+            logger.warning(
+                "No GPs were fitted — suggest() will return a random candidate "
+                "(call fit() with sufficient data first)"
+            )
+
         # Generate random candidates
         candidates: list[dict[str, float]] = []
         for _ in range(n_candidates):
