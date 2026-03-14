@@ -108,6 +108,7 @@ class ExperimentEngine:
         constraints: list[Constraint] | None = None,
         store: ExperimentStore | None = None,
         experiment_id: str | None = None,
+        strategy: str = "bayesian",
     ) -> None:
         """Initialize the experiment engine.
 
@@ -140,6 +141,11 @@ class ExperimentEngine:
             n_bootstrap: Number of bootstrap samples used when
                 ``effect_method="bootstrap"`` (default 1000).  Passed to
                 :class:`~causal_optimizer.estimator.effects.EffectEstimator`.
+            strategy: Optimization strategy for the optimization phase.
+                ``"bayesian"`` (default) uses Ax/BoTorch; ``"causal_gp"``
+                uses the experimental CBO surrogate with separate GPs per
+                causal mechanism.  Requires a causal graph; falls back to
+                ``"bayesian"`` if no graph is provided.
         """
         if discovery_method is not None and discovery_method not in self._VALID_DISCOVERY_METHODS:
             raise ValueError(
@@ -182,6 +188,7 @@ class ExperimentEngine:
         self._discovery_threshold: float = discovery_threshold
         self._discovery_bidir_threshold: float = discovery_bidir_threshold
         self._discovered_graph: CausalGraph | None = None
+        self._strategy: str = strategy
         self.log = ExperimentLog()
         self._phase: str = "exploration"
         self._effect_method = effect_method
@@ -408,6 +415,7 @@ class ExperimentEngine:
             screened_variables=self._screened_focus_variables,
             pomis_sets=pomis_sets,
             objectives=self._objectives,
+            strategy=self._strategy,
         )
 
     def step(self) -> ExperimentResult:

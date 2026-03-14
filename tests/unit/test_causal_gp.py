@@ -197,9 +197,7 @@ def test_causal_gp_suggest_returns_valid_params() -> None:
         assert var.name in params, f"Missing variable {var.name}"
         assert var.lower is not None and var.upper is not None
         val = params[var.name]
-        assert var.lower <= val <= var.upper, (
-            f"{var.name}={val} out of [{var.lower}, {var.upper}]"
-        )
+        assert var.lower <= val <= var.upper, f"{var.name}={val} out of [{var.lower}, {var.upper}]"
 
 
 # ---------------------------------------------------------------------------
