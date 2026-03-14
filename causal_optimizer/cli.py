@@ -61,7 +61,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
     """Run a new experiment."""
     adapter = _load_adapter(args.adapter)
     store = ExperimentStore(args.db)
-    experiment_id: str = args.id or str(uuid.uuid4())[:8]
+    experiment_id: str = args.id or str(uuid.uuid4())
 
     engine_kwargs = _adapter_engine_kwargs(adapter)
     engine_kwargs.update(
