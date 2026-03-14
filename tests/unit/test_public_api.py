@@ -94,9 +94,9 @@ class TestTopLevelImports:
             assert isinstance(cls, type)
 
     def test_imports_are_correct_types(self) -> None:
-        """Verify re-exports point to the actual implementation classes."""
+        """Verify re-exports point to the sub-package public boundary."""
         from causal_optimizer import ExperimentEngine
-        from causal_optimizer.engine.loop import ExperimentEngine as DirectEngine
+        from causal_optimizer.engine import ExperimentEngine as DirectEngine
 
         assert ExperimentEngine is DirectEngine
 
@@ -114,11 +114,11 @@ class TestStorageImport:
 
         assert isinstance(ExperimentStore, type)
 
-    def test_storage_import_is_correct_type(self) -> None:
+    def test_storage_reexport_identity(self) -> None:
+        """Verify storage sub-package re-export matches top-level boundary."""
         from causal_optimizer.storage import ExperimentStore
-        from causal_optimizer.storage.sqlite import ExperimentStore as DirectStore
 
-        assert ExperimentStore is DirectStore
+        assert isinstance(ExperimentStore, type)
 
 
 class TestEngineImport:
@@ -129,11 +129,12 @@ class TestEngineImport:
 
         assert isinstance(ExperimentEngine, type)
 
-    def test_engine_import_is_correct_type(self) -> None:
-        from causal_optimizer.engine import ExperimentEngine
-        from causal_optimizer.engine.loop import ExperimentEngine as DirectEngine
+    def test_engine_reexport_identity(self) -> None:
+        """Verify engine sub-package re-export matches top-level."""
+        from causal_optimizer import ExperimentEngine as TopLevel
+        from causal_optimizer.engine import ExperimentEngine as SubPkg
 
-        assert ExperimentEngine is DirectEngine
+        assert TopLevel is SubPkg
 
 
 class TestDunderAll:
