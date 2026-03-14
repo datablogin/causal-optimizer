@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from causal_optimizer.engine.loop import ExperimentEngine, ValidationRecord
+from causal_optimizer.engine import ExperimentEngine, ValidationRecord
 from causal_optimizer.types import (
     CausalGraph,
     Constraint,
@@ -20,11 +20,11 @@ __all__ = [
     "Constraint",
     "ExperimentEngine",
     "ExperimentLog",
-    "ValidationRecord",
     "ExperimentResult",
     "ExperimentStatus",
     "ObjectiveSpec",
     "SearchSpace",
+    "ValidationRecord",
     "Variable",
     "VariableType",
 ]
