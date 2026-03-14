@@ -260,11 +260,11 @@ def test_evaluate_status_uses_greedy_when_few_experiments() -> None:
 
     # Now test status evaluation with only 3 experiments in log
     # Better result => KEEP
-    status = engine._evaluate_status({"objective": 0.5})
+    status, _ = engine._evaluate_status({"objective": 0.5})
     assert status == ExperimentStatus.KEEP
 
     # Worse result => DISCARD
-    status = engine._evaluate_status({"objective": 100.0})
+    status, _ = engine._evaluate_status({"objective": 100.0})
     assert status == ExperimentStatus.DISCARD
 
 

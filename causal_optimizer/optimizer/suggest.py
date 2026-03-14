@@ -24,6 +24,10 @@ from causal_optimizer.types import (
 
 logger = logging.getLogger(__name__)
 
+#: Reserved metric key for scalarized multi-objective values.
+#: Uses a leading underscore to avoid collision with user-defined metric names.
+_SCALARIZED_KEY = "__scalarized_objective__"
+
 
 def suggest_parameters(
     search_space: SearchSpace,
@@ -50,10 +54,12 @@ def suggest_parameters(
             a scalarized objective is used for surrogate-based suggestion.
     """
     # When multi-objective, scalarize the experiment log so the surrogate
-    # has a single target to optimize.  The scalarized column is added
-    # in-place to each result's metrics dict (idempotent).
+    # has a single target to optimize.  The scalarized value is written to a
+    # reserved key to avoid overwriting any user-defined objective metric.
+    surrogate_objective = objective_name
     if objectives is not None and len(objectives) > 1:
-        _scalarize_log(experiment_log, objectives, objective_name)
+        _scalarize_log(experiment_log, objectives, _SCALARIZED_KEY)
+        surrogate_objective = _SCALARIZED_KEY
 
     if phase == "exploration":
         return _suggest_exploration(search_space, experiment_log)
@@ -63,7 +69,7 @@ def suggest_parameters(
             experiment_log,
             causal_graph,
             minimize,
-            objective_name,
+            surrogate_objective,
             screened_variables=screened_variables,
             pomis_sets=pomis_sets,
         )
@@ -73,7 +79,7 @@ def suggest_parameters(
             search_space,
             experiment_log,
             minimize,
-            objective_name,
+            surrogate_objective,
             focus_variables=focus_variables,
             base_parameters=base_parameters,
         )
@@ -411,8 +417,9 @@ def _scalarize_log(
     before summing so that maximization objectives contribute correctly.
 
     The scalarized value is written to ``result.metrics[target_name]`` for every
-    result in the log.  This is idempotent — calling it multiple times with the
-    same objectives overwrites the same key.
+    result in the log.  ``target_name`` should be a reserved key (e.g.
+    :data:`_SCALARIZED_KEY`) that does not collide with any user-defined
+    objective name, so that original metric values are never overwritten.
     """
     for result in experiment_log.results:
         scalar = 0.0

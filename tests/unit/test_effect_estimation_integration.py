@@ -165,7 +165,7 @@ class TestStatisticalEvaluation:
 
         # A value of 0.5 is clearly better than best (5.0)
         metrics = {"objective": 0.5}
-        status = engine._evaluate_status(metrics)
+        status, _ = engine._evaluate_status(metrics)
         assert status == ExperimentStatus.KEEP
 
     def test_noise_level_change_discarded(self):
@@ -185,7 +185,7 @@ class TestStatisticalEvaluation:
 
         # A value of 12.0 is worse than best (5.0) — should be discarded
         metrics = {"objective": 12.0}
-        status = engine._evaluate_status(metrics)
+        status, _ = engine._evaluate_status(metrics)
         assert status == ExperimentStatus.DISCARD
 
     def test_maximization_clear_improvement(self):
@@ -204,7 +204,7 @@ class TestStatisticalEvaluation:
 
         # 50.0 is clearly better for maximization
         metrics = {"objective": 50.0}
-        status = engine._evaluate_status(metrics)
+        status, _ = engine._evaluate_status(metrics)
         assert status == ExperimentStatus.KEEP
 
     def test_maximization_worse_value_discarded(self):
@@ -223,7 +223,7 @@ class TestStatisticalEvaluation:
 
         # 1.0 is clearly worse for maximization
         metrics = {"objective": 1.0}
-        status = engine._evaluate_status(metrics)
+        status, _ = engine._evaluate_status(metrics)
         assert status == ExperimentStatus.DISCARD
 
     def test_adaptive_alpha_early(self):
@@ -278,5 +278,5 @@ class TestStatisticalEvaluation:
             discarded_values=[15.0, 18.0, 20.0],
         )
 
-        status = engine._evaluate_status({"other_metric": 1.0})
+        status, _ = engine._evaluate_status({"other_metric": 1.0})
         assert status == ExperimentStatus.CRASH

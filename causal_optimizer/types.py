@@ -121,8 +121,10 @@ class ParetoResult(BaseModel):
         all_at_least_as_good = True
         strictly_better = False
         for obj in objectives:
-            c_val = candidate.metrics.get(obj.name, float("inf"))
-            o_val = other.metrics.get(obj.name, float("inf"))
+            # Missing metrics default to the *worst* value for the direction
+            missing_default = float("inf") if obj.minimize else float("-inf")
+            c_val = candidate.metrics.get(obj.name, missing_default)
+            o_val = other.metrics.get(obj.name, missing_default)
             if obj.minimize:
                 if o_val > c_val:
                     all_at_least_as_good = False

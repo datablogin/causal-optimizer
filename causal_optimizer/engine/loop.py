@@ -249,18 +249,17 @@ class ExperimentEngine:
         experiment_id = str(uuid.uuid4())[:8]
         logger.info(f"Running experiment {experiment_id} with {parameters}")
 
+        constraint_violated = False
         try:
             metrics = self.runner.run(parameters)
-            status = self._evaluate_status(metrics)
+            status, constraint_violated = self._evaluate_status(metrics)
         except Exception as e:
             logger.error(f"Experiment {experiment_id} crashed: {e}")
             metrics = {self.objective_name: float("inf") if self.minimize else float("-inf")}
             status = ExperimentStatus.CRASH
 
         metadata: dict[str, Any] = {"phase": self._phase}
-        # Tag constraint-violated results so downstream code can distinguish
-        # constraint violations from ordinary DISCARD (e.g., no improvement).
-        if status == ExperimentStatus.DISCARD and not self._check_constraints(metrics):
+        if constraint_violated:
             metadata["constraint_violated"] = True
 
         result = ExperimentResult(
@@ -460,7 +459,7 @@ class ExperimentEngine:
             return True
         return all(c.is_satisfied(metrics) for c in self._constraints)
 
-    def _evaluate_status(self, metrics: dict[str, float]) -> ExperimentStatus:
+    def _evaluate_status(self, metrics: dict[str, float]) -> tuple[ExperimentStatus, bool]:
         """Determine if this result should be kept.
 
         Uses bootstrap-based statistical testing when enough history is available.
@@ -469,30 +468,34 @@ class ExperimentEngine:
 
         In multi-objective mode, Pareto dominance replaces scalar comparison:
         a result is KEEP if no existing KEEP result dominates it on all objectives.
+
+        Returns:
+            A ``(status, constraint_violated)`` tuple.  ``constraint_violated`` is
+            ``True`` only when the result was discarded due to a constraint violation.
         """
         current_objective = metrics.get(self.objective_name)
         if current_objective is None:
-            return ExperimentStatus.CRASH
+            return ExperimentStatus.CRASH, False
 
         # Check constraints first — violated results are always discarded.
         if not self._check_constraints(metrics):
-            return ExperimentStatus.DISCARD
+            return ExperimentStatus.DISCARD, True
 
         # Multi-objective: use Pareto dominance
         if self._objectives is not None and len(self._objectives) > 1:
-            return self._evaluate_multi_objective(metrics)
+            return self._evaluate_multi_objective(metrics), False
 
         # Single-objective path (unchanged from before)
         best = self.log.best_result(self.objective_name, self.minimize)
         if best is None:
-            return ExperimentStatus.KEEP
+            return ExperimentStatus.KEEP, False
 
         # Try statistical evaluation first
         sig_result = self._is_improvement_significant(current_objective)
         if sig_result is not None:
             if sig_result:
                 logger.info("Statistical evaluation: significant improvement detected — KEEP")
-                return ExperimentStatus.KEEP
+                return ExperimentStatus.KEEP, False
             else:
                 # Not statistically significant, but still check greedy
                 # (the statistical test may be conservative)
@@ -508,10 +511,10 @@ class ExperimentEngine:
                         "Statistical evaluation: not significant, "
                         "but greedy improvement detected — KEEP"
                     )
-                    return ExperimentStatus.KEEP
+                    return ExperimentStatus.KEEP, False
                 else:
                     logger.info("Statistical evaluation: no improvement — DISCARD")
-                    return ExperimentStatus.DISCARD
+                    return ExperimentStatus.DISCARD, False
 
         # Fall back to greedy comparison when insufficient data
         fallback = float("inf") if self.minimize else float("-inf")
@@ -520,7 +523,8 @@ class ExperimentEngine:
             is_better = current_objective < best_objective
         else:
             is_better = current_objective > best_objective
-        return ExperimentStatus.KEEP if is_better else ExperimentStatus.DISCARD
+        status = ExperimentStatus.KEEP if is_better else ExperimentStatus.DISCARD
+        return status, False
 
     def _evaluate_multi_objective(self, metrics: dict[str, float]) -> ExperimentStatus:
         """Evaluate a result using Pareto dominance for multi-objective mode.
