@@ -39,6 +39,8 @@ def main() -> None:
     engine = ExperimentEngine(
         search_space=search_space,
         runner=_BiObjectiveRunner(bench),
+        # objective_name is the primary objective used for single-objective fallbacks
+        # (e.g., best_result); objectives defines the full multi-objective set
         objective_name="objective",
         minimize=True,
         causal_graph=graph,

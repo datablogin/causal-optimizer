@@ -27,7 +27,7 @@ class _DiscoveryRunner:
     def run(self, parameters: dict[str, Any]) -> dict[str, float]:
         x1 = parameters["x1"]
         x2 = parameters["x2"]
-        # X3 is irrelevant noise — should not appear in the discovered graph
+        _ = parameters["x3"]  # irrelevant noise — should not appear in discovered graph
         x2_effect = x2 + 0.5 * x1
         objective = float((x2_effect - 2.0) ** 2 + self._rng.normal(0, 0.1))
         return {"objective": objective}

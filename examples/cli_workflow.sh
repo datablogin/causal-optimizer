@@ -13,7 +13,7 @@ DB="demo.db"
 ID="demo-1"
 ADAPTER="examples.demo_adapter:DemoAdapter"
 
-trap "rm -f '$DB'" EXIT
+trap 'rm -f "$DB"' EXIT
 
 # Clean up from any previous run
 rm -f "$DB"
