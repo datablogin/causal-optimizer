@@ -12,6 +12,7 @@ from typing import Any
 from causal_optimizer.engine.loop import ExperimentEngine
 from causal_optimizer.evolution.map_elites import MAPElites
 from causal_optimizer.optimizer.suggest import (
+    _derive_seed,
     _random_sample,
     _suggest_exploitation,
     suggest_parameters,
@@ -232,3 +233,125 @@ def test_suggest_parameters_passes_seed_to_exploitation() -> None:
     a = suggest_parameters(ss, log, phase="exploitation", seed=42)
     b = suggest_parameters(ss, log, phase="exploitation", seed=42)
     assert a == b, "suggest_parameters with seed=42 in exploitation should be deterministic"
+
+
+# ---------------------------------------------------------------------------
+# Coverage: _derive_seed helper
+# ---------------------------------------------------------------------------
+
+
+def test_derive_seed_with_seed() -> None:
+    """_derive_seed returns seed + step when seed is not None."""
+    assert _derive_seed(42, 10) == 52
+    assert _derive_seed(0, 0) == 0
+    assert _derive_seed(100, 5) == 105
+
+
+def test_derive_seed_without_seed() -> None:
+    """_derive_seed returns None when seed is None."""
+    assert _derive_seed(None, 10) is None
+    assert _derive_seed(None, 0) is None
+
+
+# ---------------------------------------------------------------------------
+# Coverage: suggest_parameters unknown phase (else branch, lines 118-120)
+# ---------------------------------------------------------------------------
+
+
+def test_suggest_parameters_unknown_phase_seeded() -> None:
+    """suggest_parameters with an unknown phase falls back to exploration with seed."""
+    ss = _make_search_space()
+    log = ExperimentLog()
+    # Add a result so step offset is nonzero
+    log.results.append(
+        ExperimentResult(
+            experiment_id="e0",
+            parameters={"x": 1.0, "y": 2.0},
+            metrics={"objective": 5.0},
+            status=ExperimentStatus.KEEP,
+        )
+    )
+    a = suggest_parameters(ss, log, phase="unknown_phase", seed=42)
+    b = suggest_parameters(ss, log, phase="unknown_phase", seed=42)
+    assert a == b, "Unknown phase with seed should be deterministic (falls back to exploration)"
+
+
+# ---------------------------------------------------------------------------
+# Coverage: _suggest_optimization early return when < 3 data (lines 162-164)
+# ---------------------------------------------------------------------------
+
+
+def test_suggest_optimization_few_results_seeded() -> None:
+    """optimization phase with < 3 results falls back to exploration with seed."""
+    ss = _make_search_space()
+    log = ExperimentLog()
+    # Only 2 results -- triggers the < 3 early return in _suggest_optimization
+    for i in range(2):
+        log.results.append(
+            ExperimentResult(
+                experiment_id=f"e{i}",
+                parameters={"x": float(i), "y": float(i)},
+                metrics={"objective": float(i)},
+                status=ExperimentStatus.KEEP,
+            )
+        )
+    a = suggest_parameters(ss, log, phase="optimization", seed=42)
+    b = suggest_parameters(ss, log, phase="optimization", seed=42)
+    assert a == b, "Optimization with < 3 results should seed the exploration fallback"
+
+
+# ---------------------------------------------------------------------------
+# Coverage: engine MAP-Elites seeded coin flip (loop.py lines 397-423)
+# ---------------------------------------------------------------------------
+
+
+def test_engine_exploitation_map_elites_seeded() -> None:
+    """Engine in exploitation phase with MAP-Elites archive uses seeded coin flip.
+
+    Forces the engine into exploitation phase with a populated archive, then
+    verifies that suggest_next() is deterministic with a seed.
+    """
+    ss = _make_search_space()
+    runner = _QuadraticRunner()
+
+    def _run_exploitation_suggestions(seed: int) -> list[dict[str, Any]]:
+        engine = ExperimentEngine(
+            search_space=ss,
+            runner=runner,
+            seed=seed,
+            descriptor_names=["objective"],
+        )
+        # Manually populate enough results to reach exploitation phase (>50)
+        # and populate the MAP-Elites archive
+        for i in range(55):
+            x_val = float(i % 10) - 5.0
+            y_val = float(i % 7) - 3.0
+            params = {"x": x_val, "y": y_val}
+            engine.run_experiment(params)
+            # Force phase progression
+            engine._phase = "exploitation" if i >= 50 else "optimization"
+
+        # Now suggest_next should go through the MAP-Elites coin flip path
+        engine._phase = "exploitation"
+        suggestions = []
+        for _ in range(5):
+            s = engine.suggest_next()
+            suggestions.append(s)
+            # Run the experiment so step count advances (changes the seed offset)
+            engine.run_experiment(s)
+        return suggestions
+
+    results_a = _run_exploitation_suggestions(seed=42)
+    results_b = _run_exploitation_suggestions(seed=42)
+    assert results_a == results_b, (
+        "Exploitation with MAP-Elites and seed=42 should be deterministic"
+    )
+
+
+def test_suggest_parameters_exploration_seeded() -> None:
+    """suggest_parameters in exploration phase is deterministic with seed."""
+    ss = _make_search_space()
+    log = ExperimentLog()
+    a = suggest_parameters(ss, log, phase="exploration", seed=42)
+    b = suggest_parameters(ss, log, phase="exploration", seed=42)
+    assert a == b, "Exploration with seed=42 should be deterministic"
