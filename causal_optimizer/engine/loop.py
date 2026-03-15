@@ -116,9 +116,10 @@ class ExperimentEngine:
         """Initialize the experiment engine.
 
         Args:
-            seed: Seed for reproducibility of random operations in
-                ``OffPolicyPredictor`` and ``EffectEstimator`` bootstrap
-                sampling.  Does **not** seed MAP-Elites archive sampling.
+            seed: Seed for reproducibility of all random operations,
+                including parameter suggestions, MAP-Elites archive
+                sampling, ``OffPolicyPredictor``, and ``EffectEstimator``
+                bootstrap sampling.
             discovery_method: Algorithm used to learn a causal graph from
                 experiment data at the exploration→optimization phase
                 transition.  Valid values are ``"correlation"``, ``"pc"``,
@@ -395,9 +396,16 @@ class ExperimentEngine:
 
         # In exploitation phase, 50% of the time sample from MAP-Elites archive
         if self._phase == "exploitation" and self._archive is not None and self._archive.archive:
-            rng = np.random.default_rng()
+            step_count = len(self.log.results)
+            # Use large prime offsets to avoid seed collisions with
+            # _derive_seed(seed, step_count) inside suggest_parameters.
+            flip_seed = (self._seed + step_count * 3 + 100003) if self._seed is not None else None
+            rng = np.random.default_rng(flip_seed)
             if rng.random() < 0.5:
-                elite = self._archive.sample_elite()
+                elite_seed = (
+                    (self._seed + step_count * 3 + 200003) if self._seed is not None else None
+                )
+                elite = self._archive.sample_elite(seed=elite_seed)
                 if elite is not None:
                     logger.info("Sampling from MAP-Elites archive for diversity")
                     return suggest_parameters(

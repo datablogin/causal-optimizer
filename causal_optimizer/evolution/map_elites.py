@@ -93,22 +93,22 @@ class MAPElites:
 
         return False
 
-    def sample_elite(self) -> ExperimentResult | None:
+    def sample_elite(self, seed: int | None = None) -> ExperimentResult | None:
         """Sample a random elite from the archive for mutation."""
         if not self.archive:
             return None
-        rng = np.random.default_rng()
+        rng = np.random.default_rng(seed)
         cells = list(self.archive.values())
         idx = rng.integers(0, len(cells))
         return cells[idx].result
 
-    def sample_diverse(self, n: int = 5) -> list[ExperimentResult]:
+    def sample_diverse(self, n: int = 5, seed: int | None = None) -> list[ExperimentResult]:
         """Sample diverse elites from different regions of the archive."""
         if not self.archive:
             return []
         cells = list(self.archive.values())
         n = min(n, len(cells))
-        rng = np.random.default_rng()
+        rng = np.random.default_rng(seed)
         indices = rng.choice(len(cells), size=n, replace=False)
         return [cells[i].result for i in indices]
 
