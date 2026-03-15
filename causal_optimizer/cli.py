@@ -46,7 +46,11 @@ def _load_adapter(spec: str) -> DomainAdapter:
 
 
 def _adapter_engine_kwargs(adapter: DomainAdapter) -> dict[str, Any]:
-    """Build common engine kwargs from a domain adapter."""
+    """Build common engine kwargs from a domain adapter.
+
+    Pulls configuration from adapter hooks.  CLI flags override these values
+    later in ``_cmd_run`` / ``_cmd_resume``.
+    """
     kwargs: dict[str, Any] = {"search_space": adapter.get_search_space()}
     graph = adapter.get_prior_graph()
     if graph is not None:
@@ -54,7 +58,41 @@ def _adapter_engine_kwargs(adapter: DomainAdapter) -> dict[str, Any]:
     descriptors = adapter.get_descriptor_names()
     if descriptors:
         kwargs["descriptor_names"] = descriptors
+
+    # Configuration hooks — always set scalar values
+    kwargs["objective_name"] = adapter.get_objective_name()
+    kwargs["minimize"] = adapter.get_minimize()
+    kwargs["strategy"] = adapter.get_strategy()
+
+    # Optional hooks — only set if adapter returns a non-None value
+    objectives = adapter.get_objectives()
+    if objectives is not None:
+        kwargs["objectives"] = objectives
+    constraints = adapter.get_constraints()
+    if constraints is not None:
+        kwargs["constraints"] = constraints
+    discovery_method = adapter.get_discovery_method()
+    if discovery_method is not None:
+        kwargs["discovery_method"] = discovery_method
+
     return kwargs
+
+
+def _apply_cli_overrides(engine_kwargs: dict[str, Any], args: argparse.Namespace) -> None:
+    """Apply CLI flag overrides on top of adapter-derived kwargs.
+
+    Priority: CLI flag > adapter method > engine default.
+    """
+    if getattr(args, "objective_name", None) is not None:
+        engine_kwargs["objective_name"] = args.objective_name
+    if getattr(args, "maximize", False):
+        engine_kwargs["minimize"] = False
+    elif getattr(args, "minimize", False):
+        engine_kwargs["minimize"] = True
+    if getattr(args, "strategy", None) is not None:
+        engine_kwargs["strategy"] = args.strategy
+    if getattr(args, "discovery_method", None) is not None:
+        engine_kwargs["discovery_method"] = args.discovery_method
 
 
 def _cmd_run(args: argparse.Namespace) -> None:
@@ -72,6 +110,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
             sys.exit(1)
 
         engine_kwargs = _adapter_engine_kwargs(adapter)
+        _apply_cli_overrides(engine_kwargs, args)
         engine_kwargs.update(
             runner=_AdapterRunner(adapter),
             store=store,
@@ -83,9 +122,11 @@ def _cmd_run(args: argparse.Namespace) -> None:
         engine = ExperimentEngine(**engine_kwargs)
         engine.run_loop(args.budget)
 
-    best = engine.log.best_result()
+    objective_name = engine_kwargs.get("objective_name", "objective")
+    minimize = engine_kwargs.get("minimize", True)
+    best = engine.log.best_result(objective_name=objective_name, minimize=minimize)
     if best is not None:
-        print(f"Best objective: {best.metrics.get('objective', 'N/A')}")
+        print(f"Best {objective_name}: {best.metrics.get(objective_name, 'N/A')}")
     print(f"Experiment ID: {experiment_id}")
 
 
@@ -95,6 +136,7 @@ def _cmd_resume(args: argparse.Namespace) -> None:
 
     with ExperimentStore(args.db) as store:
         engine_kwargs = _adapter_engine_kwargs(adapter)
+        _apply_cli_overrides(engine_kwargs, args)
         try:
             engine = ExperimentEngine.resume(
                 store=store,
@@ -107,9 +149,11 @@ def _cmd_resume(args: argparse.Namespace) -> None:
             sys.exit(1)
         engine.run_loop(args.budget)
 
-    best = engine.log.best_result()
+    objective_name = engine_kwargs.get("objective_name", "objective")
+    minimize = engine_kwargs.get("minimize", True)
+    best = engine.log.best_result(objective_name=objective_name, minimize=minimize)
     if best is not None:
-        print(f"Best objective: {best.metrics.get('objective', 'N/A')}")
+        print(f"Best {objective_name}: {best.metrics.get(objective_name, 'N/A')}")
 
 
 def _cmd_report(args: argparse.Namespace) -> None:
@@ -121,11 +165,15 @@ def _cmd_report(args: argparse.Namespace) -> None:
             print(f"Error: experiment {args.id!r} not found", file=sys.stderr)
             sys.exit(1)
 
+    obj_flag = getattr(args, "objective_name", None)
+    objective_name: str = obj_flag if obj_flag is not None else "objective"
+    # --maximize → minimize=False; otherwise default to minimize=True
+    minimize = not getattr(args, "maximize", False)
     n_kept = sum(1 for r in log.results if r.status == ExperimentStatus.KEEP)
     n_discarded = sum(1 for r in log.results if r.status == ExperimentStatus.DISCARD)
     n_crash = sum(1 for r in log.results if r.status == ExperimentStatus.CRASH)
     phases = sorted({r.metadata.get("phase", "unknown") for r in log.results})
-    best = log.best_result()
+    best = log.best_result(objective_name=objective_name, minimize=minimize)
 
     if args.format == "json":
         data: dict[str, Any] = {
@@ -145,7 +193,9 @@ def _cmd_report(args: argparse.Namespace) -> None:
         print(f"Kept: {n_kept}  Discarded: {n_discarded}  Crashed: {n_crash}")
         print(f"Phases: {', '.join(phases)}")
         if best is not None:
-            print(f"Best result: {best.metrics}")
+            obj_val = best.metrics.get(objective_name, "N/A")
+            print(f"Best {objective_name}: {obj_val}")
+            print(f"  All metrics: {best.metrics}")
             print(f"  Parameters: {best.parameters}")
         else:
             print("No kept results.")
@@ -168,6 +218,39 @@ def _cmd_list(args: argparse.Namespace) -> None:
         print(f"{exp['id']:<{id_width}} {exp['created_at']:<28} {exp['step_count']:>6}")
 
 
+def _add_optimization_flags(parser: argparse.ArgumentParser) -> None:
+    """Add common optimization flags to a subparser (run / resume)."""
+    parser.add_argument(
+        "--objective-name",
+        default=None,
+        help="Name of the primary objective metric (overrides adapter)",
+    )
+    # --minimize and --maximize are mutually exclusive; argparse enforces at most one.
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--minimize",
+        action="store_true",
+        help="Minimize the objective (overrides adapter)",
+    )
+    group.add_argument(
+        "--maximize",
+        action="store_true",
+        help="Maximize the objective (overrides adapter)",
+    )
+    parser.add_argument(
+        "--strategy",
+        default=None,
+        choices=["bayesian", "causal_gp"],
+        help="Optimization strategy (overrides adapter)",
+    )
+    parser.add_argument(
+        "--discovery-method",
+        default=None,
+        choices=["correlation", "pc", "notears"],
+        help="Causal discovery method (overrides adapter)",
+    )
+
+
 def main() -> None:
     """Entry point for the causal-optimizer CLI."""
     parser = argparse.ArgumentParser(
@@ -183,6 +266,7 @@ def main() -> None:
     run_parser.add_argument("--db", required=True, help="Path to SQLite database")
     run_parser.add_argument("--id", default=None, help="Experiment ID (auto-generated if omitted)")
     run_parser.add_argument("--seed", type=int, default=None, help="Random seed")
+    _add_optimization_flags(run_parser)
 
     # resume
     resume_parser = subparsers.add_parser("resume", help="Resume an interrupted experiment")
@@ -192,6 +276,7 @@ def main() -> None:
     resume_parser.add_argument("--id", required=True, help="Experiment ID to resume")
     resume_parser.add_argument("--db", required=True, help="Path to SQLite database")
     resume_parser.add_argument("--budget", type=int, default=10, help="Additional steps to run")
+    _add_optimization_flags(resume_parser)
 
     # report
     report_parser = subparsers.add_parser("report", help="Print experiment report")
@@ -199,6 +284,23 @@ def main() -> None:
     report_parser.add_argument("--db", required=True, help="Path to SQLite database")
     report_parser.add_argument(
         "--format", choices=["table", "json"], default="table", help="Output format"
+    )
+    report_parser.add_argument(
+        "--objective-name",
+        default=None,
+        help="Name of the primary objective metric",
+    )
+    # --minimize/--maximize for correct best-result selection in reports
+    report_group = report_parser.add_mutually_exclusive_group()
+    report_group.add_argument(
+        "--minimize",
+        action="store_true",
+        help="Select best result by minimization",
+    )
+    report_group.add_argument(
+        "--maximize",
+        action="store_true",
+        help="Select best result by maximization",
     )
 
     # list
