@@ -116,9 +116,10 @@ class ExperimentEngine:
         """Initialize the experiment engine.
 
         Args:
-            seed: Seed for reproducibility of all random operations,
-                including parameter suggestions, MAP-Elites archive
-                sampling, ``OffPolicyPredictor``, and ``EffectEstimator``
+            seed: Seed for reproducibility of parameter suggestions
+                (exploration, exploitation, surrogate, causal GP) and
+                MAP-Elites archive sampling.  Bayesian optimization via
+                Ax/BoTorch is not seeded through this parameter
                 bootstrap sampling.
             discovery_method: Algorithm used to learn a causal graph from
                 experiment data at the exploration→optimization phase

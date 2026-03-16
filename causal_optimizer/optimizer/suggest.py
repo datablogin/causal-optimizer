@@ -197,13 +197,14 @@ def _suggest_optimization(
                 "POMIS focus constraints are not applied"
             )
         try:
+            step_seed = _derive_seed(seed, len(experiment_log.results))
             return _suggest_causal_gp(
                 search_space,
                 experiment_log,
                 causal_graph,
                 minimize,
                 objective_name,
-                seed=seed,
+                seed=step_seed,
             )
         except ImportError:
             logger.info("botorch/gpytorch not available for causal_gp, falling back to bayesian")
@@ -223,8 +224,14 @@ def _suggest_optimization(
         )
     except ImportError:
         logger.info("Ax/BoTorch not available, using surrogate-guided sampling")
+        step_seed = _derive_seed(seed, len(experiment_log.results))
         return _suggest_surrogate(
-            search_space, experiment_log, focus_variables, minimize, objective_name
+            search_space,
+            experiment_log,
+            focus_variables,
+            minimize,
+            objective_name,
+            seed=step_seed,
         )
 
 
@@ -358,6 +365,7 @@ def _suggest_surrogate(
     focus_variables: list[str],
     minimize: bool,
     objective_name: str,
+    seed: int | None = None,
 ) -> dict[str, Any]:
     """Surrogate-guided sampling using random forest (fallback when Ax unavailable).
 
@@ -371,7 +379,7 @@ def _suggest_surrogate(
     all_var_names = [v.name for v in search_space.variables if v.name in df.columns]
 
     if len(all_var_names) == 0 or len(df) < 3:
-        return _random_sample(search_space)
+        return _random_sample(search_space, seed=seed)
 
     # Filter to focus variables for RF training; fall back to all if empty
     focus_var_names = [v for v in all_var_names if v in focus_variables] if focus_variables else []
@@ -393,7 +401,7 @@ def _suggest_surrogate(
     from causal_optimizer.designer.factorial import FactorialDesigner
 
     designer = FactorialDesigner(search_space)
-    candidates = designer.latin_hypercube(n_samples=100)
+    candidates = designer.latin_hypercube(n_samples=100, seed=seed)
 
     # For each candidate, hold non-focus variables at best-known values
     non_focus_vars = set(all_var_names) - set(focus_var_names)
@@ -465,15 +473,12 @@ def _suggest_causal_gp(
     """
     from causal_optimizer.optimizer.causal_gp import CausalGPSurrogate
 
-    # Vary the seed per call so each step explores a fresh candidate pool
-    # while preserving reproducibility (seed + n_observations is deterministic).
-    step_seed = _derive_seed(seed, len(experiment_log.results))
     surrogate = CausalGPSurrogate(
         search_space=search_space,
         causal_graph=causal_graph,
         objective_name=objective_name,
         minimize=minimize,
-        seed=step_seed,
+        seed=seed,
     )
     surrogate.fit(experiment_log)
     return surrogate.suggest()
