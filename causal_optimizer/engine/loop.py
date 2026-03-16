@@ -119,8 +119,7 @@ class ExperimentEngine:
             seed: Seed for reproducibility of parameter suggestions
                 (exploration, exploitation, surrogate, causal GP) and
                 MAP-Elites archive sampling.  Bayesian optimization via
-                Ax/BoTorch is not seeded through this parameter
-                bootstrap sampling.
+                Ax/BoTorch is not seeded through this parameter.
             discovery_method: Algorithm used to learn a causal graph from
                 experiment data at the exploration→optimization phase
                 transition.  Valid values are ``"correlation"``, ``"pc"``,

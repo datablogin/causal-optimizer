@@ -394,6 +394,9 @@ def _suggest_surrogate(
     features = encode_dataframe_for_rf(df, focus_var_names, search_space)
     y = df[objective_name].values
 
+    # Hardcoded random_state for RF training stability — the seed param
+    # controls candidate generation (LHS) and fallback sampling, not the
+    # surrogate model itself.
     rf = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=42)
     rf.fit(features, y)
 
