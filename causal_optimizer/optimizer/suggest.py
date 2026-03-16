@@ -158,9 +158,11 @@ def _suggest_optimization(
     selects the least-explored POMIS set and constrains suggestions to those
     variables.
     """
+    # Derive seed once for all paths within this function.
+    step_seed = _derive_seed(seed, len(experiment_log.results))
+
     df = experiment_log.to_dataframe()
     if len(df) < 3:
-        step_seed = _derive_seed(seed, len(experiment_log.results))
         return _suggest_exploration(search_space, experiment_log, seed=step_seed)
 
     # Identify which variables to focus on
@@ -197,7 +199,6 @@ def _suggest_optimization(
                 "POMIS focus constraints are not applied"
             )
         try:
-            step_seed = _derive_seed(seed, len(experiment_log.results))
             return _suggest_causal_gp(
                 search_space,
                 experiment_log,
@@ -224,7 +225,6 @@ def _suggest_optimization(
         )
     except ImportError:
         logger.info("Ax/BoTorch not available, using surrogate-guided sampling")
-        step_seed = _derive_seed(seed, len(experiment_log.results))
         return _suggest_surrogate(
             search_space,
             experiment_log,
