@@ -29,6 +29,16 @@ logger = logging.getLogger(__name__)
 _SCALARIZED_KEY = "__scalarized_objective__"
 
 
+def _derive_seed(seed: int | None, step: int) -> int | None:
+    """Derive a step-specific seed from a base seed.
+
+    Returns ``seed + step`` when *seed* is not ``None``, ensuring each call
+    gets unique but deterministic randomness.  When *seed* is ``None`` the
+    result is ``None`` (unseeded / non-deterministic).
+    """
+    return (seed + step) if seed is not None else None
+
+
 def suggest_parameters(
     search_space: SearchSpace,
     experiment_log: ExperimentLog,
@@ -60,7 +70,8 @@ def suggest_parameters(
             reproducibility.
     """
     if phase == "exploration":
-        return _suggest_exploration(search_space, experiment_log)
+        step_seed = _derive_seed(seed, len(experiment_log.results))
+        return _suggest_exploration(search_space, experiment_log, seed=step_seed)
 
     # When multi-objective, scalarize the experiment log so the surrogate
     # has a single target to optimize.  The scalarized value is written to a
@@ -94,6 +105,7 @@ def suggest_parameters(
             )
         elif phase == "exploitation":
             focus_variables = _get_focus_variables(search_space, causal_graph, objective_name)
+            step_seed = _derive_seed(seed, len(experiment_log.results))
             return _suggest_exploitation(
                 search_space,
                 experiment_log,
@@ -101,9 +113,11 @@ def suggest_parameters(
                 surrogate_objective,
                 focus_variables=focus_variables,
                 base_parameters=base_parameters,
+                seed=step_seed,
             )
         else:
-            return _suggest_exploration(search_space, experiment_log)
+            step_seed = _derive_seed(seed, len(experiment_log.results))
+            return _suggest_exploration(search_space, experiment_log, seed=step_seed)
     finally:
         if needs_cleanup:
             for result in experiment_log.results:
@@ -111,14 +125,16 @@ def suggest_parameters(
 
 
 def _suggest_exploration(
-    search_space: SearchSpace, experiment_log: ExperimentLog
+    search_space: SearchSpace,
+    experiment_log: ExperimentLog,
+    seed: int | None = None,
 ) -> dict[str, Any]:
     """Exploration: Latin Hypercube sampling for space-filling coverage."""
     from causal_optimizer.designer.factorial import FactorialDesigner
 
     designer = FactorialDesigner(search_space)
-    designs = designer.latin_hypercube(n_samples=1)
-    return designs[0] if designs else _random_sample(search_space)
+    designs = designer.latin_hypercube(n_samples=1, seed=seed)
+    return designs[0] if designs else _random_sample(search_space, seed=seed)
 
 
 def _suggest_optimization(
@@ -142,9 +158,12 @@ def _suggest_optimization(
     selects the least-explored POMIS set and constrains suggestions to those
     variables.
     """
+    # Derive seed once for all paths within this function.
+    step_seed = _derive_seed(seed, len(experiment_log.results))
+
     df = experiment_log.to_dataframe()
     if len(df) < 3:
-        return _suggest_exploration(search_space, experiment_log)
+        return _suggest_exploration(search_space, experiment_log, seed=step_seed)
 
     # Identify which variables to focus on
     graph_focus = _get_focus_variables(search_space, causal_graph, objective_name)
@@ -186,7 +205,7 @@ def _suggest_optimization(
                 causal_graph,
                 minimize,
                 objective_name,
-                seed=seed,
+                seed=step_seed,
             )
         except ImportError:
             logger.info("botorch/gpytorch not available for causal_gp, falling back to bayesian")
@@ -207,7 +226,12 @@ def _suggest_optimization(
     except ImportError:
         logger.info("Ax/BoTorch not available, using surrogate-guided sampling")
         return _suggest_surrogate(
-            search_space, experiment_log, focus_variables, minimize, objective_name
+            search_space,
+            experiment_log,
+            focus_variables,
+            minimize,
+            objective_name,
+            seed=step_seed,
         )
 
 
@@ -218,6 +242,7 @@ def _suggest_exploitation(
     objective_name: str,
     focus_variables: list[str] | None = None,
     base_parameters: dict[str, Any] | None = None,
+    seed: int | None = None,
 ) -> dict[str, Any]:
     """Exploitation: perturb the best known configuration or a provided base.
 
@@ -231,10 +256,10 @@ def _suggest_exploitation(
     else:
         best = experiment_log.best_result(objective_name, minimize)
         if best is None:
-            return _random_sample(search_space)
+            return _random_sample(search_space, seed=seed)
         params = dict(best.parameters)
 
-    rng = np.random.default_rng()
+    rng = np.random.default_rng(seed)
 
     # Determine which variables are eligible for perturbation
     if focus_variables:
@@ -340,6 +365,7 @@ def _suggest_surrogate(
     focus_variables: list[str],
     minimize: bool,
     objective_name: str,
+    seed: int | None = None,
 ) -> dict[str, Any]:
     """Surrogate-guided sampling using random forest (fallback when Ax unavailable).
 
@@ -353,7 +379,7 @@ def _suggest_surrogate(
     all_var_names = [v.name for v in search_space.variables if v.name in df.columns]
 
     if len(all_var_names) == 0 or len(df) < 3:
-        return _random_sample(search_space)
+        return _random_sample(search_space, seed=seed)
 
     # Filter to focus variables for RF training; fall back to all if empty
     focus_var_names = [v for v in all_var_names if v in focus_variables] if focus_variables else []
@@ -368,6 +394,9 @@ def _suggest_surrogate(
     features = encode_dataframe_for_rf(df, focus_var_names, search_space)
     y = df[objective_name].values
 
+    # Hardcoded random_state for RF training stability — the seed param
+    # controls candidate generation (LHS) and fallback sampling, not the
+    # surrogate model itself.
     rf = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=42)
     rf.fit(features, y)
 
@@ -375,7 +404,7 @@ def _suggest_surrogate(
     from causal_optimizer.designer.factorial import FactorialDesigner
 
     designer = FactorialDesigner(search_space)
-    candidates = designer.latin_hypercube(n_samples=100)
+    candidates = designer.latin_hypercube(n_samples=100, seed=seed)
 
     # For each candidate, hold non-focus variables at best-known values
     non_focus_vars = set(all_var_names) - set(focus_var_names)
@@ -447,23 +476,20 @@ def _suggest_causal_gp(
     """
     from causal_optimizer.optimizer.causal_gp import CausalGPSurrogate
 
-    # Vary the seed per call so each step explores a fresh candidate pool
-    # while preserving reproducibility (seed + n_observations is deterministic).
-    step_seed = (seed + len(experiment_log.results)) if seed is not None else None
     surrogate = CausalGPSurrogate(
         search_space=search_space,
         causal_graph=causal_graph,
         objective_name=objective_name,
         minimize=minimize,
-        seed=step_seed,
+        seed=seed,
     )
     surrogate.fit(experiment_log)
     return surrogate.suggest()
 
 
-def _random_sample(search_space: SearchSpace) -> dict[str, Any]:
+def _random_sample(search_space: SearchSpace, seed: int | None = None) -> dict[str, Any]:
     """Generate a random sample from the search space."""
-    rng = np.random.default_rng()
+    rng = np.random.default_rng(seed)
     params: dict[str, Any] = {}
     for var in search_space.variables:
         is_cont = var.variable_type == VariableType.CONTINUOUS
