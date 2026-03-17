@@ -109,7 +109,7 @@ def analyze_convergence(
 
 def _safe_linregress_slope(x: np.ndarray, y: np.ndarray) -> float:
     """Linear regression slope, returning 0.0 on degenerate input."""
-    if len(x) < 2 or (np.max(x) - np.min(x)) == 0:
+    if len(x) < 2 or (np.max(x) - np.min(x)) < 1e-10:
         return 0.0
     result = stats.linregress(x, y)
     return float(result.slope)

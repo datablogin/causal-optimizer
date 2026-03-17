@@ -66,7 +66,7 @@ def analyze_variable_signal(
             screening_result = screener.screen(experiment_log, objective_name)
             main_effects = screening_result.main_effects
         except Exception:
-            logger.debug("Screening failed, skipping importance scores", exc_info=True)
+            logger.warning("Screening failed, skipping importance scores", exc_info=True)
 
     reports: list[VariableSignalReport] = []
 
@@ -83,7 +83,8 @@ def analyze_variable_signal(
 
         col = kept_df[name]
         n_unique = col.nunique()
-        n_varied = n_kept if n_unique > 1 else 0
+        # Count experiments with distinct values (n_unique), not total experiments
+        n_varied = n_unique if n_unique > 1 else 0
 
         # Compute range explored
         value_range: tuple[float, float] | None = None
@@ -114,7 +115,7 @@ def analyze_variable_signal(
                     effect_estimate = effect_val
                     effect_significant = float(p_val) < 0.05
             except Exception:
-                logger.debug("Effect estimation failed for %s", name, exc_info=True)
+                logger.warning("Effect estimation failed for %s", name, exc_info=True)
 
         # Classify — causal ancestors get HIGH_SIGNAL to avoid premature dropping
         is_causal_ancestor = name in causal_ancestors

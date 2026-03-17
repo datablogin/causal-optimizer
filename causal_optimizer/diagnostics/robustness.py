@@ -45,7 +45,11 @@ def analyze_robustness(
             top_k_consistency=0.0,
         )
 
-    # Split into early/late halves for sensitivity validation
+    # Split into early/late halves for sensitivity validation.
+    # This temporal split assumes optimization improves over time, so the
+    # late half should contain better results.  During random exploration
+    # the comparison may be less meaningful; the sensitivity validator
+    # still provides a valid statistical test of the two groups.
     mid = n // 2
     early_ids = [r.experiment_id for r in kept[:mid]]
     late_ids = [r.experiment_id for r in kept[mid:]]

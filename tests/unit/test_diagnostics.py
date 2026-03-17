@@ -49,14 +49,19 @@ def _search_space(n_vars: int = 3) -> SearchSpace:
     )
 
 
+_result_counter = 0
+
+
 def _result(
     params: dict,
     objective: float,
     status: ExperimentStatus = ExperimentStatus.KEEP,
     phase: str = "exploration",
 ) -> ExperimentResult:
+    global _result_counter  # noqa: PLW0603
+    _result_counter += 1
     return ExperimentResult(
-        experiment_id="test-exp",
+        experiment_id=f"test-exp-{_result_counter}",
         parameters=params,
         metrics={"objective": objective},
         status=status,
