@@ -154,6 +154,21 @@ class ExperimentStore:
             for r in rows
         ]
 
+    def load_search_space(self, experiment_id: str) -> SearchSpace:
+        """Load the search space for an experiment.
+
+        Raises:
+            KeyError: If the experiment does not exist.
+        """
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT search_space_json FROM experiments WHERE id = ?",
+                (experiment_id,),
+            ).fetchone()
+        if row is None:
+            raise KeyError(f"Experiment {experiment_id!r} not found")
+        return SearchSpace.model_validate(json.loads(row["search_space_json"]))
+
     def delete_experiment(self, experiment_id: str) -> None:
         """Delete an experiment and all its results."""
         with self._lock:

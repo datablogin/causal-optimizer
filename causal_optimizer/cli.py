@@ -15,6 +15,7 @@ from causal_optimizer.types import ExperimentStatus
 
 if TYPE_CHECKING:
     from causal_optimizer.domain_adapters.base import DomainAdapter
+    from causal_optimizer.types import ExperimentLog, SearchSpace
 
 
 class _AdapterRunner:
@@ -95,6 +96,17 @@ def _apply_cli_overrides(engine_kwargs: dict[str, Any], args: argparse.Namespace
         engine_kwargs["discovery_method"] = args.discovery_method
 
 
+def _print_diagnostics(log: ExperimentLog, search_space: SearchSpace) -> None:
+    """Print research advisor diagnostics and recommendations."""
+    from causal_optimizer.diagnostics import ResearchAdvisor
+
+    advisor = ResearchAdvisor()
+    report = advisor.analyze_from_log(experiment_log=log, search_space=search_space)
+
+    print()
+    print(report.summary())
+
+
 def _cmd_run(args: argparse.Namespace) -> None:
     """Run a new experiment."""
     adapter = _load_adapter(args.adapter)
@@ -165,6 +177,8 @@ def _cmd_report(args: argparse.Namespace) -> None:
             print(f"Error: experiment {args.id!r} not found", file=sys.stderr)
             sys.exit(1)
 
+        search_space = store.load_search_space(args.id) if getattr(args, "next", False) else None
+
     obj_flag = getattr(args, "objective_name", None)
     objective_name: str = obj_flag if obj_flag is not None else "objective"
     # --maximize → minimize=False; otherwise default to minimize=True
@@ -199,6 +213,9 @@ def _cmd_report(args: argparse.Namespace) -> None:
             print(f"  Parameters: {best.parameters}")
         else:
             print("No kept results.")
+
+    if search_space is not None:
+        _print_diagnostics(log, search_space)
 
 
 def _cmd_list(args: argparse.Namespace) -> None:
@@ -301,6 +318,9 @@ def main() -> None:
         "--maximize",
         action="store_true",
         help="Select best result by maximization",
+    )
+    report_parser.add_argument(
+        "--next", action="store_true", help="Include research recommendations for next steps"
     )
 
     # list
