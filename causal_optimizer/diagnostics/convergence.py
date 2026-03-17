@@ -85,14 +85,14 @@ def analyze_convergence(
     slope_late = _safe_linregress_slope(indices[mid:], y[mid:]) if (n - mid) >= 2 else slope
 
     # Plateau detection: late slope within 1% of objective range
-    obj_range = float(np.ptp(obj_values)) if len(obj_values) > 1 else 1.0
+    obj_arr = np.array(obj_values)
+    obj_range = float(np.max(obj_arr) - np.min(obj_arr)) if len(obj_values) > 1 else 1.0
     threshold = 0.01 * max(obj_range, 1e-10)
     plateaued = abs(slope_late) < threshold
 
-    # Abandoned climb: still improving when run ended
+    # Abandoned climb: still improving when budget ran out
     at_budget = total_budget is not None and len(experiment_log.results) >= total_budget
-    run_complete = at_budget or total_budget is None
-    abandoned_climb = slope_late > threshold and run_complete
+    abandoned_climb = slope_late > threshold and at_budget
 
     return ConvergenceAnalysis(
         plateaued=plateaued,
@@ -109,7 +109,7 @@ def analyze_convergence(
 
 def _safe_linregress_slope(x: np.ndarray, y: np.ndarray) -> float:
     """Linear regression slope, returning 0.0 on degenerate input."""
-    if len(x) < 2 or np.ptp(x) == 0:
+    if len(x) < 2 or (np.max(x) - np.min(x)) == 0:
         return 0.0
     result = stats.linregress(x, y)
     return float(result.slope)

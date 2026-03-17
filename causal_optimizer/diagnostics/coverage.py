@@ -29,7 +29,11 @@ def analyze_coverage(
     Each sub-analysis is independent and returns ``None`` when its
     required input is unavailable.
     """
+    from causal_optimizer.types import ExperimentStatus
+
     df = experiment_log.to_dataframe()
+    if "status" in df.columns:
+        df = df[df["status"] == ExperimentStatus.KEEP.value]
 
     # Identify which variables were actually varied (have more than one unique value)
     varied_vars: set[str] = set()

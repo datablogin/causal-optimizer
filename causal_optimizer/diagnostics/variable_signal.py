@@ -49,6 +49,13 @@ def analyze_variable_signal(
     kept_df = df[df["status"] == ExperimentStatus.KEEP.value] if "status" in df.columns else df
     n_kept = len(kept_df)
 
+    # Known causal ancestors — avoid classifying these as LOW_SIGNAL
+    causal_ancestors: set[str] = set()
+    if causal_graph is not None:
+        causal_ancestors = causal_graph.ancestors(objective_name) & set(
+            search_space.variable_names
+        )
+
     # Run screening if enough data
     main_effects: dict[str, float] = {}
     if n_kept >= _MIN_EXPERIMENTS_FOR_SCREENING:
@@ -109,11 +116,14 @@ def analyze_variable_signal(
             except Exception:
                 logger.debug("Effect estimation failed for %s", name, exc_info=True)
 
-        # Classify
+        # Classify — causal ancestors get HIGH_SIGNAL to avoid premature dropping
+        is_causal_ancestor = name in causal_ancestors
         if n_varied < _MIN_VARIED_FOR_TESTED or n_kept < _MIN_EXPERIMENTS_FOR_SCREENING:
             signal_class = VariableSignalClass.UNTESTED
-        elif (importance is not None and importance > _IMPORTANCE_THRESHOLD) or (
-            effect_significant is True
+        elif (
+            (importance is not None and importance > _IMPORTANCE_THRESHOLD)
+            or effect_significant is True
+            or is_causal_ancestor
         ):
             signal_class = VariableSignalClass.HIGH_SIGNAL
         else:

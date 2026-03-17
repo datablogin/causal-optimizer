@@ -96,12 +96,17 @@ def _apply_cli_overrides(engine_kwargs: dict[str, Any], args: argparse.Namespace
         engine_kwargs["discovery_method"] = args.discovery_method
 
 
-def _print_diagnostics(log: ExperimentLog, search_space: SearchSpace) -> None:
+def _print_diagnostics(
+    log: ExperimentLog,
+    search_space: SearchSpace,
+    objective_name: str = "objective",
+    minimize: bool = True,
+) -> None:
     """Print research advisor diagnostics and recommendations."""
     from causal_optimizer.diagnostics import ResearchAdvisor
 
     try:
-        advisor = ResearchAdvisor()
+        advisor = ResearchAdvisor(objective_name=objective_name, minimize=minimize)
         report = advisor.analyze_from_log(experiment_log=log, search_space=search_space)
         print()
         print(report.summary())
@@ -217,7 +222,7 @@ def _cmd_report(args: argparse.Namespace) -> None:
             print("No kept results.")
 
     if search_space is not None and args.format != "json":
-        _print_diagnostics(log, search_space)
+        _print_diagnostics(log, search_space, objective_name, minimize)
 
 
 def _cmd_list(args: argparse.Namespace) -> None:
