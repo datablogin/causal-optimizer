@@ -61,7 +61,7 @@ def analyze_robustness(
         robust = report.is_robust
         summary = report.summary
     except Exception:
-        logger.debug("Sensitivity validation failed", exc_info=True)
+        logger.warning("Sensitivity validation failed; robustness is unknown", exc_info=True)
         snr = 0.0
         e_val = 1.0
         effect = 0.0

@@ -204,8 +204,14 @@ def _synthesize_recommendations(
                     f"filled. Unexplored behavioral regions may contain better solutions."
                 ),
                 evidence=[
-                    f"Archive: {coverage.map_elites_filled_cells}"
-                    f"/{coverage.map_elites_total_cells} cells",
+                    *(
+                        [
+                            f"Archive: {coverage.map_elites_filled_cells}"
+                            f"/{coverage.map_elites_total_cells} cells"
+                        ]
+                        if coverage.map_elites_total_cells is not None
+                        else []
+                    ),
                     f"Coverage: {coverage.map_elites_coverage:.1%}",
                 ],
                 next_step="Run more exploitation steps to fill the diversity archive",

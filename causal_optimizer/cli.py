@@ -100,11 +100,13 @@ def _print_diagnostics(log: ExperimentLog, search_space: SearchSpace) -> None:
     """Print research advisor diagnostics and recommendations."""
     from causal_optimizer.diagnostics import ResearchAdvisor
 
-    advisor = ResearchAdvisor()
-    report = advisor.analyze_from_log(experiment_log=log, search_space=search_space)
-
-    print()
-    print(report.summary())
+    try:
+        advisor = ResearchAdvisor()
+        report = advisor.analyze_from_log(experiment_log=log, search_space=search_space)
+        print()
+        print(report.summary())
+    except Exception as exc:  # noqa: BLE001
+        print(f"\nWarning: diagnostics failed ({exc})", file=sys.stderr)
 
 
 def _cmd_run(args: argparse.Namespace) -> None:
@@ -214,7 +216,7 @@ def _cmd_report(args: argparse.Namespace) -> None:
         else:
             print("No kept results.")
 
-    if search_space is not None:
+    if search_space is not None and args.format != "json":
         _print_diagnostics(log, search_space)
 
 
