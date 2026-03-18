@@ -30,6 +30,7 @@ from causal_optimizer.types import (
 from causal_optimizer.validator.sensitivity import RobustnessReport, SensitivityValidator
 
 if TYPE_CHECKING:
+    from causal_optimizer.diagnostics.models import DiagnosticReport
     from causal_optimizer.storage.sqlite import ExperimentStore
 
 logger = logging.getLogger(__name__)
@@ -338,6 +339,41 @@ class ExperimentEngine:
             ObjectiveSpec(name=self.objective_name, minimize=self.minimize)
         ]
         return self.log.pareto_front(objectives)
+
+    @property
+    def phase(self) -> str:
+        """Current optimization phase: 'exploration', 'optimization', or 'exploitation'."""
+        return self._phase
+
+    @property
+    def archive(self) -> MAPElites | None:
+        """The MAP-Elites diversity archive, if configured."""
+        return self._archive
+
+    @property
+    def experiment_id(self) -> str | None:
+        """The experiment ID used for persistence, if configured."""
+        return self._experiment_id
+
+    def diagnose(self, total_budget: int | None = None) -> DiagnosticReport:
+        """Produce a diagnostic report with research recommendations.
+
+        Args:
+            total_budget: Total experiment budget (used for convergence analysis).
+                If ``None``, the run is assumed complete.
+
+        Returns:
+            A :class:`DiagnosticReport` with variable signal, convergence,
+            coverage, and robustness analyses plus ranked recommendations.
+        """
+        from causal_optimizer.diagnostics import ResearchAdvisor
+
+        advisor = ResearchAdvisor(
+            objective_name=self.objective_name,
+            minimize=self.minimize,
+            total_budget=total_budget,
+        )
+        return advisor.analyze(self)
 
     def run_experiment(self, parameters: dict[str, Any]) -> ExperimentResult:
         """Execute a single experiment and log the result."""
