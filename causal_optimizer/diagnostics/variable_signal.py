@@ -54,9 +54,7 @@ def analyze_variable_signal(
     # Known causal ancestors — avoid classifying these as LOW_SIGNAL
     causal_ancestors: set[str] = set()
     if causal_graph is not None:
-        causal_ancestors = causal_graph.ancestors(objective_name) & set(
-            search_space.variable_names
-        )
+        causal_ancestors = causal_graph.ancestors(objective_name) & set(search_space.variable_names)
 
     # Run screening if enough data
     main_effects: dict[str, float] = {}
