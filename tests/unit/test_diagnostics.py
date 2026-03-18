@@ -710,3 +710,68 @@ class TestCLIPrintDiagnostics:
         _print_diagnostics(log, ss)
         captured = capsys.readouterr()
         assert "Diagnostic Report" in captured.out
+
+    def test_print_diagnostics_with_objective_flags(self, capsys):
+        """_print_diagnostics should pass objective_name and minimize."""
+        from causal_optimizer.cli import _print_diagnostics
+
+        ss = _search_space(3)
+        log = _log_with_improving_objective(n=10)
+        _print_diagnostics(log, ss, objective_name="objective", minimize=False)
+        captured = capsys.readouterr()
+        assert "Diagnostic Report" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# Engine.diagnose() Integration Test
+# ---------------------------------------------------------------------------
+
+
+class TestEngineDiagnose:
+    def test_diagnose_smoke(self):
+        """engine.diagnose() should return a valid DiagnosticReport."""
+        from unittest.mock import MagicMock
+
+        from causal_optimizer.engine.loop import ExperimentEngine
+
+        ss = _search_space(3)
+        runner = MagicMock()
+        runner.run.return_value = {"objective": 1.0}
+        engine = ExperimentEngine(search_space=ss, runner=runner)
+        engine.run_loop(n_experiments=6)
+        report = engine.diagnose()
+        assert isinstance(report, DiagnosticReport)
+        assert report.n_experiments == 6
+
+
+# ---------------------------------------------------------------------------
+# ExperimentStore.load_search_space() Test
+# ---------------------------------------------------------------------------
+
+
+class TestStoreLoadSearchSpace:
+    def test_load_search_space(self, tmp_path):
+        """load_search_space should round-trip a search space through SQLite."""
+        from unittest.mock import MagicMock
+
+        from causal_optimizer.engine.loop import ExperimentEngine
+        from causal_optimizer.storage.sqlite import ExperimentStore
+
+        ss = _search_space(2)
+        db_path = str(tmp_path / "test.db")
+        runner = MagicMock()
+        runner.run.return_value = {"objective": 1.0}
+
+        with ExperimentStore(db_path) as store:
+            engine = ExperimentEngine(
+                search_space=ss,
+                runner=runner,
+                store=store,
+                experiment_id="test-ss",
+            )
+            engine.run_loop(n_experiments=3)
+            loaded_ss = store.load_search_space("test-ss")
+
+        assert len(loaded_ss.variables) == len(ss.variables)
+        for orig, loaded in zip(ss.variables, loaded_ss.variables, strict=True):
+            assert orig.name == loaded.name

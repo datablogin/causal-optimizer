@@ -43,11 +43,13 @@ def analyze_variable_signal(
     Uses screening (fANOVA) for importance scores and effect estimation
     for statistical significance.  Degrades gracefully with few experiments.
     """
+    from causal_optimizer.types import ExperimentLog as ELog
     from causal_optimizer.types import ExperimentStatus, VariableType
 
-    df = experiment_log.to_dataframe()
-    kept_df = df[df["status"] == ExperimentStatus.KEEP.value] if "status" in df.columns else df
-    n_kept = len(kept_df)
+    kept_results = [r for r in experiment_log.results if r.status == ExperimentStatus.KEEP]
+    kept_log = ELog(results=kept_results)
+    df = kept_log.to_dataframe() if kept_results else experiment_log.to_dataframe()
+    n_kept = len(df)
 
     # Known causal ancestors — avoid classifying these as LOW_SIGNAL
     causal_ancestors: set[str] = set()
@@ -63,7 +65,7 @@ def analyze_variable_signal(
             from causal_optimizer.designer.screening import ScreeningDesigner
 
             screener = ScreeningDesigner(search_space)
-            screening_result = screener.screen(experiment_log, objective_name)
+            screening_result = screener.screen(kept_log, objective_name)
             main_effects = screening_result.main_effects
         except Exception:
             logger.warning("Screening failed, skipping importance scores", exc_info=True)
@@ -72,7 +74,7 @@ def analyze_variable_signal(
 
     for var in search_space.variables:
         name = var.name
-        if name not in kept_df.columns:
+        if name not in df.columns:
             reports.append(
                 VariableSignalReport(
                     variable_name=name,
@@ -81,10 +83,10 @@ def analyze_variable_signal(
             )
             continue
 
-        col = kept_df[name]
+        col = df[name]
         n_unique = col.nunique()
-        # Count experiments with distinct values (n_unique), not total experiments
-        n_varied = n_unique if n_unique > 1 else 0
+        # Count experiments where this variable was varied (all of them if >1 unique value)
+        n_varied = n_kept if n_unique > 1 else 0
 
         # Compute range explored
         value_range: tuple[float, float] | None = None
@@ -108,8 +110,8 @@ def analyze_variable_signal(
                 if len(above) >= 2 and len(below) >= 2:
                     from scipy import stats as sp_stats
 
-                    above_obj = kept_df.loc[above.index, objective_name].values
-                    below_obj = kept_df.loc[below.index, objective_name].values
+                    above_obj = df.loc[above.index, objective_name].values
+                    below_obj = df.loc[below.index, objective_name].values
                     effect_val = float(np.mean(above_obj) - np.mean(below_obj))
                     _, p_val = sp_stats.ttest_ind(above_obj, below_obj)
                     effect_estimate = effect_val
@@ -119,7 +121,7 @@ def analyze_variable_signal(
 
         # Classify — causal ancestors get HIGH_SIGNAL to avoid premature dropping
         is_causal_ancestor = name in causal_ancestors
-        if n_varied < _MIN_VARIED_FOR_TESTED or n_kept < _MIN_EXPERIMENTS_FOR_SCREENING:
+        if n_unique < 2 or n_kept < _MIN_EXPERIMENTS_FOR_SCREENING:
             signal_class = VariableSignalClass.UNTESTED
         elif (
             (importance is not None and importance > _IMPORTANCE_THRESHOLD)

@@ -271,7 +271,9 @@ def _synthesize_recommendations(
         )
 
     # --- PIVOT: top-K inconsistency ---
-    if robustness.top_k_consistency < 0.3 and robustness.top_k_consistency > 0:
+    # Skip only when robustness had insufficient data (effect_size==0 and snr==0)
+    has_robustness_data = robustness.effect_size != 0.0 or robustness.signal_to_noise != 0.0
+    if robustness.top_k_consistency < 0.3 and has_robustness_data:
         gain = 0.55 * (1.0 - robustness.top_k_consistency)
         recs.append(
             Recommendation(
