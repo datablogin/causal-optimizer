@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 
 import numpy as np
 import pytest
@@ -49,19 +50,14 @@ def _search_space(n_vars: int = 3) -> SearchSpace:
     )
 
 
-_result_counter = 0
-
-
 def _result(
     params: dict,
     objective: float,
     status: ExperimentStatus = ExperimentStatus.KEEP,
     phase: str = "exploration",
 ) -> ExperimentResult:
-    global _result_counter  # noqa: PLW0603
-    _result_counter += 1
     return ExperimentResult(
-        experiment_id=f"test-exp-{_result_counter}",
+        experiment_id=str(uuid.uuid4()),
         parameters=params,
         metrics={"objective": objective},
         status=status,
@@ -270,6 +266,14 @@ class TestConvergence:
         analysis = analyze_convergence(log, "objective", minimize=True)
         # Best should be 2.0 (step index 3 among kept: 10, 5, 3, 2)
         assert analysis.best_objective == 2.0
+
+    def test_flat_objective_is_plateau(self):
+        """A completely flat objective should be detected as a plateau."""
+        results = [_result({"x0": float(i)}, 5.0) for i in range(10)]
+        log = ExperimentLog(results=results)
+        analysis = analyze_convergence(log, "objective", minimize=True)
+        assert analysis.plateaued is True
+        assert analysis.abandoned_climb is False
 
 
 # ---------------------------------------------------------------------------

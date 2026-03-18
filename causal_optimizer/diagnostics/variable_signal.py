@@ -96,7 +96,11 @@ def analyze_variable_signal(
 
         importance = main_effects.get(name)
 
-        # Effect estimation via median split for numeric variables
+        # Effect estimation via median split for numeric variables.
+        # NOTE: This is a marginal (unconditional) test — it does not control
+        # for confounding from other variables.  In multi-variable optimization
+        # the groups may differ on other variables too, so treat p-values as
+        # rough screening signals, not causal evidence.
         effect_estimate: float | None = None
         effect_significant: bool | None = None
         enough_unique = n_unique >= _MIN_UNIQUE_FOR_EFFECT
@@ -104,7 +108,6 @@ def analyze_variable_signal(
         if is_numeric and enough_data:
             try:
                 median_val = float(col.median())
-                # Use values above/below median as proxy treatment/control
                 above = col[col > median_val]
                 below = col[col <= median_val]
                 if len(above) >= 2 and len(below) >= 2:
