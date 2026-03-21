@@ -187,6 +187,8 @@ class MLTrainingAdapter(DomainAdapter):
         # activation -> gradient_flow -> training_stability
         gradient_flow = act_factor
         training_stability *= gradient_flow
+        # Final clamp after all multiplicative adjustments
+        training_stability = max(0.01, min(1.0, training_stability))
 
         # batch_size -> throughput (+ hardware confounder)
         throughput = batch_size * 0.8 + u_hardware * 10 + self._rng.normal(0, sigma)

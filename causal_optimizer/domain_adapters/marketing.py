@@ -6,7 +6,7 @@ email campaigns, social ads, search ads, creative variants, and retargeting.
 Structural equations follow the prior causal graph:
   email_frequency -> email_opens -> site_visits -> conversions
   social_spend_pct -> social_impressions -> brand_awareness -> search_volume -> conversions
-  search_bid_multiplier -> paid_clicks -> conversions
+  search_bid_multiplier -> search_clicks -> conversions
   creative_variant -> ctr -> conversions
   retargeting_enabled -> repeat_visits -> conversions
   Bidirected: U_purchase_intent <-> (social_impressions, conversions)
@@ -145,18 +145,18 @@ class MarketingAdapter(DomainAdapter):
         )
         search_volume = max(0.0, search_volume)
 
-        # search_volume + search_bid_multiplier -> paid_clicks (diminishing returns on bid)
-        paid_clicks = search_volume * np.sqrt(bid_mult) * 0.15 + self._rng.normal(0, sigma)
-        paid_clicks = max(0.0, paid_clicks)
+        # search_volume + search_bid_multiplier -> search_clicks (diminishing returns on bid)
+        search_clicks = search_volume * np.sqrt(bid_mult) * 0.15 + self._rng.normal(0, sigma)
+        search_clicks = max(0.0, search_clicks)
 
         # creative_variant -> click_through_rate
         ctr = self._CREATIVE_CTR.get(creative, 0.02) + self._rng.normal(0, sigma * 0.1)
         ctr = max(0.001, ctr)
 
-        # email_opens + paid_clicks + ctr -> site_visits
+        # email_opens + search_clicks + ctr -> site_visits
         site_visits = (
             email_opens * 0.8
-            + paid_clicks
+            + search_clicks
             + ctr * 60.0  # CTR applied to a base traffic pool
             + self._rng.normal(0, sigma)
         )
