@@ -99,8 +99,21 @@ When a causal graph is available, it enables:
 
 ## Install
 
+### From PyPI
+
 ```bash
-uv sync
+pip install causal-optimizer                    # core only
+pip install causal-optimizer[bayesian]          # + Ax/BoTorch
+pip install causal-optimizer[causal]            # + DoWhy
+pip install causal-optimizer[all]               # everything
+```
+
+### From source (development)
+
+```bash
+git clone https://github.com/datablogin/causal-optimizer.git
+cd causal-optimizer
+uv sync --extra dev
 ```
 
 With optional dependencies:
@@ -108,7 +121,7 @@ With optional dependencies:
 ```bash
 uv sync --extra bayesian   # Ax/BoTorch for Bayesian optimization
 uv sync --extra doe         # pyDOE3 for factorial designs
-uv sync --extra causal      # causal-inference-marketing library
+uv sync --extra causal      # DoWhy for causal inference
 uv sync --extra all         # everything
 ```
 
@@ -170,7 +183,7 @@ Each adapter defines a search space, a runner, and optionally a prior causal gra
 
 ## Relationship to causal-inference-marketing
 
-This project optionally depends on [causal-inference-marketing](https://github.com/datablogin/causal-inference-marketing) for advanced causal estimators (AIPW, TMLE, causal forests) and discovery algorithms (PC, NOTEARS). The CI library provides the *analysis* tools; this project provides the *optimization loop* that uses those tools to design and sequence experiments.
+This project was originally developed alongside [causal-inference-marketing](https://github.com/datablogin/causal-inference-marketing). The `causal` optional extra now installs [DoWhy](https://github.com/py-why/dowhy) for advanced causal estimators and discovery algorithms. The CI library provides the *analysis* tools; this project provides the *optimization loop* that uses those tools to design and sequence experiments.
 
 Core functionality works without it — built-in bootstrap estimation and correlation-based graphs cover the basics.
 

@@ -52,7 +52,6 @@ doe = [
     "pyDOE3>=1.0.0",
 ]
 causal = [
-    "causal-inference-marketing @ git+https://github.com/datablogin/causal-inference-marketing.git",
     "dowhy>=0.11",
 ]
 all = [
@@ -73,9 +72,6 @@ causal-optimizer = "causal_optimizer.cli:main"
 [project.urls]
 Repository = "https://github.com/datablogin/causal-optimizer"
 Issues = "https://github.com/datablogin/causal-optimizer/issues"
-
-[tool.hatch.metadata]
-allow-direct-references = true
 
 [tool.ruff]
 target-version = "py310"
