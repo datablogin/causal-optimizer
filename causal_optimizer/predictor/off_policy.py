@@ -424,12 +424,8 @@ class OffPolicyPredictor:
             combined_mean = (rf_mean * rf_weight + obs_mean * obs_weight) / total_weight
             # Use the overlap (intersection) of the two CIs, clamped to
             # always contain the weighted mean so the CI is never empty.
-            inner_lo = max(
-                rf_pred.confidence_interval[0], obs_estimate.confidence_interval[0]
-            )
-            inner_hi = min(
-                rf_pred.confidence_interval[1], obs_estimate.confidence_interval[1]
-            )
+            inner_lo = max(rf_pred.confidence_interval[0], obs_estimate.confidence_interval[0])
+            inner_hi = min(rf_pred.confidence_interval[1], obs_estimate.confidence_interval[1])
             if inner_lo <= inner_hi:
                 combined_ci = (
                     min(inner_lo, combined_mean),
