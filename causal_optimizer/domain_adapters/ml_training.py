@@ -10,7 +10,7 @@ Structural equations follow the prior causal graph:
   n_layers, n_heads, hidden_dim -> model_capacity -> val_loss
   dropout, weight_decay -> regularization -> val_loss
   optimizer -> gradient_scale
-  activation -> model_capacity
+  activation -> gradient_flow -> training_stability
   Bidirected: U_hardware <-> (throughput, memory_usage)
   Bidirected: U_data_distribution <-> (model_capacity, val_loss)
 
@@ -171,10 +171,11 @@ class MLTrainingAdapter(DomainAdapter):
         gradient_scale = lr * 1000 * opt_factor + self._rng.normal(0, sigma * 0.1)
 
         # gradient_scale -> training_stability
-        # Stability is highest when gradient_scale is near 1.0
-        # Very high gradient_scale (>10) causes near-total instability
-        stability_penalty = (gradient_scale - 1.0) ** 2
-        training_stability = 1.0 / (1.0 + stability_penalty * 0.5) + self._rng.normal(
+        # Stability degrades when gradient_scale is too high (explosion).
+        # Low gradient_scale (small LR) is stable but slow — the slow
+        # convergence effect is captured separately via tokens_benefit.
+        explosion_penalty = max(0.0, gradient_scale - 1.0) ** 2
+        training_stability = 1.0 / (1.0 + explosion_penalty * 0.5) + self._rng.normal(
             0, sigma * 0.05
         )
         training_stability = max(0.01, min(1.0, training_stability))
