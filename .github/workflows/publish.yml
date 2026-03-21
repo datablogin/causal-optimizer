@@ -39,7 +39,7 @@ jobs:
       - run: uv build
       - name: Verify version matches tag
         run: |
-          PKG_VERSION=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          PKG_VERSION=$(uv run python -c "import tomllib, pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
           TAG_VERSION="${GITHUB_REF#refs/tags/v}"
           if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
             echo "::error::Package version ($PKG_VERSION) does not match tag ($TAG_VERSION)"
@@ -51,6 +51,7 @@ jobs:
           name: dist
           path: dist/
           retention-days: 1
+          if-no-files-found: error
 
   test-publish:
     needs: build
