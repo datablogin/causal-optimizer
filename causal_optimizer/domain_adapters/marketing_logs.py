@@ -267,9 +267,7 @@ class MarketingLogAdapter(DomainAdapter):
         treated_cost_weights[match_treat] = normalized_weights[match_treat]
         n_match_treat = match_treat.sum()
         total_cost = (
-            float(np.sum(treated_cost_weights * cost) / n_match_treat)
-            if n_match_treat > 0
-            else 0.0
+            float(np.sum(treated_cost_weights * cost) / n_match_treat) if n_match_treat > 0 else 0.0
         )
 
         treated_fraction = float(policy_treat.mean())
