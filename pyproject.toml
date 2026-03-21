@@ -87,6 +87,8 @@ exclude = [
     "/thoughts",
     "/.coverage",
     "/.claude",
+    "/CLAUDE.md",
+    "/claude-review.sh",
 ]
 
 [tool.hatch.metadata]

@@ -33,3 +33,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - SQLite persistence with resume support
 - CLI: run, resume, report, list commands
 - 530+ tests across unit, integration, and regression suites
+
+[0.1.0]: https://github.com/datablogin/causal-optimizer/releases/tag/v0.1.0
