@@ -33,6 +33,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
 ]
 dependencies = [
     "numpy>=1.24.0",
@@ -89,6 +90,7 @@ exclude = [
     "/.claude",
     "/CLAUDE.md",
     "/claude-review.sh",
+    "/examples",
 ]
 
 [tool.hatch.metadata]
