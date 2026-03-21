@@ -295,6 +295,7 @@ class MarketingLogAdapter(DomainAdapter):
                 ("treatment_budget_pct", "treated_fraction"),
                 ("treated_fraction", "total_cost"),
                 ("treated_fraction", "policy_value"),
+                ("treated_fraction", "effective_sample_size"),
                 ("email_share", "total_cost"),
                 ("email_share", "policy_value"),
                 ("social_share_of_remainder", "total_cost"),
