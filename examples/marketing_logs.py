@@ -24,10 +24,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
     fixture_path = (
-        Path(__file__).resolve().parent.parent
-        / "tests"
-        / "fixtures"
-        / "marketing_log_fixture.csv"
+        Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "marketing_log_fixture.csv"
     )
     adapter = MarketingLogAdapter(data_path=str(fixture_path), seed=42)
 
