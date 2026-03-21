@@ -69,6 +69,7 @@ class MarketingLogAdapter(DomainAdapter):
             data = pd.read_csv(data_path)
 
         assert data is not None  # for type narrowing
+        self._seed = seed
         self._data = data.copy()
         self._propensity_col = propensity_col
         self._treatment_col = treatment_col
@@ -148,6 +149,12 @@ class MarketingLogAdapter(DomainAdapter):
         eligibility_threshold = float(parameters.get("eligibility_threshold", 0.3))
         email_share = float(parameters.get("email_share", 0.4))
         social_share = float(parameters.get("social_share", 0.3))
+
+        # Normalize shares so they sum to at most 1.0
+        total_share = email_share + social_share
+        if total_share > 1.0:
+            email_share /= total_share
+            social_share /= total_share
         min_propensity_clip = float(parameters.get("min_propensity_clip", 0.05))
         regularization = float(parameters.get("regularization", 1.0))
         treatment_budget_pct = float(parameters.get("treatment_budget_pct", 0.5))
@@ -258,9 +265,12 @@ class MarketingLogAdapter(DomainAdapter):
         # Weight treated costs by IPS
         treated_cost_weights = np.zeros(n)
         treated_cost_weights[match_treat] = normalized_weights[match_treat]
-        total_cost = float(np.sum(treated_cost_weights * cost) / max(1, match_treat.sum()))
-        if match_treat.sum() == 0:
-            total_cost = 0.0
+        n_match_treat = match_treat.sum()
+        total_cost = (
+            float(np.sum(treated_cost_weights * cost) / n_match_treat)
+            if n_match_treat > 0
+            else 0.0
+        )
 
         treated_fraction = float(policy_treat.mean())
 
