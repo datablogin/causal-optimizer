@@ -8,9 +8,10 @@ version = "0.1.0"
 description = "Causally-informed experiment optimization engine — decides what to try next using causal inference, Bayesian optimization, and evolutionary strategies."
 readme = "README.md"
 license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 authors = [
-    { name = "Robert Welborn" },
+    { name = "Robert Welborn", email = "robert@datablogin.com" },
 ]
 keywords = [
     "causal-inference",
@@ -71,8 +72,23 @@ dev = [
 causal-optimizer = "causal_optimizer.cli:main"
 
 [project.urls]
+Homepage = "https://github.com/datablogin/causal-optimizer"
+Documentation = "https://github.com/datablogin/causal-optimizer#readme"
 Repository = "https://github.com/datablogin/causal-optimizer"
 Issues = "https://github.com/datablogin/causal-optimizer/issues"
+Changelog = "https://github.com/datablogin/causal-optimizer/blob/main/CHANGELOG.md"
+
+[tool.hatch.build.targets.wheel]
+packages = ["causal_optimizer"]
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "/.github",
+    "/tests",
+    "/thoughts",
+    "/.coverage",
+    "/.claude",
+]
 
 [tool.hatch.metadata]
 allow-direct-references = true
