@@ -414,9 +414,13 @@ def _add_observational_recommendations(
             )
         )
 
-    # Identifiable but untested ancestors → EXPLORE
+    # Per-variable recommendations (single pass)
     for var_report in observational.variables:
-        if var_report.identifiable and var_report.exp_estimate is None:
+        if not var_report.identifiable:
+            continue
+
+        # Identifiable but untested ancestors → EXPLORE
+        if var_report.exp_estimate is None:
             recs.append(
                 Recommendation(
                     rank=0,
@@ -441,15 +445,9 @@ def _add_observational_recommendations(
                 )
             )
 
-    # Tight obs CI on ancestor → DROP (low signal)
-    for var_report in observational.variables:
-        if (
-            var_report.identifiable
-            and var_report.obs_ci is not None
-            and var_report.obs_estimate is not None
-        ):
+        # Tight obs CI on ancestor with near-zero effect → DROP
+        if var_report.obs_ci is not None and var_report.obs_estimate is not None:
             ci_width = var_report.obs_ci[1] - var_report.obs_ci[0]
-            # If the CI is tight and the estimate is near zero, suggest dropping
             if ci_width < 1.0 and abs(var_report.obs_estimate) < 0.5:
                 recs.append(
                     Recommendation(

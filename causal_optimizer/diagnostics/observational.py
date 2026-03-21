@@ -8,7 +8,7 @@ available.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -19,6 +19,8 @@ from causal_optimizer.diagnostics.models import (
 from causal_optimizer.types import ExperimentStatus
 
 if TYPE_CHECKING:
+    import pandas as pd
+
     from causal_optimizer.types import CausalGraph, ExperimentLog, SearchSpace
 
 logger = logging.getLogger(__name__)
@@ -104,28 +106,18 @@ def analyze_observational(
     keep_results = [r for r in experiment_log.results if r.status == ExperimentStatus.KEEP]
     n_keep = len(keep_results)
 
-    # Try to create the estimator
+    # Check if the estimator class is available
     estimator_cls = ObservationalEstimator
-    estimator: Any = None
-    dowhy_available = True
+    dowhy_available = estimator_cls is not None
 
-    if estimator_cls is None:
-        dowhy_available = False
+    if not dowhy_available:
         logger.info("DoWhy not available; all variables marked as non-identifiable")
-    else:
-        try:
-            estimator = estimator_cls(causal_graph=causal_graph)
-        except ImportError:
-            dowhy_available = False
-            logger.info("DoWhy not available; all variables marked as non-identifiable")
-        except Exception:
-            dowhy_available = False
-            logger.warning("Failed to create ObservationalEstimator", exc_info=True)
+
+    # Compute dataframe once for reuse across all variable analyses
+    df = experiment_log.to_dataframe()
 
     # Compute experimental effect estimates for comparison
-    exp_estimates = _compute_experimental_estimates(
-        experiment_log, search_space, objective_name, ancestor_vars
-    )
+    exp_estimates = _compute_experimental_estimates(df, objective_name, ancestor_vars)
 
     variables: list[ObservationalVariableReport] = []
     n_identifiable = 0
@@ -133,10 +125,10 @@ def analyze_observational(
     for var_name in ancestor_vars:
         report = _analyze_variable(
             var_name=var_name,
-            estimator=estimator,
             estimator_cls=estimator_cls,
             causal_graph=causal_graph,
             experiment_log=experiment_log,
+            df=df,
             objective_name=objective_name,
             n_keep=n_keep,
             exp_estimate=exp_estimates.get(var_name),
@@ -168,16 +160,16 @@ def analyze_observational(
 
 def _analyze_variable(
     var_name: str,
-    estimator: Any,
     estimator_cls: type | None,
     causal_graph: CausalGraph,
     experiment_log: ExperimentLog,
+    df: pd.DataFrame,
     objective_name: str,
     n_keep: int,
     exp_estimate: float | None,
 ) -> ObservationalVariableReport:
     """Analyze a single variable's observational identifiability and estimate."""
-    if estimator is None or estimator_cls is None or n_keep < _MIN_EXPERIMENTS:
+    if estimator_cls is None or n_keep < _MIN_EXPERIMENTS:
         return ObservationalVariableReport(
             variable_name=var_name,
             identifiable=False,
@@ -193,8 +185,6 @@ def _analyze_variable(
     for method in ("backdoor", "frontdoor", "iv"):
         try:
             est = estimator_cls(causal_graph=causal_graph, method=method)
-            # Use median value for treatment
-            df = experiment_log.to_dataframe()
             if var_name not in df.columns:
                 continue
             treatment_value = float(df[var_name].median())
@@ -245,13 +235,11 @@ def _analyze_variable(
 
 
 def _compute_experimental_estimates(
-    experiment_log: ExperimentLog,
-    search_space: SearchSpace,
+    df: pd.DataFrame,
     objective_name: str,
     ancestor_vars: list[str],
 ) -> dict[str, float]:
     """Compute simple experimental effect estimates via median split."""
-    df = experiment_log.to_dataframe()
     estimates: dict[str, float] = {}
 
     for var_name in ancestor_vars:
