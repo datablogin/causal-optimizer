@@ -210,7 +210,13 @@ class ExperimentEngine:
             n_bootstrap=n_bootstrap,
             seed=seed,
         )
-        self._predictor = OffPolicyPredictor(epsilon_mode=epsilon_mode, n_max=n_max, seed=seed)
+        self._predictor = OffPolicyPredictor(
+            epsilon_mode=epsilon_mode,
+            n_max=n_max,
+            seed=seed,
+            causal_graph=causal_graph,
+            objective_name=objective_name,
+        )
         self._max_skips = max_skips
         self._screening_result: ScreeningResult | None = None
         self._screened_focus_variables: list[str] | None = None

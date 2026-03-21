@@ -93,6 +93,28 @@ class RobustnessAnalysis(BaseModel):
     top_k_consistency: float
 
 
+class ObservationalVariableReport(BaseModel):
+    """Observational analysis for a single variable."""
+
+    variable_name: str
+    identifiable: bool
+    identification_method: str | None = None
+    obs_estimate: float | None = None
+    obs_ci: tuple[float, float] | None = None
+    exp_estimate: float | None = None
+    agreement: float | None = None
+
+
+class ObservationalAnalysis(BaseModel):
+    """Aggregate observational signal analysis."""
+
+    n_identifiable: int
+    n_variables: int
+    variables: list[ObservationalVariableReport]
+    obs_experimental_agreement: float | None = None
+    recommendation: str
+
+
 class Recommendation(BaseModel):
     """A ranked research recommendation."""
 
@@ -117,6 +139,7 @@ class DiagnosticReport(BaseModel):
     convergence: ConvergenceAnalysis
     coverage: CoverageAnalysis
     robustness: RobustnessAnalysis
+    observational: ObservationalAnalysis | None = None
     recommendations: list[Recommendation]
 
     def summary(self) -> str:
@@ -160,6 +183,14 @@ class DiagnosticReport(BaseModel):
             lines.append(f"MAP-Elites coverage: {cov.map_elites_coverage:.0%}")
         if cov.search_space_coverage is not None:
             lines.append(f"Search space coverage: {cov.search_space_coverage:.0%}")
+
+        # Observational
+        if self.observational is not None:
+            obs = self.observational
+            lines.append(f"Observational: {obs.n_identifiable}/{obs.n_variables} identifiable")
+            if obs.obs_experimental_agreement is not None:
+                lines.append(f"Obs-experimental agreement: {obs.obs_experimental_agreement:.0%}")
+            lines.append(f"Observational recommendation: {obs.recommendation}")
 
         # Robustness
         r = self.robustness

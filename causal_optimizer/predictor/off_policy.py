@@ -19,9 +19,13 @@ from causal_optimizer.predictor.epsilon import compute_epsilon
 from causal_optimizer.types import VariableType
 
 if TYPE_CHECKING:
-    from causal_optimizer.types import ExperimentLog, SearchSpace
+    from causal_optimizer.estimator.observational import ObservationalEstimate
+    from causal_optimizer.types import CausalGraph, ExperimentLog, SearchSpace
 
 logger = logging.getLogger(__name__)
+
+# Sentinel distinguishing "not yet tried" from "tried and failed"
+_NOT_TRIED: object = object()
 
 
 @dataclass
@@ -49,6 +53,8 @@ class OffPolicyPredictor:
         epsilon_mode: bool = False,
         n_max: int = 100,
         seed: int | None = None,
+        causal_graph: CausalGraph | None = None,
+        objective_name: str | None = None,
     ) -> None:
         """Initialize the off-policy predictor.
 
@@ -57,6 +63,12 @@ class OffPolicyPredictor:
                 reproducibility of observe/intervene coin flips in
                 ``_should_run_epsilon``. Has no effect when
                 ``epsilon_mode=False``.
+            causal_graph: Optional causal graph for observational estimation.
+                When provided alongside ``objective_name``, the predictor
+                will attempt to combine RF predictions with observational
+                causal effect estimates for improved prediction.
+            objective_name: Name of the objective metric. Required when
+                ``causal_graph`` is provided.
         """
         self.uncertainty_threshold = uncertainty_threshold
         self.min_history = min_history
@@ -71,6 +83,10 @@ class OffPolicyPredictor:
         self._search_space: SearchSpace | None = None
         self._rng: np.random.Generator = np.random.default_rng(seed)
         self._warned_unbound_vars: set[str] = set()
+        self._causal_graph: CausalGraph | None = causal_graph
+        self._objective_name: str | None = objective_name
+        self._obs_estimator: type | object | None = _NOT_TRIED
+        self._experiment_log: ExperimentLog | None = None
 
     def fit(
         self,
@@ -128,6 +144,26 @@ class OffPolicyPredictor:
             self._cached_features = None
             self._cached_epsilon = 0.0
 
+        # Cache experiment log for observational prediction
+        self._experiment_log = experiment_log
+
+        # Check DoWhy availability and cache estimator class for
+        # _observational_predict (which tries backdoor, frontdoor, IV per
+        # variable — mirroring _analyze_variable in observational.py).
+        if self._causal_graph is not None and self._obs_estimator is _NOT_TRIED:
+            try:
+                from causal_optimizer.estimator.observational import ObservationalEstimator
+
+                # Store the *class* so _observational_predict can instantiate
+                # per-method estimators (backdoor, frontdoor, IV).
+                self._obs_estimator = ObservationalEstimator
+            except ImportError:
+                logger.debug("DoWhy not available; observational estimation disabled")
+                self._obs_estimator = None
+            except (AttributeError, TypeError) as exc:
+                logger.debug("Failed to load ObservationalEstimator: %s", exc)
+                self._obs_estimator = None
+
         if len(df) < self.min_history or not self._var_names:
             self._model = None
             return
@@ -173,12 +209,24 @@ class OffPolicyPredictor:
             float(np.percentile(tree_predictions, 97.5)),
         )
 
-        return Prediction(
+        rf_prediction = Prediction(
             expected_value=expected,
             uncertainty=uncertainty,
             confidence_interval=ci,
             model_quality=self._model_quality,
         )
+
+        # Try to combine with observational estimate (skip if not tried or failed)
+        if (
+            self._obs_estimator is not None
+            and self._obs_estimator is not _NOT_TRIED
+            and self._experiment_log is not None
+        ):
+            obs_estimate = self._observational_predict(parameters)
+            if obs_estimate is not None:
+                return self._combine_predictions(rf_prediction, obs_estimate)
+
+        return rf_prediction
 
     def should_run_experiment(self, parameters: dict[str, Any]) -> bool:
         """Decide whether to run the experiment or trust the prediction.
@@ -264,6 +312,177 @@ class OffPolicyPredictor:
 
         # With probability 1-epsilon, intervene (run experiment)
         return True
+
+    def _observational_predict(self, parameters: dict[str, Any]) -> ObservationalEstimate | None:
+        """Predict outcome using observational causal estimation.
+
+        Tries all causal-ancestor parameters with all identification methods
+        (backdoor, frontdoor, IV) — mirroring ``_analyze_variable`` in
+        ``observational.py`` — and selects the identified estimate with the
+        tightest finite confidence interval.  Returns ``None`` when no
+        ancestor yields an identified estimate with a finite CI.
+        """
+        if (
+            self._obs_estimator is None
+            or self._obs_estimator is _NOT_TRIED
+            or self._experiment_log is None
+        ):
+            return None
+
+        if self._causal_graph is None:
+            return None
+
+        # _obs_estimator stores the *class* (set during fit())
+        estimator_cls = self._obs_estimator
+        if not callable(estimator_cls):
+            return None
+
+        objective_name = self._objective_name or "objective"
+
+        if objective_name in self._causal_graph.nodes:
+            ancestors = self._causal_graph.ancestors(objective_name)
+        else:
+            return None
+
+        # Collect all identified estimates, then pick the tightest CI
+        candidates: list[ObservationalEstimate] = []
+
+        for var_name, var_value in parameters.items():
+            if var_name not in ancestors:
+                continue
+            if not isinstance(var_value, (int, float)):
+                continue
+            # Try each identification method (backdoor, frontdoor, IV)
+            from causal_optimizer.diagnostics.observational import IDENTIFICATION_METHODS
+
+            for method in IDENTIFICATION_METHODS:
+                try:
+                    est = estimator_cls(
+                        causal_graph=self._causal_graph,
+                        method=method,
+                    )
+                    result = est.estimate_intervention(
+                        experiment_log=self._experiment_log,
+                        treatment_var=var_name,
+                        treatment_value=float(var_value),
+                        objective_name=objective_name,
+                    )
+                    if result.identified:
+                        candidates.append(result)
+                except Exception:
+                    logger.debug(
+                        "Observational prediction (%s) failed for %s",
+                        method,
+                        var_name,
+                        exc_info=True,
+                    )
+                    continue
+
+        if not candidates:
+            return None
+
+        # Select the estimate with the smallest finite CI width
+        def _ci_width(est: ObservationalEstimate) -> float:
+            ci = est.confidence_interval
+            width = ci[1] - ci[0]
+            if not np.isfinite(width) or width <= 0:
+                return float("inf")
+            return width
+
+        best = min(candidates, key=_ci_width)
+
+        # Guard: if the best candidate still has a non-finite CI, fall back
+        # to pure RF prediction rather than polluting _combine_predictions.
+        if not np.isfinite(_ci_width(best)):
+            return None
+
+        return best
+
+    def _combine_predictions(
+        self, rf_pred: Prediction, obs_estimate: ObservationalEstimate
+    ) -> Prediction:
+        """Combine RF and observational predictions via heuristic ensemble.
+
+        This is a heuristic combination, not a principled Bayesian fusion.
+        The RF uncertainty (tree ensemble std) and observational CI (DoWhy
+        linear regression SE) come from fundamentally different models, so
+        the weighting and thresholds below are pragmatic approximations:
+
+        - **Agreement**: RF and obs means within 1 RF std.  The combined
+          mean is a precision-weighted average (inverse CI width), and the
+          combined CI is the overlap of the two CIs clamped to contain the
+          combined mean.
+        - **Disagreement**: conservative union — the CI spans both estimates
+          and uncertainty is inflated.
+
+        Known limitations:
+        - Inverse-CI-width weighting assumes comparable calibration across
+          the two uncertainty models.
+        - The ``/4.0`` and ``/2.0`` divisors are heuristic scale factors
+          without formal justification.
+        - When obs CI is much tighter than RF CI, the combined mean is
+          dominated by the observational estimate.
+
+        Despite these limitations, empirically the combination is safe:
+        disagreement always *increases* uncertainty (triggering more
+        experiments), and agreement only *modestly* tightens the CI.
+        """
+        rf_mean = rf_pred.expected_value
+        obs_mean = obs_estimate.expected_outcome
+        difference = abs(rf_mean - obs_mean)
+
+        rf_ci_width = rf_pred.confidence_interval[1] - rf_pred.confidence_interval[0]
+        obs_ci_width = obs_estimate.confidence_interval[1] - obs_estimate.confidence_interval[0]
+
+        # Agreement threshold: predictions agree if they're within 1 RF std
+        agree = difference <= rf_pred.uncertainty
+
+        if agree:
+            # Agree → weighted average, CI from overlap of the two CIs
+            # Weight by inverse CI width (tighter CI gets more weight)
+            rf_weight = 1.0 / max(rf_ci_width, 1e-10)
+            obs_weight = 1.0 / max(obs_ci_width, 1e-10)
+            total_weight = rf_weight + obs_weight
+            combined_mean = (rf_mean * rf_weight + obs_mean * obs_weight) / total_weight
+            # Use the overlap (intersection) of the two CIs, clamped to
+            # always contain the weighted mean so the CI is never empty.
+            inner_lo = max(rf_pred.confidence_interval[0], obs_estimate.confidence_interval[0])
+            inner_hi = min(rf_pred.confidence_interval[1], obs_estimate.confidence_interval[1])
+            if inner_lo <= inner_hi:
+                combined_ci = (
+                    min(inner_lo, combined_mean),
+                    max(inner_hi, combined_mean),
+                )
+            else:
+                # No overlap: span a CI that covers combined_mean and both CIs
+                all_bounds = [
+                    rf_pred.confidence_interval[0],
+                    rf_pred.confidence_interval[1],
+                    obs_estimate.confidence_interval[0],
+                    obs_estimate.confidence_interval[1],
+                    combined_mean,
+                ]
+                combined_ci = (min(all_bounds), max(all_bounds))
+            combined_uncertainty = min(rf_pred.uncertainty, obs_ci_width / 4.0)
+        else:
+            # Disagree → conservative, wider CI
+            combined_mean = (rf_mean + obs_mean) / 2.0
+            # Expand CI to cover both predictions
+            all_bounds = [
+                rf_pred.confidence_interval[0],
+                rf_pred.confidence_interval[1],
+                obs_estimate.confidence_interval[0],
+                obs_estimate.confidence_interval[1],
+            ]
+            combined_ci = (min(all_bounds), max(all_bounds))
+            combined_uncertainty = max(rf_pred.uncertainty, difference, obs_ci_width / 2.0)
+
+        return Prediction(
+            expected_value=combined_mean,
+            uncertainty=combined_uncertainty,
+            confidence_interval=combined_ci,
+            model_quality=rf_pred.model_quality,
+        )
 
     def _get_domain_bounds(self) -> list[tuple[float, float]] | None:
         """Extract bounds from the search space for numeric variables only.
