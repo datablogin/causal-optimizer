@@ -19,7 +19,8 @@ from causal_optimizer.predictor.epsilon import compute_epsilon
 from causal_optimizer.types import VariableType
 
 if TYPE_CHECKING:
-    from causal_optimizer.types import ExperimentLog, SearchSpace
+    from causal_optimizer.estimator.observational import ObservationalEstimate
+    from causal_optimizer.types import CausalGraph, ExperimentLog, SearchSpace
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,8 @@ class OffPolicyPredictor:
         epsilon_mode: bool = False,
         n_max: int = 100,
         seed: int | None = None,
+        causal_graph: CausalGraph | None = None,
+        objective_name: str | None = None,
     ) -> None:
         """Initialize the off-policy predictor.
 
@@ -57,6 +60,12 @@ class OffPolicyPredictor:
                 reproducibility of observe/intervene coin flips in
                 ``_should_run_epsilon``. Has no effect when
                 ``epsilon_mode=False``.
+            causal_graph: Optional causal graph for observational estimation.
+                When provided alongside ``objective_name``, the predictor
+                will attempt to combine RF predictions with observational
+                causal effect estimates for improved prediction.
+            objective_name: Name of the objective metric. Required when
+                ``causal_graph`` is provided.
         """
         self.uncertainty_threshold = uncertainty_threshold
         self.min_history = min_history
@@ -71,6 +80,10 @@ class OffPolicyPredictor:
         self._search_space: SearchSpace | None = None
         self._rng: np.random.Generator = np.random.default_rng(seed)
         self._warned_unbound_vars: set[str] = set()
+        self._causal_graph: CausalGraph | None = causal_graph
+        self._objective_name: str | None = objective_name
+        self._obs_estimator: object | None = None
+        self._experiment_log: ExperimentLog | None = None
 
     def fit(
         self,
@@ -128,6 +141,24 @@ class OffPolicyPredictor:
             self._cached_features = None
             self._cached_epsilon = 0.0
 
+        # Cache experiment log for observational prediction
+        self._experiment_log = experiment_log
+
+        # Initialize observational estimator if causal graph is available
+        if self._causal_graph is not None and self._obs_estimator is None:
+            try:
+                from causal_optimizer.estimator.observational import ObservationalEstimator
+
+                self._obs_estimator = ObservationalEstimator(
+                    causal_graph=self._causal_graph,
+                )
+            except ImportError:
+                logger.debug("DoWhy not available; observational estimation disabled")
+                self._obs_estimator = None
+            except Exception:
+                logger.debug("Failed to create ObservationalEstimator", exc_info=True)
+                self._obs_estimator = None
+
         if len(df) < self.min_history or not self._var_names:
             self._model = None
             return
@@ -173,12 +204,20 @@ class OffPolicyPredictor:
             float(np.percentile(tree_predictions, 97.5)),
         )
 
-        return Prediction(
+        rf_prediction = Prediction(
             expected_value=expected,
             uncertainty=uncertainty,
             confidence_interval=ci,
             model_quality=self._model_quality,
         )
+
+        # Try to combine with observational estimate
+        if self._obs_estimator is not None and self._experiment_log is not None:
+            obs_estimate = self._observational_predict(parameters)
+            if obs_estimate is not None:
+                return self._combine_predictions(rf_prediction, obs_estimate)
+
+        return rf_prediction
 
     def should_run_experiment(self, parameters: dict[str, Any]) -> bool:
         """Decide whether to run the experiment or trust the prediction.
@@ -264,6 +303,102 @@ class OffPolicyPredictor:
 
         # With probability 1-epsilon, intervene (run experiment)
         return True
+
+    def _observational_predict(self, parameters: dict[str, Any]) -> ObservationalEstimate | None:
+        """Predict outcome using observational causal estimation.
+
+        Attempts to estimate the outcome for the first available treatment
+        variable using the causal graph. Returns None if estimation fails.
+        """
+        if self._obs_estimator is None or self._experiment_log is None:
+            return None
+
+        from causal_optimizer.estimator.observational import ObservationalEstimator
+
+        if not isinstance(self._obs_estimator, ObservationalEstimator):
+            return None
+
+        objective_name = self._objective_name or "objective"
+
+        # Try the first parameter that is a causal ancestor
+        graph = self._obs_estimator.causal_graph
+        if objective_name in graph.nodes:
+            ancestors = graph.ancestors(objective_name)
+        else:
+            return None
+
+        for var_name, var_value in parameters.items():
+            if var_name not in ancestors:
+                continue
+            if not isinstance(var_value, (int, float)):
+                continue
+            try:
+                result = self._obs_estimator.estimate_intervention(
+                    experiment_log=self._experiment_log,
+                    treatment_var=var_name,
+                    treatment_value=float(var_value),
+                    objective_name=objective_name,
+                )
+                if result.identified:
+                    return result
+            except Exception:
+                logger.debug("Observational prediction failed for %s", var_name, exc_info=True)
+                continue
+
+        return None
+
+    def _combine_predictions(
+        self, rf_pred: Prediction, obs_estimate: ObservationalEstimate
+    ) -> Prediction:
+        """Combine RF and observational predictions.
+
+        When predictions agree (difference < RF uncertainty), produce a
+        tighter CI. When they disagree, produce a wider CI to signal
+        increased uncertainty.
+        """
+        rf_mean = rf_pred.expected_value
+        obs_mean = obs_estimate.expected_outcome
+        difference = abs(rf_mean - obs_mean)
+
+        rf_ci_width = rf_pred.confidence_interval[1] - rf_pred.confidence_interval[0]
+        obs_ci_width = obs_estimate.confidence_interval[1] - obs_estimate.confidence_interval[0]
+
+        # Agreement threshold: predictions agree if they're within 1 RF std
+        agree = difference <= rf_pred.uncertainty
+
+        if agree:
+            # Agree → weighted average, tighter CI
+            # Weight by inverse CI width (tighter CI gets more weight)
+            rf_weight = 1.0 / max(rf_ci_width, 1e-10)
+            obs_weight = 1.0 / max(obs_ci_width, 1e-10)
+            total_weight = rf_weight + obs_weight
+            combined_mean = (rf_mean * rf_weight + obs_mean * obs_weight) / total_weight
+            # Combined CI is the intersection-inspired approach
+            combined_half_width = min(rf_ci_width, obs_ci_width) / 2.0
+            combined_ci = (
+                combined_mean - combined_half_width,
+                combined_mean + combined_half_width,
+            )
+            combined_uncertainty = min(rf_pred.uncertainty, obs_ci_width / 4.0)
+        else:
+            # Disagree → conservative, wider CI
+            combined_mean = (rf_mean + obs_mean) / 2.0
+            # Expand CI to cover both predictions
+            all_bounds = [
+                rf_pred.confidence_interval[0],
+                rf_pred.confidence_interval[1],
+                obs_estimate.confidence_interval[0],
+                obs_estimate.confidence_interval[1],
+            ]
+            combined_ci = (min(all_bounds), max(all_bounds))
+            combined_uncertainty = max(rf_pred.uncertainty, difference, obs_ci_width / 2.0)
+
+        return Prediction(
+            expected_value=combined_mean,
+            uncertainty=combined_uncertainty,
+            confidence_interval=combined_ci,
+            model_quality=rf_pred.model_quality,
+        )
 
     def _get_domain_bounds(self) -> list[tuple[float, float]] | None:
         """Extract bounds from the search space for numeric variables only.

@@ -12,6 +12,7 @@ from causal_optimizer.diagnostics.models import (
     ConvergenceAnalysis,
     CoverageAnalysis,
     DiagnosticReport,
+    ObservationalAnalysis,
     Recommendation,
     RecommendationType,
     RobustnessAnalysis,
@@ -88,8 +89,22 @@ class ResearchAdvisor:
         robustness = analyze_robustness(
             experiment_log, self.objective_name, self.minimize, search_space
         )
+
+        # Observational analysis (only when causal graph is provided)
+        observational: ObservationalAnalysis | None = None
+        if causal_graph is not None:
+            from causal_optimizer.diagnostics.observational import analyze_observational
+
+            observational = analyze_observational(
+                experiment_log,
+                search_space,
+                self.objective_name,
+                self.minimize,
+                causal_graph,
+            )
+
         recommendations = _synthesize_recommendations(
-            signal, convergence, coverage, robustness, search_space
+            signal, convergence, coverage, robustness, search_space, observational
         )
 
         return DiagnosticReport(
@@ -100,6 +115,7 @@ class ResearchAdvisor:
             convergence=convergence,
             coverage=coverage,
             robustness=robustness,
+            observational=observational,
             recommendations=recommendations,
         )
 
@@ -110,6 +126,7 @@ def _synthesize_recommendations(
     coverage: CoverageAnalysis,
     robustness: RobustnessAnalysis,
     search_space: SearchSpace,
+    observational: ObservationalAnalysis | None = None,
 ) -> list[Recommendation]:
     """Generate ranked recommendations from all analyses."""
     recs: list[Recommendation] = []
@@ -328,9 +345,136 @@ def _synthesize_recommendations(
             )
         )
 
+    # --- Observational-based recommendations ---
+    if observational is not None:
+        _add_observational_recommendations(observational, recs)
+
     # Sort by expected_info_gain descending and assign ranks
     recs.sort(key=lambda r: r.expected_info_gain, reverse=True)
     for i, rec in enumerate(recs):
         rec.rank = i + 1
 
     return recs
+
+
+def _add_observational_recommendations(
+    observational: ObservationalAnalysis,
+    recs: list[Recommendation],
+) -> None:
+    """Add recommendations based on observational analysis."""
+    # Strong obs-exp agreement → EXPLOIT
+    if (
+        observational.obs_experimental_agreement is not None
+        and observational.obs_experimental_agreement >= 0.8
+    ):
+        recs.append(
+            Recommendation(
+                rank=0,
+                rec_type=RecommendationType.EXPLOIT,
+                confidence=ConfidenceLevel.HIGH,
+                title="Observational estimates confirm experimental findings",
+                description=(
+                    f"Observational and experimental estimates agree "
+                    f"({observational.obs_experimental_agreement:.0%}). "
+                    f"Focus on the best-performing regions identified by both methods."
+                ),
+                evidence=[
+                    f"Obs-exp agreement: {observational.obs_experimental_agreement:.0%}",
+                    f"{observational.n_identifiable}/{observational.n_variables} "
+                    f"variables identifiable",
+                ],
+                next_step="Exploit the identified high-performing parameter regions",
+                expected_info_gain=0.75,
+            )
+        )
+
+    # Obs-exp disagreement → PIVOT
+    if (
+        observational.obs_experimental_agreement is not None
+        and observational.obs_experimental_agreement < 0.5
+        and observational.n_identifiable > 0
+    ):
+        recs.append(
+            Recommendation(
+                rank=0,
+                rec_type=RecommendationType.PIVOT,
+                confidence=ConfidenceLevel.MEDIUM,
+                title="Observational and experimental estimates disagree",
+                description=(
+                    f"Observational estimates disagree with experiments "
+                    f"(agreement: {observational.obs_experimental_agreement:.0%}). "
+                    f"Possible confounding or model misspecification."
+                ),
+                evidence=[
+                    f"Obs-exp agreement: {observational.obs_experimental_agreement:.0%}",
+                    f"{observational.n_identifiable} identifiable variables",
+                ],
+                next_step=("Review causal graph assumptions or add more observational data"),
+                expected_info_gain=0.7,
+            )
+        )
+
+    # Identifiable but untested ancestors → EXPLORE
+    for var_report in observational.variables:
+        if var_report.identifiable and var_report.exp_estimate is None:
+            recs.append(
+                Recommendation(
+                    rank=0,
+                    rec_type=RecommendationType.EXPLORE,
+                    confidence=ConfidenceLevel.MEDIUM,
+                    title=f"Identifiable ancestor {var_report.variable_name} untested",
+                    description=(
+                        f"Variable {var_report.variable_name} has an identifiable causal "
+                        f"effect (obs estimate: {var_report.obs_estimate}) but no "
+                        f"experimental estimate available."
+                    ),
+                    evidence=[
+                        f"Identification method: {var_report.identification_method}",
+                        f"Observational estimate: {var_report.obs_estimate}",
+                    ],
+                    next_step=(
+                        f"Run experiments varying {var_report.variable_name} to validate "
+                        f"the observational estimate"
+                    ),
+                    expected_info_gain=0.8,
+                    variables_involved=[var_report.variable_name],
+                )
+            )
+
+    # Tight obs CI on ancestor → DROP (low signal)
+    for var_report in observational.variables:
+        if (
+            var_report.identifiable
+            and var_report.obs_ci is not None
+            and var_report.obs_estimate is not None
+        ):
+            ci_width = var_report.obs_ci[1] - var_report.obs_ci[0]
+            # If the CI is tight and the estimate is near zero, suggest dropping
+            if ci_width < 1.0 and abs(var_report.obs_estimate) < 0.5:
+                recs.append(
+                    Recommendation(
+                        rank=0,
+                        rec_type=RecommendationType.DROP,
+                        confidence=ConfidenceLevel.MEDIUM,
+                        title=(
+                            f"Observational evidence suggests {var_report.variable_name} "
+                            f"has negligible effect"
+                        ),
+                        description=(
+                            f"Variable {var_report.variable_name} has a tight observational "
+                            f"CI ({ci_width:.3f}) around a near-zero estimate "
+                            f"({var_report.obs_estimate:.3f})."
+                        ),
+                        evidence=[
+                            f"Obs estimate: {var_report.obs_estimate:.4f}",
+                            f"Obs CI width: {ci_width:.4f}",
+                            f"Method: {var_report.identification_method}",
+                        ],
+                        next_step=(
+                            f"Fix {var_report.variable_name} at its current value "
+                            f"to reduce search space"
+                        ),
+                        expected_info_gain=0.6,
+                        variables_involved=[var_report.variable_name],
+                    )
+                )
