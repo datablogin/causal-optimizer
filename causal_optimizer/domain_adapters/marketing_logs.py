@@ -7,7 +7,7 @@ and evaluates counterfactual policies offline.
 
 Policy variables control:
   - eligibility_threshold: minimum predicted uplift score to treat a user
-  - email_share / social_share: budget allocation across channels
+  - email_share / social_share_of_remainder: budget allocation across channels
   - min_propensity_clip: floor for IPS weights to control variance
   - regularization: uplift model regularization strength
   - treatment_budget_pct: fraction of eligible users to treat
@@ -123,7 +123,7 @@ class MarketingLogAdapter(DomainAdapter):
                     upper=1.0,
                 ),
                 Variable(
-                    name="social_share",
+                    name="social_share_of_remainder",
                     variable_type=VariableType.CONTINUOUS,
                     lower=0.0,
                     upper=1.0,
@@ -160,13 +160,10 @@ class MarketingLogAdapter(DomainAdapter):
         """
         eligibility_threshold = float(parameters.get("eligibility_threshold", 0.3))
         email_share = float(parameters.get("email_share", 0.4))
-        social_share = float(parameters.get("social_share", 0.3))
+        social_share_of_remainder = float(parameters.get("social_share_of_remainder", 0.5))
 
-        # Normalize shares so they sum to at most 1.0
-        total_share = email_share + social_share
-        if total_share > 1.0:
-            email_share /= total_share
-            social_share /= total_share
+        # Simplex parameterization: shares always sum to 1.0
+        social_share = social_share_of_remainder * (1.0 - email_share)
         min_propensity_clip = float(parameters.get("min_propensity_clip", 0.05))
         regularization = float(parameters.get("regularization", 1.0))
         treatment_budget_pct = float(parameters.get("treatment_budget_pct", 0.5))
@@ -239,11 +236,11 @@ class MarketingLogAdapter(DomainAdapter):
 
         # Apply budget constraint: treat at most treatment_budget_pct of eligible
         n_eligible = eligible.sum()
-        n_to_treat = max(1, int(n_eligible * treatment_budget_pct))
+        n_to_treat = int(n_eligible * treatment_budget_pct)
 
         # Select top-scoring eligible observations
         policy_treat = np.zeros(n, dtype=bool)
-        if n_eligible > 0:
+        if n_to_treat > 0:
             eligible_indices = np.where(eligible)[0]
             eligible_scores = uplift_score[eligible_indices]
             # Sort by score descending, take top n_to_treat
@@ -273,16 +270,10 @@ class MarketingLogAdapter(DomainAdapter):
         # Policy value: weighted average outcome
         policy_value = float(np.sum(normalized_weights * outcome) / n)
 
-        # Total cost: cost for treated observations under policy
-        # Weight treated costs by IPS
+        # Total cost: sum of IPS-weighted costs for treated observations under policy
         treated_cost_weights = np.zeros(n)
         treated_cost_weights[match_treat] = normalized_weights[match_treat]
-        treated_weight_sum = treated_cost_weights.sum()
-        total_cost = (
-            float(np.sum(treated_cost_weights * cost) / treated_weight_sum)
-            if treated_weight_sum > 0
-            else 0.0
-        )
+        total_cost = float(np.sum(treated_cost_weights * cost) / n)
 
         treated_fraction = float(policy_treat.mean())
 
@@ -306,8 +297,8 @@ class MarketingLogAdapter(DomainAdapter):
                 ("treated_fraction", "policy_value"),
                 ("email_share", "total_cost"),
                 ("email_share", "policy_value"),
-                ("social_share", "total_cost"),
-                ("social_share", "policy_value"),
+                ("social_share_of_remainder", "total_cost"),
+                ("social_share_of_remainder", "policy_value"),
                 ("regularization", "policy_value"),
                 ("min_propensity_clip", "effective_sample_size"),
                 ("min_propensity_clip", "policy_value"),

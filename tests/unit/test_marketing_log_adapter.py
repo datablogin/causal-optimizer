@@ -36,7 +36,7 @@ def default_params() -> dict[str, float]:
     return {
         "eligibility_threshold": 0.3,
         "email_share": 0.4,
-        "social_share": 0.3,
+        "social_share_of_remainder": 0.3,
         "min_propensity_clip": 0.05,
         "regularization": 1.0,
         "treatment_budget_pct": 0.5,
@@ -56,7 +56,7 @@ class TestAdapterContract:
         expected = [
             "eligibility_threshold",
             "email_share",
-            "social_share",
+            "social_share_of_remainder",
             "min_propensity_clip",
             "regularization",
             "treatment_budget_pct",
@@ -166,7 +166,7 @@ class TestDeterminism:
         params1 = {
             "eligibility_threshold": 0.1,
             "email_share": 0.3,
-            "social_share": 0.3,
+            "social_share_of_remainder": 0.3,
             "min_propensity_clip": 0.05,
             "regularization": 1.0,
             "treatment_budget_pct": 0.5,
@@ -174,7 +174,7 @@ class TestDeterminism:
         params2 = {
             "eligibility_threshold": 0.9,
             "email_share": 0.3,
-            "social_share": 0.3,
+            "social_share_of_remainder": 0.3,
             "min_propensity_clip": 0.05,
             "regularization": 1.0,
             "treatment_budget_pct": 0.5,
@@ -352,7 +352,7 @@ class TestPositivity:
         params_tight = {
             "eligibility_threshold": 0.3,
             "email_share": 0.4,
-            "social_share": 0.3,
+            "social_share_of_remainder": 0.3,
             "min_propensity_clip": 0.01,
             "regularization": 1.0,
             "treatment_budget_pct": 0.5,
@@ -360,7 +360,7 @@ class TestPositivity:
         params_wide = {
             "eligibility_threshold": 0.3,
             "email_share": 0.4,
-            "social_share": 0.3,
+            "social_share_of_remainder": 0.3,
             "min_propensity_clip": 0.4,
             "regularization": 1.0,
             "treatment_budget_pct": 0.5,
