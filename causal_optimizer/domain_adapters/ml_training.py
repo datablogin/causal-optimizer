@@ -32,12 +32,15 @@ Approximate known optimum:
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import numpy as np
 
 from causal_optimizer.domain_adapters.base import DomainAdapter
 from causal_optimizer.types import CausalGraph, SearchSpace, Variable, VariableType
+
+logger = logging.getLogger(__name__)
 
 
 class MLTrainingAdapter(DomainAdapter):
@@ -161,6 +164,10 @@ class MLTrainingAdapter(DomainAdapter):
         u_data_dist = self._rng.normal(0, 1)
 
         # --- Categorical encodings ---
+        if optimizer_name not in self._OPTIMIZER_FACTOR:
+            logger.warning("Unknown optimizer %r, falling back to factor 1.0", optimizer_name)
+        if activation not in self._ACTIVATION_FACTOR:
+            logger.warning("Unknown activation %r, falling back to factor 1.0", activation)
         opt_factor = self._OPTIMIZER_FACTOR.get(optimizer_name, 1.0)
         act_factor = self._ACTIVATION_FACTOR.get(activation, 1.0)
 
@@ -231,8 +238,9 @@ class MLTrainingAdapter(DomainAdapter):
         # Training stability reduces loss
         stability_benefit = training_stability * 0.4
 
-        # Optimizer convergence speed
-        convergence_benefit = opt_factor * 0.1
+        # optimizer -> convergence_speed -> val_loss
+        convergence_speed = opt_factor  # named to match graph node
+        convergence_benefit = convergence_speed * 0.1
 
         # Tokens seen benefit (log scale, diminishing returns)
         tokens_benefit = np.log(tokens_seen + 1) * 0.04
@@ -301,7 +309,6 @@ class MLTrainingAdapter(DomainAdapter):
                 ("n_layers", "memory_usage"),
                 ("hidden_dim", "memory_usage"),
                 ("model_capacity", "val_loss"),
-                ("memory_usage", "max_batch_size"),
                 ("dropout", "regularization"),
                 ("weight_decay", "regularization"),
                 ("regularization", "val_loss"),

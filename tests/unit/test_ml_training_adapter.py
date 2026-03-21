@@ -39,6 +39,51 @@ class TestMLTrainingAdapterBasics:
         assert adapter.get_minimize() is True
 
 
+class TestMLTrainingRunProtocol:
+    """Test the ExperimentRunner protocol (run method)."""
+
+    def test_run_delegates_to_run_experiment(self) -> None:
+        adapter = MLTrainingAdapter(seed=42)
+        params = {
+            "learning_rate": 1e-3,
+            "batch_size": 64,
+            "n_layers": 6,
+            "n_heads": 8,
+            "hidden_dim": 512,
+            "dropout": 0.1,
+            "weight_decay": 0.01,
+            "optimizer": "adamw",
+            "activation": "gelu",
+        }
+        run_result = adapter.run(params)
+        adapter2 = MLTrainingAdapter(seed=42)
+        experiment_result = adapter2.run_experiment(params)
+        assert run_result == experiment_result
+
+
+class TestMLTrainingNoise:
+    """Tests for noise scale configuration."""
+
+    def test_noise_scale_zero_is_deterministic(self) -> None:
+        """noise_scale=0 should produce deterministic results (except confounders)."""
+        adapter1 = MLTrainingAdapter(seed=42, noise_scale=0.0)
+        adapter2 = MLTrainingAdapter(seed=42, noise_scale=0.0)
+        params = {
+            "learning_rate": 1e-3,
+            "batch_size": 64,
+            "n_layers": 6,
+            "n_heads": 8,
+            "hidden_dim": 512,
+            "dropout": 0.1,
+            "weight_decay": 0.01,
+            "optimizer": "adamw",
+            "activation": "gelu",
+        }
+        m1 = adapter1.run_experiment(params)
+        m2 = adapter2.run_experiment(params)
+        assert m1["val_loss"] == pytest.approx(m2["val_loss"], abs=1e-10)
+
+
 class TestMLTrainingSimulator:
     """Tests for the run_experiment simulator."""
 

@@ -6,9 +6,9 @@ email campaigns, social ads, search ads, creative variants, and retargeting.
 Structural equations follow the prior causal graph:
   email_frequency -> email_opens -> site_visits -> conversions
   social_spend_pct -> social_impressions -> brand_awareness -> search_volume -> conversions
-  search_bid_multiplier -> search_clicks -> conversions
-  creative_variant -> ctr -> conversions
-  retargeting_enabled -> repeat_visits -> conversions
+  search_bid_multiplier, search_volume -> search_clicks -> site_visits -> conversions
+  creative_variant -> click_through_rate -> site_visits -> conversions
+  retargeting_enabled -> return_visits -> conversions
   Bidirected: U_purchase_intent <-> (social_impressions, conversions)
   Bidirected: U_seasonality <-> (brand_awareness, search_volume)
 
@@ -25,12 +25,15 @@ The optimum is interior because:
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import numpy as np
 
 from causal_optimizer.domain_adapters.base import DomainAdapter
 from causal_optimizer.types import CausalGraph, SearchSpace, Variable, VariableType
+
+logger = logging.getLogger(__name__)
 
 
 class MarketingAdapter(DomainAdapter):
@@ -150,6 +153,8 @@ class MarketingAdapter(DomainAdapter):
         search_clicks = max(0.0, search_clicks)
 
         # creative_variant -> click_through_rate
+        if creative not in self._CREATIVE_CTR:
+            logger.warning("Unknown creative_variant %r, falling back to control CTR", creative)
         click_through_rate = self._CREATIVE_CTR.get(creative, 0.02) + self._rng.normal(
             0, sigma * 0.1
         )
