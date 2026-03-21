@@ -2,7 +2,7 @@
 
 Demonstrates the full pipeline using MarketingAdapter:
 - 5-variable mixed-type search space (integer, continuous, categorical, boolean)
-- Prior causal graph with 13 directed edges and 2 bidirected edges
+- Prior causal graph with 12 directed edges and 2 bidirected edges
 - 40 experiments through exploration -> optimization phases
 - Diagnostic report with research recommendations
 
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 
-from causal_optimizer.domain_adapters.marketing import MarketingAdapter
+from causal_optimizer.domain_adapters import MarketingAdapter
 from causal_optimizer.engine.loop import ExperimentEngine
 
 

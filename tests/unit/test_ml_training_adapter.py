@@ -316,6 +316,35 @@ class TestMLTrainingSeedReproducibility:
         assert m1["val_loss"] != pytest.approx(m2["val_loss"], abs=1e-10)
 
 
+class TestMLTrainingEdgeCases:
+    """Tests for edge cases and fallback behavior."""
+
+    def test_empty_params_uses_defaults(self) -> None:
+        """run_experiment({}) should not crash, using defaults for all params."""
+        adapter = MLTrainingAdapter(seed=42)
+        metrics = adapter.run_experiment({})
+        assert "val_loss" in metrics
+        assert "memory_usage" in metrics
+        assert "model_capacity" in metrics
+
+    def test_unknown_optimizer_falls_back(self) -> None:
+        """Unknown optimizer should fall back to factor 1.0."""
+        adapter = MLTrainingAdapter(seed=42)
+        params = {
+            "learning_rate": 1e-3,
+            "batch_size": 64,
+            "n_layers": 6,
+            "n_heads": 8,
+            "hidden_dim": 512,
+            "dropout": 0.1,
+            "weight_decay": 0.01,
+            "optimizer": "INVALID",
+            "activation": "gelu",
+        }
+        metrics = adapter.run_experiment(params)
+        assert metrics["val_loss"] > 0  # should not crash
+
+
 class TestMLTrainingMemory:
     """Tests for memory usage behavior."""
 

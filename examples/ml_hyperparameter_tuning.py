@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 
-from causal_optimizer.domain_adapters.ml_training import MLTrainingAdapter
+from causal_optimizer.domain_adapters import MLTrainingAdapter
 from causal_optimizer.engine.loop import ExperimentEngine
 
 

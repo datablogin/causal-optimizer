@@ -272,6 +272,31 @@ class TestMarketingSeedReproducibility:
         assert m1["conversions"] != pytest.approx(m2["conversions"], abs=1e-10)
 
 
+class TestMarketingEdgeCases:
+    """Tests for edge cases and fallback behavior."""
+
+    def test_empty_params_uses_defaults(self) -> None:
+        """run_experiment({}) should not crash, using defaults for all params."""
+        adapter = MarketingAdapter(seed=42)
+        metrics = adapter.run_experiment({})
+        assert "conversions" in metrics
+        assert "total_spend" in metrics
+        assert "channel_diversity" in metrics
+
+    def test_unknown_creative_variant_falls_back(self) -> None:
+        """Unknown creative_variant should fall back to control CTR."""
+        adapter = MarketingAdapter(seed=42)
+        params = {
+            "email_frequency": 3,
+            "social_spend_pct": 0.5,
+            "search_bid_multiplier": 1.0,
+            "creative_variant": "INVALID",
+            "retargeting_enabled": False,
+        }
+        metrics = adapter.run_experiment(params)
+        assert "conversions" in metrics  # should not crash
+
+
 class TestMarketingOptimum:
     """Test that the simulator has an interior optimum."""
 

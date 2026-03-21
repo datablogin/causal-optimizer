@@ -72,10 +72,6 @@ class MLTrainingAdapter(DomainAdapter):
         self._noise_scale = noise_scale
         self._rng = np.random.default_rng(seed)
 
-    def run(self, parameters: dict[str, Any]) -> dict[str, float]:
-        """ExperimentRunner protocol: delegates to run_experiment."""
-        return self.run_experiment(parameters)
-
     def get_search_space(self) -> SearchSpace:
         return SearchSpace(
             variables=[

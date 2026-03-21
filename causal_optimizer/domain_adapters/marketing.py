@@ -5,7 +5,7 @@ email campaigns, social ads, search ads, creative variants, and retargeting.
 
 Structural equations follow the prior causal graph:
   email_frequency -> email_opens -> site_visits -> conversions
-  social_spend_pct -> social_impressions -> brand_awareness -> search_volume -> conversions
+  social_spend_pct -> social_impressions -> brand_awareness -> search_volume -> search_clicks
   search_bid_multiplier, search_volume -> search_clicks -> site_visits -> conversions
   creative_variant -> click_through_rate -> site_visits -> conversions
   retargeting_enabled -> return_visits -> conversions
@@ -59,10 +59,6 @@ class MarketingAdapter(DomainAdapter):
         self._seed = seed
         self._noise_scale = noise_scale
         self._rng = np.random.default_rng(seed)
-
-    def run(self, parameters: dict[str, Any]) -> dict[str, float]:
-        """ExperimentRunner protocol: delegates to run_experiment."""
-        return self.run_experiment(parameters)
 
     def get_search_space(self) -> SearchSpace:
         return SearchSpace(
