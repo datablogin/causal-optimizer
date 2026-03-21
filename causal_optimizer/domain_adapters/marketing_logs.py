@@ -278,7 +278,7 @@ class MarketingLogAdapter(DomainAdapter):
         treated_fraction = float(policy_treat.mean())
 
         # Effective sample size (Kish's ESS)
-        ess = float(weight_sum**2 / np.sum(weights**2)) if weight_sum > 0 else 1.0
+        ess = float(weight_sum**2 / np.sum(weights**2)) if weight_sum > 0 else 0.0
 
         return {
             "policy_value": policy_value,
@@ -299,6 +299,7 @@ class MarketingLogAdapter(DomainAdapter):
                 ("email_share", "policy_value"),
                 ("social_share_of_remainder", "total_cost"),
                 ("social_share_of_remainder", "policy_value"),
+                ("regularization", "treated_fraction"),
                 ("regularization", "policy_value"),
                 ("min_propensity_clip", "effective_sample_size"),
                 ("min_propensity_clip", "policy_value"),
