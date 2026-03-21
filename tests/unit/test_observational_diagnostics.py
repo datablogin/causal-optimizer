@@ -212,6 +212,62 @@ class TestAgreement:
         # The obs_experimental_agreement should be a float or None
         assert isinstance(result.obs_experimental_agreement, float | None)
 
+    def test_agreement_perfect_when_equal(self) -> None:
+        from causal_optimizer.diagnostics.observational import _compute_agreement
+
+        assert _compute_agreement(5.0, 5.0) == 1.0
+
+    def test_agreement_zero_for_opposite_signs(self) -> None:
+        from causal_optimizer.diagnostics.observational import _compute_agreement
+
+        # Large relative difference → 0.0 agreement
+        result = _compute_agreement(1.0, -1.0)
+        assert result == 0.0
+
+    def test_agreement_both_zero(self) -> None:
+        from causal_optimizer.diagnostics.observational import _compute_agreement
+
+        assert _compute_agreement(0.0, 0.0) == 1.0
+
+    def test_agreement_near_zero_estimates(self) -> None:
+        from causal_optimizer.diagnostics.observational import _compute_agreement
+
+        # Very small values close together should have high agreement
+        result = _compute_agreement(0.01, 0.011)
+        assert result > 0.5
+
+    def test_aggregate_agreement_precision_weighted(self) -> None:
+        """Tighter CIs should get more weight in aggregate agreement."""
+        from causal_optimizer.diagnostics.models import ObservationalVariableReport
+        from causal_optimizer.diagnostics.observational import _compute_aggregate_agreement
+
+        # Variable A: tight CI (width 0.1), agreement 0.9
+        var_a = ObservationalVariableReport(
+            variable_name="a",
+            identifiable=True,
+            identification_method="backdoor",
+            obs_estimate=1.0,
+            obs_ci=(0.95, 1.05),
+            exp_estimate=1.0,
+            agreement=0.9,
+        )
+        # Variable B: wide CI (width 10.0), agreement 0.1
+        var_b = ObservationalVariableReport(
+            variable_name="b",
+            identifiable=True,
+            identification_method="backdoor",
+            obs_estimate=5.0,
+            obs_ci=(0.0, 10.0),
+            exp_estimate=5.0,
+            agreement=0.1,
+        )
+
+        agg = _compute_aggregate_agreement([var_a, var_b])
+        assert agg is not None
+        # With precision weighting, var_a (tight CI) should dominate,
+        # so aggregate should be much closer to 0.9 than to 0.5
+        assert agg > 0.7
+
 
 # ---------------------------------------------------------------------------
 # Test: DoWhy not installed

@@ -28,6 +28,9 @@ logger = logging.getLogger(__name__)
 # Minimum number of KEEP experiments required for estimation
 _MIN_EXPERIMENTS = 10
 
+# Identification methods tried in order of preference (shared with off_policy.py)
+IDENTIFICATION_METHODS: tuple[str, ...] = ("backdoor", "frontdoor", "iv")
+
 
 def _try_import_estimator() -> type | None:
     """Try to import ObservationalEstimator; return class or None."""
@@ -182,7 +185,7 @@ def _analyze_variable(
         )
 
     # Try each identification method in order of preference
-    for method in ("backdoor", "frontdoor", "iv"):
+    for method in IDENTIFICATION_METHODS:
         try:
             est = estimator_cls(causal_graph=causal_graph, method=method)
             if var_name not in df.columns:
@@ -210,8 +213,11 @@ def _analyze_variable(
                     exp_estimate=exp_estimate,
                     agreement=agreement,
                 )
-        except Exception as exc:
+        except (ValueError, RuntimeError, KeyError) as exc:
             logger.debug("Method %s failed for %s: %s", method, var_name, exc)
+            continue
+        except Exception as exc:
+            logger.warning("Unexpected error in method %s for %s: %s", method, var_name, exc)
             continue
 
     return ObservationalVariableReport(

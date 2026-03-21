@@ -450,10 +450,14 @@ def _add_observational_recommendations(
         # AND that obs/exp agree closely, indicating the variable's causal
         # influence at its median is well-characterized and negligible.
         # Only consider strong identification methods (backdoor/frontdoor).
+        # Check for strong identification methods. DoWhy method strings look
+        # like "observational/backdoor.linear_regression", so we check if
+        # "backdoor" or "frontdoor" appears as a component (exact word boundary
+        # match via split on "/" and ".").
         _strong_methods = {"backdoor", "frontdoor"}
-        method_is_strong = var_report.identification_method is not None and any(
-            m in var_report.identification_method for m in _strong_methods
-        )
+        method_str = var_report.identification_method or ""
+        method_parts = set(method_str.replace(".", "/").split("/"))
+        method_is_strong = bool(method_parts & _strong_methods)
         if (
             method_is_strong
             and var_report.obs_ci is not None

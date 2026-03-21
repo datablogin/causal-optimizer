@@ -353,7 +353,9 @@ class OffPolicyPredictor:
             if not isinstance(var_value, (int, float)):
                 continue
             # Try each identification method (backdoor, frontdoor, IV)
-            for method in ("backdoor", "frontdoor", "iv"):
+            from causal_optimizer.diagnostics.observational import IDENTIFICATION_METHODS
+
+            for method in IDENTIFICATION_METHODS:
                 try:
                     est = estimator_cls(
                         causal_graph=self._causal_graph,
