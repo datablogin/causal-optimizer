@@ -24,6 +24,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Sentinel distinguishing "not yet tried" from "tried and failed"
+_NOT_TRIED: object = object()
+
 
 @dataclass
 class Prediction:
@@ -82,7 +85,7 @@ class OffPolicyPredictor:
         self._warned_unbound_vars: set[str] = set()
         self._causal_graph: CausalGraph | None = causal_graph
         self._objective_name: str | None = objective_name
-        self._obs_estimator: type | None = None
+        self._obs_estimator: type | object | None = _NOT_TRIED
         self._experiment_log: ExperimentLog | None = None
 
     def fit(
@@ -147,7 +150,7 @@ class OffPolicyPredictor:
         # Check DoWhy availability and cache estimator class for
         # _observational_predict (which tries backdoor, frontdoor, IV per
         # variable — mirroring _analyze_variable in observational.py).
-        if self._causal_graph is not None and self._obs_estimator is None:
+        if self._causal_graph is not None and self._obs_estimator is _NOT_TRIED:
             try:
                 from causal_optimizer.estimator.observational import ObservationalEstimator
 
@@ -213,8 +216,12 @@ class OffPolicyPredictor:
             model_quality=self._model_quality,
         )
 
-        # Try to combine with observational estimate
-        if self._obs_estimator is not None and self._experiment_log is not None:
+        # Try to combine with observational estimate (skip if not tried or failed)
+        if (
+            self._obs_estimator is not None
+            and self._obs_estimator is not _NOT_TRIED
+            and self._experiment_log is not None
+        ):
             obs_estimate = self._observational_predict(parameters)
             if obs_estimate is not None:
                 return self._combine_predictions(rf_prediction, obs_estimate)
@@ -315,7 +322,11 @@ class OffPolicyPredictor:
         tightest finite confidence interval.  Returns ``None`` when no
         ancestor yields an identified estimate with a finite CI.
         """
-        if self._obs_estimator is None or self._experiment_log is None:
+        if (
+            self._obs_estimator is None
+            or self._obs_estimator is _NOT_TRIED
+            or self._experiment_log is None
+        ):
             return None
 
         if self._causal_graph is None:
@@ -323,6 +334,8 @@ class OffPolicyPredictor:
 
         # _obs_estimator stores the *class* (set during fit())
         estimator_cls = self._obs_estimator
+        if not callable(estimator_cls):
+            return None
 
         objective_name = self._objective_name or "objective"
 
@@ -423,11 +436,15 @@ class OffPolicyPredictor:
                     max(inner_hi, combined_mean),
                 )
             else:
-                # No overlap: use the tighter of the two CIs
-                if obs_ci_width < rf_ci_width:
-                    combined_ci = obs_estimate.confidence_interval
-                else:
-                    combined_ci = rf_pred.confidence_interval
+                # No overlap: span a CI that covers combined_mean and both CIs
+                all_bounds = [
+                    rf_pred.confidence_interval[0],
+                    rf_pred.confidence_interval[1],
+                    obs_estimate.confidence_interval[0],
+                    obs_estimate.confidence_interval[1],
+                    combined_mean,
+                ]
+                combined_ci = (min(all_bounds), max(all_bounds))
             combined_uncertainty = min(rf_pred.uncertainty, obs_ci_width / 4.0)
         else:
             # Disagree → conservative, wider CI
