@@ -307,8 +307,9 @@ class OffPolicyPredictor:
     def _observational_predict(self, parameters: dict[str, Any]) -> ObservationalEstimate | None:
         """Predict outcome using observational causal estimation.
 
-        Attempts to estimate the outcome for the first available treatment
-        variable using the causal graph. Returns None if estimation fails.
+        Tries all causal-ancestor parameters and selects the identified
+        estimate with the tightest confidence interval (smallest CI width).
+        Returns None if no ancestor yields an identified estimate.
         """
         if self._obs_estimator is None or self._experiment_log is None:
             return None
@@ -320,12 +321,14 @@ class OffPolicyPredictor:
 
         objective_name = self._objective_name or "objective"
 
-        # Try the first parameter that is a causal ancestor
         graph = self._obs_estimator.causal_graph
         if objective_name in graph.nodes:
             ancestors = graph.ancestors(objective_name)
         else:
             return None
+
+        # Collect all identified estimates, then pick the tightest CI
+        candidates: list[ObservationalEstimate] = []
 
         for var_name, var_value in parameters.items():
             if var_name not in ancestors:
@@ -340,12 +343,24 @@ class OffPolicyPredictor:
                     objective_name=objective_name,
                 )
                 if result.identified:
-                    return result
+                    candidates.append(result)
             except Exception:
                 logger.debug("Observational prediction failed for %s", var_name, exc_info=True)
                 continue
 
-        return None
+        if not candidates:
+            return None
+
+        # Select the estimate with the smallest CI width
+        def _ci_width(est: ObservationalEstimate) -> float:
+            ci = est.confidence_interval
+            width = ci[1] - ci[0]
+            # Treat infinite CIs as very large
+            if not np.isfinite(width) or width < 0:
+                return float("inf")
+            return width
+
+        return min(candidates, key=_ci_width)
 
     def _combine_predictions(
         self, rf_pred: Prediction, obs_estimate: ObservationalEstimate

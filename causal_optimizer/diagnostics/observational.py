@@ -48,7 +48,7 @@ def analyze_observational(
     experiment_log: ExperimentLog,
     search_space: SearchSpace,
     objective_name: str,
-    minimize: bool,
+    minimize: bool,  # noqa: ARG001 — reserved for future direction-aware logic
     causal_graph: CausalGraph | None = None,
 ) -> ObservationalAnalysis:
     """Analyze observational signals from experiment data.
@@ -67,7 +67,8 @@ def analyze_observational(
         experiment_log: Historical experiment data.
         search_space: The search space definition.
         objective_name: Name of the objective metric.
-        minimize: Whether the objective is being minimized.
+        minimize: Whether the objective is being minimized. Reserved for
+            future direction-aware recommendation logic.
         causal_graph: Optional causal graph for identifiability analysis.
 
     Returns:
@@ -239,7 +240,13 @@ def _compute_experimental_estimates(
     objective_name: str,
     ancestor_vars: list[str],
 ) -> dict[str, float]:
-    """Compute simple experimental effect estimates via median split."""
+    """Compute experimental outcome estimates at each variable's median.
+
+    For each variable, selects experiments where the variable is near its
+    median (within +/- 25% of the interquartile range) and returns the mean
+    objective value. This produces an estimate comparable to the observational
+    ``E[Y | do(T = median)]``.
+    """
     estimates: dict[str, float] = {}
 
     for var_name in ancestor_vars:
@@ -249,14 +256,20 @@ def _compute_experimental_estimates(
         if col.nunique() < 2:
             continue
         median = col.median()
-        high_mask = col >= median
-        low_mask = col < median
+        iqr = col.quantile(0.75) - col.quantile(0.25)
+        # Use 25% of IQR as the "near median" band; fall back to 10% of
+        # median when the IQR is zero (e.g., low-variance variable).
+        half_band = max(iqr * 0.25, abs(median) * 0.1, 1e-10)
+        near_mask = (col >= median - half_band) & (col <= median + half_band)
 
-        high_obj = df.loc[high_mask, objective_name].mean()
-        low_obj = df.loc[low_mask, objective_name].mean()
+        if near_mask.sum() < 2:
+            # Not enough data near the median; fall back to global mean
+            mean_obj = df[objective_name].mean()
+        else:
+            mean_obj = df.loc[near_mask, objective_name].mean()
 
-        if np.isfinite(high_obj) and np.isfinite(low_obj):
-            estimates[var_name] = float(high_obj - low_obj)
+        if np.isfinite(mean_obj):
+            estimates[var_name] = float(mean_obj)
 
     return estimates
 
