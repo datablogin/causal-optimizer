@@ -173,6 +173,7 @@ class MarketingAdapter(DomainAdapter):
             + u_purchase_intent * 0.3  # confounder directly affects conversions
             + self._rng.normal(0, sigma)
         )
+        conversions = max(0.0, conversions)
 
         # --- Descriptor metrics ---
         total_spend = social_spend * 1000 + bid_mult * 50 + email_freq * 10
