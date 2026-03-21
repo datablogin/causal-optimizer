@@ -45,6 +45,13 @@ class MarketingAdapter(DomainAdapter):
             intermediate variable. Default 0.1.
     """
 
+    _CREATIVE_CTR: dict[str, float] = {
+        "control": 0.02,
+        "urgency": 0.05,
+        "social_proof": 0.04,
+        "benefit": 0.03,
+    }
+
     def __init__(self, seed: int | None = None, noise_scale: float = 0.1) -> None:
         self._seed = seed
         self._noise_scale = noise_scale
@@ -143,13 +150,7 @@ class MarketingAdapter(DomainAdapter):
         paid_clicks = max(0.0, paid_clicks)
 
         # creative_variant -> click_through_rate
-        creative_map = {
-            "control": 0.02,
-            "urgency": 0.05,
-            "social_proof": 0.04,
-            "benefit": 0.03,
-        }
-        ctr = creative_map.get(creative, 0.02) + self._rng.normal(0, sigma * 0.1)
+        ctr = self._CREATIVE_CTR.get(creative, 0.02) + self._rng.normal(0, sigma * 0.1)
         ctr = max(0.001, ctr)
 
         # email_opens + paid_clicks + ctr -> site_visits

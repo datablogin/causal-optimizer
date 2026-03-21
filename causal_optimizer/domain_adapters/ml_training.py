@@ -52,6 +52,18 @@ class MLTrainingAdapter(DomainAdapter):
             intermediate variable. Default 0.1.
     """
 
+    _OPTIMIZER_FACTOR: dict[str, float] = {
+        "adamw": 1.0,
+        "sgd": 0.8,
+        "muon": 1.1,
+        "lion": 0.95,
+    }
+    _ACTIVATION_FACTOR: dict[str, float] = {
+        "gelu": 1.0,
+        "swiglu": 1.1,
+        "relu": 0.9,
+    }
+
     def __init__(self, seed: int | None = None, noise_scale: float = 0.1) -> None:
         self._seed = seed
         self._noise_scale = noise_scale
@@ -149,10 +161,8 @@ class MLTrainingAdapter(DomainAdapter):
         u_data_dist = self._rng.normal(0, 1)
 
         # --- Categorical encodings ---
-        optimizer_map = {"adamw": 1.0, "sgd": 0.8, "muon": 1.1, "lion": 0.95}
-        activation_map = {"gelu": 1.0, "swiglu": 1.1, "relu": 0.9}
-        opt_factor = optimizer_map.get(optimizer_name, 1.0)
-        act_factor = activation_map.get(activation, 1.0)
+        opt_factor = self._OPTIMIZER_FACTOR.get(optimizer_name, 1.0)
+        act_factor = self._ACTIVATION_FACTOR.get(activation, 1.0)
 
         # --- Structural equations ---
 
