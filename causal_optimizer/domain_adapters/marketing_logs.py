@@ -41,7 +41,9 @@ class MarketingLogAdapter(DomainAdapter):
             the treatment, outcome, and cost columns.
         data_path: Path to a CSV file to load as the data.  Exactly one of
             ``data`` or ``data_path`` must be provided.
-        seed: Random seed for reproducibility.
+        seed: Accepted for API consistency with other adapters. Unused
+            because evaluation is fully deterministic given fixed data
+            and parameters (no stochastic elements).
         propensity_col: Column name for logging-policy propensity scores.
             If the column does not exist in the data, uniform propensity
             (treatment rate) is assumed.
@@ -170,7 +172,7 @@ class MarketingLogAdapter(DomainAdapter):
 
         df = self._data
         n = len(df)
-        treatment = df[self._treatment_col].values.astype(float)
+        treatment = df[self._treatment_col].values.astype(int)
         outcome = df[self._outcome_col].values.astype(float)
         cost = df[self._cost_col].values.astype(float)
 
@@ -302,6 +304,7 @@ class MarketingLogAdapter(DomainAdapter):
                 ("social_share_of_remainder", "policy_value"),
                 ("regularization", "treated_fraction"),
                 ("regularization", "policy_value"),
+                ("min_propensity_clip", "total_cost"),
                 ("min_propensity_clip", "effective_sample_size"),
                 ("min_propensity_clip", "policy_value"),
             ],

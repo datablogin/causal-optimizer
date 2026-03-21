@@ -2,7 +2,7 @@
 
 Demonstrates the full pipeline using MarketingLogAdapter:
 - 6-variable continuous search space (policy parameters)
-- Prior causal graph with 8 directed edges
+- Prior causal graph with 13 directed edges
 - IPS/IPW-weighted counterfactual policy evaluation
 - 20 experiments through exploration -> optimization phases
 - Diagnostic report with research recommendations
