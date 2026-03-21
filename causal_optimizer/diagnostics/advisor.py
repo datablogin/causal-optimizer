@@ -449,8 +449,14 @@ def _add_observational_recommendations(
         # We check that the obs CI is tight relative to the estimate magnitude
         # AND that obs/exp agree closely, indicating the variable's causal
         # influence at its median is well-characterized and negligible.
+        # Only consider strong identification methods (backdoor/frontdoor).
+        _strong_methods = {"backdoor", "frontdoor"}
+        method_is_strong = var_report.identification_method is not None and any(
+            m in var_report.identification_method for m in _strong_methods
+        )
         if (
-            var_report.obs_ci is not None
+            method_is_strong
+            and var_report.obs_ci is not None
             and var_report.obs_estimate is not None
             and var_report.agreement is not None
             and var_report.exp_estimate is not None

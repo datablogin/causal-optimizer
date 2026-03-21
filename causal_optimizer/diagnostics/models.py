@@ -103,7 +103,6 @@ class ObservationalVariableReport(BaseModel):
     obs_ci: tuple[float, float] | None = None
     exp_estimate: float | None = None
     agreement: float | None = None
-    ci_width_ratio: float | None = None
 
 
 class ObservationalAnalysis(BaseModel):

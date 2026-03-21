@@ -160,8 +160,8 @@ class OffPolicyPredictor:
             except ImportError:
                 logger.debug("DoWhy not available; observational estimation disabled")
                 self._obs_estimator = None
-            except Exception:
-                logger.debug("Failed to create ObservationalEstimator", exc_info=True)
+            except (AttributeError, TypeError) as exc:
+                logger.debug("Failed to load ObservationalEstimator: %s", exc)
                 self._obs_estimator = None
 
         if len(df) < self.min_history or not self._var_names:
@@ -399,11 +399,31 @@ class OffPolicyPredictor:
     def _combine_predictions(
         self, rf_pred: Prediction, obs_estimate: ObservationalEstimate
     ) -> Prediction:
-        """Combine RF and observational predictions.
+        """Combine RF and observational predictions via heuristic ensemble.
 
-        When predictions agree (difference < RF uncertainty), produce a
-        tighter CI. When they disagree, produce a wider CI to signal
-        increased uncertainty.
+        This is a heuristic combination, not a principled Bayesian fusion.
+        The RF uncertainty (tree ensemble std) and observational CI (DoWhy
+        linear regression SE) come from fundamentally different models, so
+        the weighting and thresholds below are pragmatic approximations:
+
+        - **Agreement**: RF and obs means within 1 RF std.  The combined
+          mean is a precision-weighted average (inverse CI width), and the
+          combined CI is the overlap of the two CIs clamped to contain the
+          combined mean.
+        - **Disagreement**: conservative union — the CI spans both estimates
+          and uncertainty is inflated.
+
+        Known limitations:
+        - Inverse-CI-width weighting assumes comparable calibration across
+          the two uncertainty models.
+        - The ``/4.0`` and ``/2.0`` divisors are heuristic scale factors
+          without formal justification.
+        - When obs CI is much tighter than RF CI, the combined mean is
+          dominated by the observational estimate.
+
+        Despite these limitations, empirically the combination is safe:
+        disagreement always *increases* uncertainty (triggering more
+        experiments), and agreement only *modestly* tightens the CI.
         """
         rf_mean = rf_pred.expected_value
         obs_mean = obs_estimate.expected_outcome

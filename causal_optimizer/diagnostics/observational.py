@@ -179,7 +179,6 @@ def _analyze_variable(
             obs_ci=None,
             exp_estimate=exp_estimate,
             agreement=None,
-            ci_width_ratio=None,
         )
 
     # Try each identification method in order of preference
@@ -199,15 +198,8 @@ def _analyze_variable(
 
             if result.identified:
                 agreement = None
-                ci_width_ratio = None
                 if exp_estimate is not None and result.expected_outcome is not None:
                     agreement = _compute_agreement(result.expected_outcome, exp_estimate)
-
-                ci = result.confidence_interval
-                if ci[0] != float("-inf") and ci[1] != float("inf"):
-                    obs_ci_width = ci[1] - ci[0]
-                    if obs_ci_width > 0:
-                        ci_width_ratio = obs_ci_width
 
                 return ObservationalVariableReport(
                     variable_name=var_name,
@@ -217,7 +209,6 @@ def _analyze_variable(
                     obs_ci=result.confidence_interval,
                     exp_estimate=exp_estimate,
                     agreement=agreement,
-                    ci_width_ratio=ci_width_ratio,
                 )
         except Exception as exc:
             logger.debug("Method %s failed for %s: %s", method, var_name, exc)
@@ -231,7 +222,6 @@ def _analyze_variable(
         obs_ci=None,
         exp_estimate=exp_estimate,
         agreement=None,
-        ci_width_ratio=None,
     )
 
 
@@ -291,11 +281,28 @@ def _compute_agreement(obs_est: float, exp_est: float) -> float:
 def _compute_aggregate_agreement(
     variables: list[ObservationalVariableReport],
 ) -> float | None:
-    """Compute aggregate agreement across all variables with both estimates."""
-    agreements = [v.agreement for v in variables if v.agreement is not None]
-    if not agreements:
+    """Compute precision-weighted aggregate agreement.
+
+    Variables with tighter observational CIs (more precise estimates) get
+    higher weight.  Falls back to unweighted mean when CI data is missing.
+    """
+    pairs: list[tuple[float, float]] = []  # (agreement, weight)
+    for v in variables:
+        if v.agreement is None:
+            continue
+        weight = 1.0
+        if v.obs_ci is not None:
+            ci_width = v.obs_ci[1] - v.obs_ci[0]
+            if np.isfinite(ci_width) and ci_width > 0:
+                weight = 1.0 / ci_width
+        pairs.append((v.agreement, weight))
+
+    if not pairs:
         return None
-    return float(np.mean(agreements))
+    total_weight = sum(w for _, w in pairs)
+    if total_weight <= 0:
+        return None
+    return float(sum(a * w for a, w in pairs) / total_weight)
 
 
 def _generate_recommendation(
