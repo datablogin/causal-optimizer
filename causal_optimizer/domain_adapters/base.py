@@ -27,6 +27,15 @@ class DomainAdapter(ABC):
         """Execute an experiment and return metrics."""
         ...
 
+    def run(self, parameters: dict[str, Any]) -> dict[str, float]:
+        """ExperimentRunner protocol: delegates to run_experiment.
+
+        Provides the ``run()`` method expected by
+        :class:`~causal_optimizer.engine.loop.ExperimentRunner` so that
+        any ``DomainAdapter`` can be passed directly as the engine's runner.
+        """
+        return self.run_experiment(parameters)
+
     def get_prior_graph(self) -> CausalGraph | None:
         """Return a prior causal graph if domain knowledge is available."""
         return None
