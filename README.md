@@ -104,6 +104,7 @@ When a causal graph is available, it enables:
 ```bash
 pip install causal-optimizer                    # core only
 pip install causal-optimizer[bayesian]          # + Ax/BoTorch
+pip install causal-optimizer[doe]               # + pyDOE3 for factorial designs
 pip install causal-optimizer[causal]            # + DoWhy
 pip install causal-optimizer[all]               # everything
 ```
