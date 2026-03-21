@@ -72,7 +72,6 @@ dev = [
 causal-optimizer = "causal_optimizer.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/datablogin/causal-optimizer"
 Documentation = "https://github.com/datablogin/causal-optimizer#readme"
 Repository = "https://github.com/datablogin/causal-optimizer"
 Issues = "https://github.com/datablogin/causal-optimizer/issues"
