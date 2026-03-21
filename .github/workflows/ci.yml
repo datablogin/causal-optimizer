@@ -92,4 +92,4 @@ jobs:
         run: uv build
 
       - name: Validate package metadata
-        run: uvx twine check dist/*
+        run: uvx twine check --strict dist/*
