@@ -383,7 +383,7 @@ class OffPolicyPredictor:
         def _ci_width(est: ObservationalEstimate) -> float:
             ci = est.confidence_interval
             width = ci[1] - ci[0]
-            if not np.isfinite(width) or width < 0:
+            if not np.isfinite(width) or width <= 0:
                 return float("inf")
             return width
 
