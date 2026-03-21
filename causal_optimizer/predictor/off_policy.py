@@ -82,7 +82,7 @@ class OffPolicyPredictor:
         self._warned_unbound_vars: set[str] = set()
         self._causal_graph: CausalGraph | None = causal_graph
         self._objective_name: str | None = objective_name
-        self._obs_estimator: object | None = None
+        self._obs_estimator: type | None = None
         self._experiment_log: ExperimentLog | None = None
 
     def fit(
@@ -144,14 +144,16 @@ class OffPolicyPredictor:
         # Cache experiment log for observational prediction
         self._experiment_log = experiment_log
 
-        # Initialize observational estimator if causal graph is available
+        # Check DoWhy availability and cache estimator class for
+        # _observational_predict (which tries backdoor, frontdoor, IV per
+        # variable — mirroring _analyze_variable in observational.py).
         if self._causal_graph is not None and self._obs_estimator is None:
             try:
                 from causal_optimizer.estimator.observational import ObservationalEstimator
 
-                self._obs_estimator = ObservationalEstimator(
-                    causal_graph=self._causal_graph,
-                )
+                # Store the *class* so _observational_predict can instantiate
+                # per-method estimators (backdoor, frontdoor, IV).
+                self._obs_estimator = ObservationalEstimator
             except ImportError:
                 logger.debug("DoWhy not available; observational estimation disabled")
                 self._obs_estimator = None
@@ -307,23 +309,25 @@ class OffPolicyPredictor:
     def _observational_predict(self, parameters: dict[str, Any]) -> ObservationalEstimate | None:
         """Predict outcome using observational causal estimation.
 
-        Tries all causal-ancestor parameters and selects the identified
-        estimate with the tightest confidence interval (smallest CI width).
-        Returns None if no ancestor yields an identified estimate.
+        Tries all causal-ancestor parameters with all identification methods
+        (backdoor, frontdoor, IV) — mirroring ``_analyze_variable`` in
+        ``observational.py`` — and selects the identified estimate with the
+        tightest finite confidence interval.  Returns ``None`` when no
+        ancestor yields an identified estimate with a finite CI.
         """
         if self._obs_estimator is None or self._experiment_log is None:
             return None
 
-        from causal_optimizer.estimator.observational import ObservationalEstimator
-
-        if not isinstance(self._obs_estimator, ObservationalEstimator):
+        if self._causal_graph is None:
             return None
+
+        # _obs_estimator stores the *class* (set during fit())
+        estimator_cls = self._obs_estimator
 
         objective_name = self._objective_name or "objective"
 
-        graph = self._obs_estimator.causal_graph
-        if objective_name in graph.nodes:
-            ancestors = graph.ancestors(objective_name)
+        if objective_name in self._causal_graph.nodes:
+            ancestors = self._causal_graph.ancestors(objective_name)
         else:
             return None
 
@@ -335,32 +339,49 @@ class OffPolicyPredictor:
                 continue
             if not isinstance(var_value, (int, float)):
                 continue
-            try:
-                result = self._obs_estimator.estimate_intervention(
-                    experiment_log=self._experiment_log,
-                    treatment_var=var_name,
-                    treatment_value=float(var_value),
-                    objective_name=objective_name,
-                )
-                if result.identified:
-                    candidates.append(result)
-            except Exception:
-                logger.debug("Observational prediction failed for %s", var_name, exc_info=True)
-                continue
+            # Try each identification method (backdoor, frontdoor, IV)
+            for method in ("backdoor", "frontdoor", "iv"):
+                try:
+                    est = estimator_cls(
+                        causal_graph=self._causal_graph,
+                        method=method,
+                    )
+                    result = est.estimate_intervention(
+                        experiment_log=self._experiment_log,
+                        treatment_var=var_name,
+                        treatment_value=float(var_value),
+                        objective_name=objective_name,
+                    )
+                    if result.identified:
+                        candidates.append(result)
+                except Exception:
+                    logger.debug(
+                        "Observational prediction (%s) failed for %s",
+                        method,
+                        var_name,
+                        exc_info=True,
+                    )
+                    continue
 
         if not candidates:
             return None
 
-        # Select the estimate with the smallest CI width
+        # Select the estimate with the smallest finite CI width
         def _ci_width(est: ObservationalEstimate) -> float:
             ci = est.confidence_interval
             width = ci[1] - ci[0]
-            # Treat infinite CIs as very large
             if not np.isfinite(width) or width < 0:
                 return float("inf")
             return width
 
-        return min(candidates, key=_ci_width)
+        best = min(candidates, key=_ci_width)
+
+        # Guard: if the best candidate still has a non-finite CI, fall back
+        # to pure RF prediction rather than polluting _combine_predictions.
+        if not np.isfinite(_ci_width(best)):
+            return None
+
+        return best
 
     def _combine_predictions(
         self, rf_pred: Prediction, obs_estimate: ObservationalEstimate
