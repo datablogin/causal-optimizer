@@ -95,6 +95,18 @@ class MarketingLogAdapter(DomainAdapter):
         if missing:
             raise ValueError(f"Missing required columns: {', '.join(missing)}")
 
+        nan_cols = []
+        for col in [self._treatment_col, self._outcome_col, self._cost_col]:
+            if col in self._data.columns and self._data[col].isna().any():
+                nan_cols.append(col)
+        if (
+            self._propensity_col in self._data.columns
+            and self._data[self._propensity_col].isna().any()
+        ):
+            nan_cols.append(self._propensity_col)
+        if nan_cols:
+            raise ValueError(f"Columns contain NaN values: {', '.join(nan_cols)}")
+
     def get_search_space(self) -> SearchSpace:
         return SearchSpace(
             variables=[
@@ -265,9 +277,11 @@ class MarketingLogAdapter(DomainAdapter):
         # Weight treated costs by IPS
         treated_cost_weights = np.zeros(n)
         treated_cost_weights[match_treat] = normalized_weights[match_treat]
-        n_match_treat = match_treat.sum()
+        treated_weight_sum = treated_cost_weights.sum()
         total_cost = (
-            float(np.sum(treated_cost_weights * cost) / n_match_treat) if n_match_treat > 0 else 0.0
+            float(np.sum(treated_cost_weights * cost) / treated_weight_sum)
+            if treated_weight_sum > 0
+            else 0.0
         )
 
         treated_fraction = float(policy_treat.mean())
@@ -289,8 +303,11 @@ class MarketingLogAdapter(DomainAdapter):
                 ("eligibility_threshold", "treated_fraction"),
                 ("treatment_budget_pct", "treated_fraction"),
                 ("treated_fraction", "total_cost"),
+                ("treated_fraction", "policy_value"),
                 ("email_share", "total_cost"),
+                ("email_share", "policy_value"),
                 ("social_share", "total_cost"),
+                ("social_share", "policy_value"),
                 ("regularization", "policy_value"),
                 ("min_propensity_clip", "effective_sample_size"),
                 ("min_propensity_clip", "policy_value"),
