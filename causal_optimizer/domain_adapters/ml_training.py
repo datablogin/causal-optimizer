@@ -297,6 +297,7 @@ class MLTrainingAdapter(DomainAdapter):
                 ("n_layers", "model_capacity"),
                 ("n_heads", "model_capacity"),
                 ("hidden_dim", "model_capacity"),
+                ("n_layers", "memory_usage"),
                 ("hidden_dim", "memory_usage"),
                 ("model_capacity", "val_loss"),
                 ("memory_usage", "max_batch_size"),

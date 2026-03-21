@@ -15,7 +15,7 @@ Structural equations follow the prior causal graph:
 Approximate known optimum (interior, NOT at boundary):
   email_frequency ~= 5, social_spend_pct ~= 0.6, search_bid_multiplier ~= 1.8,
   creative_variant = "urgency", retargeting_enabled = True
-  -> conversions ~= 5.5 (noise-free)
+  -> conversions ~= 1.8 (noise-free)
 
 The optimum is interior because:
   - email_opens saturates (log), so email_frequency=7 is wasteful
@@ -150,26 +150,28 @@ class MarketingAdapter(DomainAdapter):
         search_clicks = max(0.0, search_clicks)
 
         # creative_variant -> click_through_rate
-        ctr = self._CREATIVE_CTR.get(creative, 0.02) + self._rng.normal(0, sigma * 0.1)
-        ctr = max(0.001, ctr)
+        click_through_rate = self._CREATIVE_CTR.get(creative, 0.02) + self._rng.normal(
+            0, sigma * 0.1
+        )
+        click_through_rate = max(0.001, click_through_rate)
 
-        # email_opens + search_clicks + ctr -> site_visits
+        # email_opens + search_clicks + click_through_rate -> site_visits
         site_visits = (
             email_opens * 0.8
             + search_clicks
-            + ctr * 60.0  # CTR applied to a base traffic pool
+            + click_through_rate * 60.0  # CTR applied to a base traffic pool
             + self._rng.normal(0, sigma)
         )
         site_visits = max(0.0, site_visits)
 
-        # retargeting_enabled -> repeat_visits
-        repeat_visits = (8.0 if retargeting else 0.0) + self._rng.normal(0, sigma)
-        repeat_visits = max(0.0, repeat_visits)
+        # retargeting_enabled -> return_visits
+        return_visits = (8.0 if retargeting else 0.0) + self._rng.normal(0, sigma)
+        return_visits = max(0.0, return_visits)
 
-        # conversions = f(site_visits, repeat_visits, U_purchase_intent) — additive
+        # conversions = f(site_visits, return_visits, U_purchase_intent) — additive
         conversions = (
             site_visits * 0.08
-            + repeat_visits * 0.15
+            + return_visits * 0.15
             + u_purchase_intent * 0.3  # confounder directly affects conversions
             + self._rng.normal(0, sigma)
         )
