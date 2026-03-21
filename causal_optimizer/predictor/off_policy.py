@@ -403,18 +403,31 @@ class OffPolicyPredictor:
         agree = difference <= rf_pred.uncertainty
 
         if agree:
-            # Agree → weighted average, tighter CI
+            # Agree → weighted average, CI from overlap of the two CIs
             # Weight by inverse CI width (tighter CI gets more weight)
             rf_weight = 1.0 / max(rf_ci_width, 1e-10)
             obs_weight = 1.0 / max(obs_ci_width, 1e-10)
             total_weight = rf_weight + obs_weight
             combined_mean = (rf_mean * rf_weight + obs_mean * obs_weight) / total_weight
-            # Combined CI is the intersection-inspired approach
-            combined_half_width = min(rf_ci_width, obs_ci_width) / 2.0
-            combined_ci = (
-                combined_mean - combined_half_width,
-                combined_mean + combined_half_width,
+            # Use the overlap (intersection) of the two CIs, clamped to
+            # always contain the weighted mean so the CI is never empty.
+            inner_lo = max(
+                rf_pred.confidence_interval[0], obs_estimate.confidence_interval[0]
             )
+            inner_hi = min(
+                rf_pred.confidence_interval[1], obs_estimate.confidence_interval[1]
+            )
+            if inner_lo <= inner_hi:
+                combined_ci = (
+                    min(inner_lo, combined_mean),
+                    max(inner_hi, combined_mean),
+                )
+            else:
+                # No overlap: use the tighter of the two CIs
+                if obs_ci_width < rf_ci_width:
+                    combined_ci = obs_estimate.confidence_interval
+                else:
+                    combined_ci = rf_pred.confidence_interval
             combined_uncertainty = min(rf_pred.uncertainty, obs_ci_width / 4.0)
         else:
             # Disagree → conservative, wider CI

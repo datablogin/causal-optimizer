@@ -445,10 +445,22 @@ def _add_observational_recommendations(
                 )
             )
 
-        # Tight obs CI on ancestor with near-zero effect → DROP
-        if var_report.obs_ci is not None and var_report.obs_estimate is not None:
+        # Tight obs CI + high agreement with experimental baseline → DROP
+        # We check that the obs CI is tight relative to the estimate magnitude
+        # AND that obs/exp agree closely, indicating the variable's causal
+        # influence at its median is well-characterized and negligible.
+        if (
+            var_report.obs_ci is not None
+            and var_report.obs_estimate is not None
+            and var_report.agreement is not None
+            and var_report.exp_estimate is not None
+        ):
             ci_width = var_report.obs_ci[1] - var_report.obs_ci[0]
-            if ci_width < 1.0 and abs(var_report.obs_estimate) < 0.5:
+            # Relative CI width: tight if CI width is small relative to
+            # the estimate magnitude (< 10% of |estimate| or < 0.01 absolute)
+            denom = max(abs(var_report.obs_estimate), 1e-10)
+            relative_ci = ci_width / denom
+            if relative_ci < 0.1 and var_report.agreement >= 0.9:
                 recs.append(
                     Recommendation(
                         rank=0,
@@ -460,12 +472,15 @@ def _add_observational_recommendations(
                         ),
                         description=(
                             f"Variable {var_report.variable_name} has a tight observational "
-                            f"CI ({ci_width:.3f}) around a near-zero estimate "
-                            f"({var_report.obs_estimate:.3f})."
+                            f"CI (relative width {relative_ci:.1%}) and strong obs-exp "
+                            f"agreement ({var_report.agreement:.0%}), suggesting its causal "
+                            f"influence is well-characterized and minimal."
                         ),
                         evidence=[
                             f"Obs estimate: {var_report.obs_estimate:.4f}",
-                            f"Obs CI width: {ci_width:.4f}",
+                            f"Exp estimate: {var_report.exp_estimate:.4f}",
+                            f"Obs CI width: {ci_width:.4f} (relative: {relative_ci:.1%})",
+                            f"Agreement: {var_report.agreement:.0%}",
                             f"Method: {var_report.identification_method}",
                         ],
                         next_step=(

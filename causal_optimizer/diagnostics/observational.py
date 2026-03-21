@@ -263,10 +263,11 @@ def _compute_experimental_estimates(
         near_mask = (col >= median - half_band) & (col <= median + half_band)
 
         if near_mask.sum() < 2:
-            # Not enough data near the median; fall back to global mean
-            mean_obj = df[objective_name].mean()
-        else:
-            mean_obj = df.loc[near_mask, objective_name].mean()
+            # Not enough data near the median; cannot compute a comparable
+            # experimental estimate — skip this variable.
+            continue
+
+        mean_obj = df.loc[near_mask, objective_name].mean()
 
         if np.isfinite(mean_obj):
             estimates[var_name] = float(mean_obj)
