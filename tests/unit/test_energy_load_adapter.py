@@ -525,7 +525,7 @@ class TestWarningMetrics:
         params_large = {**DEFAULT_PARAMS, "lookback_window": 24}
         m_small = adapter.run_experiment(params_small)
         m_large = adapter.run_experiment(params_large)
-        assert m_large["nan_rows_dropped"] >= m_small["nan_rows_dropped"]
+        assert m_large["nan_rows_dropped"] > m_small["nan_rows_dropped"]
 
 
 # ---------------------------------------------------------------------------

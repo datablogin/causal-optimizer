@@ -279,7 +279,7 @@ class EnergyLoadAdapter(DomainAdapter):
             "feature_count": feature_count,
             "validation_set_size": float(len(x_val)),
             "nan_rows_dropped": nan_rows_dropped,
-            "train_val_ratio_actual": float(train_end / len(df)),
+            "train_val_ratio_actual": float(train_end / len(df)) if len(df) > 0 else 0.0,
         }
 
     def get_prior_graph(self) -> CausalGraph:
