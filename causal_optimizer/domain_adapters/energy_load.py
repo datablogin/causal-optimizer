@@ -261,6 +261,7 @@ class EnergyLoadAdapter(DomainAdapter):
         return CausalGraph(
             edges=[
                 ("lookback_window", "mae"),
+                ("lookback_window", "runtime_seconds"),
                 ("use_temperature", "mae"),
                 ("use_humidity", "mae"),
                 ("use_calendar", "mae"),

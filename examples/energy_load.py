@@ -2,7 +2,7 @@
 
 Demonstrates the full pipeline using EnergyLoadAdapter:
 - 7-variable mixed-type search space (integer, continuous, categorical, boolean)
-- Prior causal graph with 8 directed edges
+- Prior causal graph with 10 directed edges
 - 20 experiments through exploration -> optimization phases
 - Diagnostic report with research recommendations
 
