@@ -292,8 +292,8 @@ class MarketingLogAdapter(DomainAdapter):
         # Warning metrics
         max_ips_weight = float(weights.max()) if len(weights) > 0 else 0.0
         positive_weights = weights[weights > 0]
-        if len(positive_weights) > 0:
-            weight_cv = float(positive_weights.std() / positive_weights.mean())
+        if len(positive_weights) > 1:
+            weight_cv = float(positive_weights.std(ddof=1) / positive_weights.mean())
         else:
             weight_cv = 0.0
 

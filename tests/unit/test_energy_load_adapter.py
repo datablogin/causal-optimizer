@@ -6,6 +6,7 @@ metric completeness, no-leakage split, validation, and edge cases.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -466,11 +467,16 @@ class TestTimestampHandling:
         m2 = adapter_shuffled.run_experiment(params)
         assert m1["mae"] == pytest.approx(m2["mae"], rel=1e-6)
 
-    def test_duplicate_timestamps_handled(self, fixture_df: pd.DataFrame) -> None:
+    def test_duplicate_timestamps_handled(
+        self, fixture_df: pd.DataFrame, caplog: pytest.LogCaptureFixture
+    ) -> None:
         """Duplicate timestamps should be deduplicated with a warning."""
         duped = pd.concat([fixture_df, fixture_df.iloc[:5]], ignore_index=True)
-        adapter = EnergyLoadAdapter(data=duped, seed=42)
-        # Should succeed — duplicates dropped
+        with caplog.at_level(
+            logging.WARNING, logger="causal_optimizer.domain_adapters.energy_load"
+        ):
+            adapter = EnergyLoadAdapter(data=duped, seed=42)
+        assert any("duplicate timestamps" in m for m in caplog.messages)
         space = adapter.get_search_space()
         assert len(space.variables) == 7
 
