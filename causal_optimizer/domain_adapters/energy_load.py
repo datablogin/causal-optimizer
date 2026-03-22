@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import time
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -61,7 +62,7 @@ class EnergyLoadAdapter(DomainAdapter):
         if data is not None:
             self._data = data.copy()
         elif data_path is not None:
-            if data_path.endswith(".parquet"):
+            if Path(data_path).suffix == ".parquet":
                 self._data = pd.read_parquet(data_path)
             else:
                 self._data = pd.read_csv(data_path)

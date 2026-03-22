@@ -19,6 +19,7 @@ and effective sample size for each candidate policy configuration.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -68,7 +69,7 @@ class MarketingLogAdapter(DomainAdapter):
             raise ValueError("Exactly one of 'data' or 'data_path' must be provided.")
 
         if data_path is not None:
-            if data_path.endswith(".parquet"):
+            if Path(data_path).suffix == ".parquet":
                 data = pd.read_parquet(data_path)
             else:
                 data = pd.read_csv(data_path)
