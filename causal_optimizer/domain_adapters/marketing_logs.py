@@ -40,7 +40,7 @@ class MarketingLogAdapter(DomainAdapter):
     Args:
         data: DataFrame with logged marketing data.  Must contain at least
             the treatment, outcome, and cost columns.
-        data_path: Path to a CSV file to load as the data.  Exactly one of
+        data_path: Path to a CSV or Parquet file to load as the data.  Exactly one of
             ``data`` or ``data_path`` must be provided.
         seed: Accepted for API consistency with other adapters. Unused
             because evaluation is fully deterministic given fixed data
@@ -291,7 +291,7 @@ class MarketingLogAdapter(DomainAdapter):
         ess = float(weight_sum**2 / np.sum(weights**2)) if weight_sum > 0 else 0.0
 
         # Warning metrics
-        max_ips_weight = float(weights.max()) if len(weights) > 0 else 0.0
+        max_ips_weight = float(weights.max())
         positive_weights = weights[weights > 0]
         if len(positive_weights) > 1:
             weight_cv = float(positive_weights.std(ddof=1) / positive_weights.mean())

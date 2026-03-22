@@ -509,7 +509,7 @@ class TestWarningMetrics:
         metrics = adapter.run_experiment(DEFAULT_PARAMS)
         assert "validation_set_size" in metrics
         assert "nan_rows_dropped" in metrics
-        assert "train_val_ratio_actual" in metrics
+        assert "train_fraction_actual" in metrics
 
     def test_validation_set_size_is_positive(self, adapter: EnergyLoadAdapter) -> None:
         metrics = adapter.run_experiment(DEFAULT_PARAMS)

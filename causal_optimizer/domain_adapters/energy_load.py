@@ -45,7 +45,7 @@ class EnergyLoadAdapter(DomainAdapter):
     Args:
         data: DataFrame with columns ``timestamp``, ``target_load``, and
             at least one covariate (e.g. ``temperature``).
-        data_path: Path to a CSV file (alternative to *data*).
+        data_path: Path to a CSV or Parquet file (alternative to *data*).
         seed: Random seed for reproducibility.
         train_ratio: Fraction of data used for training (default 0.7).
             The remainder is the validation set.  Split is blocked by time
@@ -171,7 +171,7 @@ class EnergyLoadAdapter(DomainAdapter):
         1. Build a feature matrix from the selected features + lagged load.
         2. Train on the training split, predict on validation.
         3. Return MAE, RMSE, MAPE, runtime_seconds, feature_count,
-           validation_set_size, nan_rows_dropped, train_val_ratio_actual.
+           validation_set_size, nan_rows_dropped, train_fraction_actual.
         """
         t_start = time.monotonic()
 
@@ -280,7 +280,7 @@ class EnergyLoadAdapter(DomainAdapter):
             "feature_count": feature_count,
             "validation_set_size": float(len(x_val)),
             "nan_rows_dropped": nan_rows_dropped,
-            "train_val_ratio_actual": float(train_end / len(df)) if len(df) > 0 else 0.0,
+            "train_fraction_actual": float(train_end / len(df)) if len(df) > 0 else 0.0,
         }
 
     def get_prior_graph(self) -> CausalGraph:
