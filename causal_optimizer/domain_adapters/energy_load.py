@@ -79,9 +79,7 @@ class EnergyLoadAdapter(DomainAdapter):
         try:
             self._data["timestamp"] = pd.to_datetime(self._data["timestamp"])
         except (ValueError, TypeError) as exc:
-            raise ValueError(
-                f"Column 'timestamp' could not be parsed as datetime: {exc}"
-            ) from exc
+            raise ValueError(f"Column 'timestamp' could not be parsed as datetime: {exc}") from exc
         self._data = self._data.sort_values("timestamp").reset_index(drop=True)
 
         n_before = len(self._data)
