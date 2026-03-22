@@ -66,6 +66,8 @@ class EnergyLoadAdapter(DomainAdapter):
             raise ValueError("Either 'data' or 'data_path' must be provided")
 
         self._seed = seed
+        if not 0.0 < train_ratio < 1.0:
+            raise ValueError(f"train_ratio must be between 0 and 1 (exclusive), got {train_ratio}")
         self._train_ratio = train_ratio
 
         self._validate_data()
@@ -181,6 +183,9 @@ class EnergyLoadAdapter(DomainAdapter):
             for cal_col in ("hour_of_day", "day_of_week", "is_holiday"):
                 if cal_col in df.columns:
                     features.append(cal_col)
+
+        if not features:
+            raise ValueError("No features selected. Increase lookback_window or enable covariates.")
 
         # Handle missing values: forward-fill then drop remaining NaN
         df[features] = df[features].ffill()
