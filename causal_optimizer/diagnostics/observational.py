@@ -11,6 +11,7 @@ import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
+import pandas as pd
 
 from causal_optimizer.diagnostics.models import (
     ObservationalAnalysis,
@@ -19,8 +20,6 @@ from causal_optimizer.diagnostics.models import (
 from causal_optimizer.types import ExperimentStatus
 
 if TYPE_CHECKING:
-    import pandas as pd
-
     from causal_optimizer.types import CausalGraph, ExperimentLog, SearchSpace
 
 logger = logging.getLogger(__name__)
@@ -190,6 +189,10 @@ def _analyze_variable(
             est = estimator_cls(causal_graph=causal_graph, method=method)
             if var_name not in df.columns:
                 continue
+            if not pd.api.types.is_numeric_dtype(df[var_name]) or pd.api.types.is_bool_dtype(
+                df[var_name]
+            ):
+                continue
             treatment_value = float(df[var_name].median())
 
             result = est.estimate_intervention(
@@ -249,6 +252,8 @@ def _compute_experimental_estimates(
         if var_name not in df.columns or objective_name not in df.columns:
             continue
         col = df[var_name]
+        if not pd.api.types.is_numeric_dtype(col) or pd.api.types.is_bool_dtype(col):
+            continue
         if col.nunique() < 2:
             continue
         median = col.median()
