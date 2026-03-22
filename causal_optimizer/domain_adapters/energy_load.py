@@ -202,11 +202,14 @@ class EnergyLoadAdapter(DomainAdapter):
                 f"Try reducing lookback_window (current: {lookback}) or train_ratio."
             )
 
+        # Regularization: alpha for Ridge, min_samples_leaf for tree models
+        min_leaf = max(1, int(reg))
         if model_type == "ridge":
             model = Ridge(alpha=reg)
         elif model_type == "rf":
             model = RandomForestRegressor(
                 n_estimators=n_est,
+                min_samples_leaf=min_leaf,
                 random_state=self._seed,
                 n_jobs=1,
             )
@@ -215,6 +218,7 @@ class EnergyLoadAdapter(DomainAdapter):
                 n_estimators=n_est,
                 learning_rate=0.1,
                 max_depth=4,
+                min_samples_leaf=min_leaf,
                 random_state=self._seed,
             )
         else:
@@ -258,6 +262,7 @@ class EnergyLoadAdapter(DomainAdapter):
                 ("regularization", "mae"),
                 ("model_type", "mae"),
                 ("model_type", "runtime_seconds"),
+                ("n_estimators", "mae"),
                 ("n_estimators", "runtime_seconds"),
             ],
         )
