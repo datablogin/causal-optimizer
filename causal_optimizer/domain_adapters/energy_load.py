@@ -81,7 +81,7 @@ class EnergyLoadAdapter(DomainAdapter):
             self._data["timestamp"] = pd.to_datetime(self._data["timestamp"])
         except (ValueError, TypeError) as exc:
             raise ValueError(f"Column 'timestamp' could not be parsed as datetime: {exc}") from exc
-        self._data = self._data.sort_values("timestamp").reset_index(drop=True)
+        self._data = self._data.sort_values("timestamp", kind="mergesort").reset_index(drop=True)
 
         n_before = len(self._data)
         self._data = self._data.drop_duplicates(subset=["timestamp"], keep="first").reset_index(
@@ -170,7 +170,8 @@ class EnergyLoadAdapter(DomainAdapter):
         Steps:
         1. Build a feature matrix from the selected features + lagged load.
         2. Train on the training split, predict on validation.
-        3. Return MAE, RMSE, MAPE, runtime_seconds, feature_count.
+        3. Return MAE, RMSE, MAPE, runtime_seconds, feature_count,
+           validation_set_size, nan_rows_dropped, train_val_ratio_actual.
         """
         t_start = time.monotonic()
 
