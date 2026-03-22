@@ -196,6 +196,12 @@ class EnergyLoadAdapter(DomainAdapter):
         x_val = df.loc[train_end:, features].values
         y_val = df.loc[train_end:, "target_load"].values
 
+        if len(x_val) == 0:
+            raise ValueError(
+                f"Validation set is empty after dropping NaN rows. "
+                f"Try reducing lookback_window (current: {lookback}) or train_ratio."
+            )
+
         if model_type == "ridge":
             model = Ridge(alpha=reg)
         elif model_type == "rf":

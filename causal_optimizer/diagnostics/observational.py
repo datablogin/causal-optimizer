@@ -189,7 +189,9 @@ def _analyze_variable(
             est = estimator_cls(causal_graph=causal_graph, method=method)
             if var_name not in df.columns:
                 continue
-            if not pd.api.types.is_numeric_dtype(df[var_name]):
+            if not pd.api.types.is_numeric_dtype(df[var_name]) or pd.api.types.is_bool_dtype(
+                df[var_name]
+            ):
                 continue
             treatment_value = float(df[var_name].median())
 
