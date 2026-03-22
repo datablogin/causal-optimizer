@@ -208,6 +208,8 @@ class EnergyLoadAdapter(DomainAdapter):
         # Handle missing values: forward-fill then drop remaining NaN
         df[features] = df[features].ffill()
         mask = df[features + ["target_load"]].notna().all(axis=1)
+        # Includes lag-induced NaN rows (first `lookback` rows), so
+        # nan_rows_dropped >= lookback even for perfect data.
         n_original = len(df)
         df = df[mask].reset_index(drop=True)
         nan_rows_dropped = float(n_original - len(df))

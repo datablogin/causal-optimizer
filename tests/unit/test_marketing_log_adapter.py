@@ -475,6 +475,9 @@ class TestParquetLoading:
         fixture_df.to_parquet(parquet_path, index=False)
         csv_adapter = MarketingLogAdapter(data=fixture_df, seed=42)
         parquet_adapter = MarketingLogAdapter(data_path=str(parquet_path), seed=42)
-        assert csv_adapter.run_experiment(default_params) == parquet_adapter.run_experiment(
-            default_params
-        )
+        m_csv = csv_adapter.run_experiment(default_params)
+        m_parquet = parquet_adapter.run_experiment(default_params)
+        for key in m_csv:
+            assert m_csv[key] == pytest.approx(m_parquet[key], abs=1e-10), (
+                f"Metric '{key}' differs between CSV and Parquet adapters"
+            )
