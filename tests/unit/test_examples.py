@@ -178,3 +178,19 @@ class TestDemoAdapter:
         graph = adapter.get_prior_graph()
         assert graph is not None
         assert hasattr(graph, "edges")
+
+
+class TestEnergyLoadExampleRuns:
+    """Test that energy_load.py runs to completion."""
+
+    def test_energy_load_runs(self) -> None:
+        mod = _import_example("energy_load")
+        mod.main()
+
+
+class TestMarketingLogsExampleRuns:
+    """Test that marketing_logs.py runs to completion."""
+
+    def test_marketing_logs_runs(self) -> None:
+        mod = _import_example("marketing_logs")
+        mod.main()

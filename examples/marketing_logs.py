@@ -80,8 +80,8 @@ def main() -> None:
     print("\n--- Research Advisor Report ---")
     report = engine.diagnose(total_budget=30)
     for rec in report.recommendations:
-        print(f"  [{rec.recommendation_type.value}] {rec.summary}")
-        print(f"    Rationale: {rec.rationale}")
+        print(f"  [{rec.rec_type.value}] {rec.title}")
+        print(f"    {rec.description}")
 
 
 if __name__ == "__main__":

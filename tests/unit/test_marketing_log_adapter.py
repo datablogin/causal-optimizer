@@ -402,3 +402,79 @@ class TestLoadFromPath:
     def test_neither_path_nor_data(self) -> None:
         with pytest.raises(ValueError, match="[Ee]xactly one"):
             MarketingLogAdapter(seed=42)
+
+
+# ---------------------------------------------------------------------------
+# Warning metrics (Task 5)
+# ---------------------------------------------------------------------------
+
+
+class TestWarningMetrics:
+    """Warning/diagnostic metrics are present and valid."""
+
+    def test_warning_metrics_present(
+        self, adapter: MarketingLogAdapter, default_params: dict[str, float]
+    ) -> None:
+        metrics = adapter.run_experiment(default_params)
+        assert "propensity_clip_fraction" in metrics
+        assert "max_ips_weight" in metrics
+        assert "weight_cv" in metrics
+
+    def test_all_warning_metrics_finite(
+        self, adapter: MarketingLogAdapter, default_params: dict[str, float]
+    ) -> None:
+        metrics = adapter.run_experiment(default_params)
+        for key in ["propensity_clip_fraction", "max_ips_weight", "weight_cv"]:
+            assert np.isfinite(metrics[key]), f"{key} is not finite"
+
+    def test_propensity_clip_fraction_bounded(
+        self, adapter: MarketingLogAdapter, default_params: dict[str, float]
+    ) -> None:
+        metrics = adapter.run_experiment(default_params)
+        assert 0.0 <= metrics["propensity_clip_fraction"] <= 1.0
+
+    def test_aggressive_clip_increases_clip_fraction(self, fixture_df: pd.DataFrame) -> None:
+        adapter = MarketingLogAdapter(data=fixture_df, seed=42)
+        default = {
+            "eligibility_threshold": 0.3,
+            "email_share": 0.4,
+            "social_share_of_remainder": 0.3,
+            "regularization": 1.0,
+            "treatment_budget_pct": 0.5,
+        }
+        params_tight = {**default, "min_propensity_clip": 0.01}
+        params_wide = {**default, "min_propensity_clip": 0.45}
+        m_tight = adapter.run_experiment(params_tight)
+        m_wide = adapter.run_experiment(params_wide)
+        assert m_wide["propensity_clip_fraction"] >= m_tight["propensity_clip_fraction"]
+
+
+# ---------------------------------------------------------------------------
+# Parquet loading (Task 3)
+# ---------------------------------------------------------------------------
+
+
+class TestParquetLoading:
+    """Test that Parquet files can be loaded."""
+
+    @pytest.fixture(autouse=True)
+    def _require_pyarrow(self) -> None:
+        pytest.importorskip("pyarrow")
+
+    def test_load_from_parquet(self, fixture_df: pd.DataFrame, tmp_path: Path) -> None:
+        parquet_path = tmp_path / "marketing.parquet"
+        fixture_df.to_parquet(parquet_path, index=False)
+        adapter = MarketingLogAdapter(data_path=str(parquet_path), seed=42)
+        space = adapter.get_search_space()
+        assert len(space.variables) == 6
+
+    def test_parquet_produces_same_metrics_as_csv(
+        self, fixture_df: pd.DataFrame, tmp_path: Path, default_params: dict[str, float]
+    ) -> None:
+        parquet_path = tmp_path / "marketing.parquet"
+        fixture_df.to_parquet(parquet_path, index=False)
+        csv_adapter = MarketingLogAdapter(data=fixture_df, seed=42)
+        parquet_adapter = MarketingLogAdapter(data_path=str(parquet_path), seed=42)
+        assert csv_adapter.run_experiment(default_params) == parquet_adapter.run_experiment(
+            default_params
+        )

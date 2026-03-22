@@ -68,7 +68,10 @@ class MarketingLogAdapter(DomainAdapter):
             raise ValueError("Exactly one of 'data' or 'data_path' must be provided.")
 
         if data_path is not None:
-            data = pd.read_csv(data_path)
+            if data_path.endswith(".parquet"):
+                data = pd.read_parquet(data_path)
+            else:
+                data = pd.read_csv(data_path)
 
         assert data is not None  # for type narrowing
         self._seed = seed
@@ -185,6 +188,10 @@ class MarketingLogAdapter(DomainAdapter):
             propensity = np.full(n, treat_rate)
 
         # Clip propensities for stability
+        clipped_mask = (propensity < min_propensity_clip) | (
+            propensity > (1.0 - min_propensity_clip)
+        )
+        propensity_clip_fraction = float(clipped_mask.mean())
         propensity_clipped = np.clip(propensity, min_propensity_clip, 1.0 - min_propensity_clip)
 
         # Compute uplift scores using a simple approach:
@@ -282,11 +289,22 @@ class MarketingLogAdapter(DomainAdapter):
         # Effective sample size (Kish's ESS)
         ess = float(weight_sum**2 / np.sum(weights**2)) if weight_sum > 0 else 0.0
 
+        # Warning metrics
+        max_ips_weight = float(weights.max()) if len(weights) > 0 else 0.0
+        positive_weights = weights[weights > 0]
+        if len(positive_weights) > 0:
+            weight_cv = float(positive_weights.std() / positive_weights.mean())
+        else:
+            weight_cv = 0.0
+
         return {
             "policy_value": policy_value,
             "total_cost": total_cost,
             "treated_fraction": treated_fraction,
             "effective_sample_size": ess,
+            "propensity_clip_fraction": propensity_clip_fraction,
+            "max_ips_weight": max_ips_weight,
+            "weight_cv": weight_cv,
         }
 
     def get_prior_graph(self) -> CausalGraph:

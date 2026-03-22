@@ -61,7 +61,10 @@ class EnergyLoadAdapter(DomainAdapter):
         if data is not None:
             self._data = data.copy()
         elif data_path is not None:
-            self._data = pd.read_csv(data_path)
+            if data_path.endswith(".parquet"):
+                self._data = pd.read_parquet(data_path)
+            else:
+                self._data = pd.read_csv(data_path)
         else:
             raise ValueError("Either 'data' or 'data_path' must be provided")
 
@@ -71,6 +74,18 @@ class EnergyLoadAdapter(DomainAdapter):
         self._train_ratio = train_ratio
 
         self._validate_data()
+
+        # Parse, sort, and deduplicate timestamps
+        self._data["timestamp"] = pd.to_datetime(self._data["timestamp"])
+        self._data = self._data.sort_values("timestamp").reset_index(drop=True)
+
+        n_before = len(self._data)
+        self._data = self._data.drop_duplicates(subset=["timestamp"], keep="first").reset_index(
+            drop=True
+        )
+        n_dupes = n_before - len(self._data)
+        if n_dupes > 0:
+            logger.warning("%d duplicate timestamps found; keeping first occurrence", n_dupes)
 
         n = len(self._data)
         self._train_end = int(n * self._train_ratio)
@@ -190,7 +205,9 @@ class EnergyLoadAdapter(DomainAdapter):
         # Handle missing values: forward-fill then drop remaining NaN
         df[features] = df[features].ffill()
         mask = df[features + ["target_load"]].notna().all(axis=1)
+        n_original = len(df)
         df = df[mask].reset_index(drop=True)
+        nan_rows_dropped = float(n_original - len(df))
 
         # Recompute split after dropping rows
         train_end = min(self._train_end, len(df) - 1)
@@ -254,6 +271,9 @@ class EnergyLoadAdapter(DomainAdapter):
             "mape": mape,
             "runtime_seconds": float(runtime),
             "feature_count": feature_count,
+            "validation_set_size": float(len(x_val)),
+            "nan_rows_dropped": nan_rows_dropped,
+            "train_val_ratio_actual": float(train_end / len(df)),
         }
 
     def get_prior_graph(self) -> CausalGraph:
