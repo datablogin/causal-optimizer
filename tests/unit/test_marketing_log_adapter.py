@@ -700,9 +700,7 @@ class TestBoundaryPropensityWarning:
         )
         with caplog.at_level(logging.WARNING, logger=self._LOGGER):
             MarketingLogAdapter(data=df, seed=42)
-        assert any(
-            "boundary values" in r.message.lower() for r in caplog.records
-        )
+        assert any("boundary values" in r.message.lower() for r in caplog.records)
 
     def test_interior_propensity_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         """Propensity strictly inside (0, 1) should not log a boundary warning."""
@@ -716,9 +714,7 @@ class TestBoundaryPropensityWarning:
         )
         with caplog.at_level(logging.WARNING, logger=self._LOGGER):
             MarketingLogAdapter(data=df, seed=42)
-        assert not any(
-            "boundary values" in r.message.lower() for r in caplog.records
-        )
+        assert not any("boundary values" in r.message.lower() for r in caplog.records)
 
 
 class TestSingleArmWarning:
