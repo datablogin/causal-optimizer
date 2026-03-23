@@ -7,6 +7,7 @@ would achieve, enabling cheap pre-screening before expensive execution.
 from __future__ import annotations
 
 import logging
+import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -55,6 +56,7 @@ class OffPolicyPredictor:
         seed: int | None = None,
         causal_graph: CausalGraph | None = None,
         objective_name: str | None = None,
+        obs_min_history: int = 20,
     ) -> None:
         """Initialize the off-policy predictor.
 
@@ -69,11 +71,16 @@ class OffPolicyPredictor:
                 causal effect estimates for improved prediction.
             objective_name: Name of the objective metric. Required when
                 ``causal_graph`` is provided.
+            obs_min_history: Minimum number of experiments in the log before
+                attempting observational (DoWhy) prediction. Prevents
+                expensive DoWhy calls when there is insufficient data for
+                reliable causal estimation.  Defaults to 20.
         """
         self.uncertainty_threshold = uncertainty_threshold
         self.min_history = min_history
         self.epsilon_mode = epsilon_mode
         self.n_max = n_max
+        self.obs_min_history = obs_min_history
         self._model: RandomForestRegressor | None = None
         self._var_names: list[str] = []
         self._numeric_var_names: list[str] = []
@@ -87,6 +94,7 @@ class OffPolicyPredictor:
         self._objective_name: str | None = objective_name
         self._obs_estimator: type | object | None = _NOT_TRIED
         self._experiment_log: ExperimentLog | None = None
+        self._last_prediction: Prediction | None = None
 
     def fit(
         self,
@@ -240,20 +248,36 @@ class OffPolicyPredictor:
         - With probability epsilon: OBSERVE (skip experiment, trust surrogate)
         - With probability 1-epsilon: INTERVENE (run experiment)
         - Even when observing, fall back to intervening if uncertainty is high
+
+        The resulting ``Prediction`` (if any) is cached as ``_last_prediction``
+        so callers can reuse it without a redundant ``predict()`` call.
         """
+        self._last_prediction = None
+
         if self.epsilon_mode:
             return self._should_run_epsilon(parameters)
 
         return self._should_run_heuristic(parameters)
 
     def _should_run_heuristic(self, parameters: dict[str, Any]) -> bool:
-        """Original heuristic-based decision logic."""
-        prediction = self.predict(parameters)
-        if prediction is None:
+        """Original heuristic-based decision logic.
+
+        Cheap guards (model availability, model quality) are checked *before*
+        calling ``predict()`` to avoid expensive RF + observational inference
+        when the result would be discarded anyway.
+        """
+        # Cheap guard: no model fitted yet
+        if self._model is None:
             return True  # No model, must run
 
-        if prediction.model_quality < 0.3:
+        # Cheap guard: model quality too low to trust
+        if self._model_quality < 0.3:
             return True  # Model too poor to trust
+
+        prediction = self.predict(parameters)
+        self._last_prediction = prediction
+        if prediction is None:
+            return True  # predict() failed (e.g. search space not set)
 
         return prediction.uncertainty > self.uncertainty_threshold
 
@@ -321,6 +345,10 @@ class OffPolicyPredictor:
         ``observational.py`` — and selects the identified estimate with the
         tightest finite confidence interval.  Returns ``None`` when no
         ancestor yields an identified estimate with a finite CI.
+
+        Gated by ``obs_min_history``: returns ``None`` when the experiment log
+        has fewer than ``obs_min_history`` results, avoiding expensive DoWhy
+        calls on insufficient data.
         """
         if (
             self._obs_estimator is None
@@ -330,6 +358,10 @@ class OffPolicyPredictor:
             return None
 
         if self._causal_graph is None:
+            return None
+
+        # Gate: skip expensive DoWhy calls when history is too short
+        if len(self._experiment_log.results) < self.obs_min_history:
             return None
 
         # _obs_estimator stores the *class* (set during fit())
@@ -357,16 +389,19 @@ class OffPolicyPredictor:
 
             for method in IDENTIFICATION_METHODS:
                 try:
-                    est = estimator_cls(
-                        causal_graph=self._causal_graph,
-                        method=method,
-                    )
-                    result = est.estimate_intervention(
-                        experiment_log=self._experiment_log,
-                        treatment_var=var_name,
-                        treatment_value=float(var_value),
-                        objective_name=objective_name,
-                    )
+                    # Suppress repeated statsmodels/pygraphviz warnings from DoWhy
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings("ignore")
+                        est = estimator_cls(
+                            causal_graph=self._causal_graph,
+                            method=method,
+                        )
+                        result = est.estimate_intervention(
+                            experiment_log=self._experiment_log,
+                            treatment_var=var_name,
+                            treatment_value=float(var_value),
+                            objective_name=objective_name,
+                        )
                     if result.identified:
                         candidates.append(result)
                 except Exception:
