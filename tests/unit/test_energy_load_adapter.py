@@ -6,6 +6,7 @@ metric completeness, no-leakage split, validation, and edge cases.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -438,3 +439,132 @@ class TestFeatureEffects:
         assert m_long["mae"] <= m_short["mae"] * 1.2, (
             "Longer lookback should not drastically worsen MAE"
         )
+
+
+# ---------------------------------------------------------------------------
+# 11. Timestamp handling (Task 4)
+# ---------------------------------------------------------------------------
+
+
+class TestTimestampHandling:
+    """Timestamp sorting, validation, and gap handling."""
+
+    def test_unsorted_data_is_sorted(self, fixture_df: pd.DataFrame) -> None:
+        """Passing shuffled data should produce same results as sorted."""
+        shuffled = fixture_df.sample(frac=1, random_state=99).reset_index(drop=True)
+        adapter_sorted = EnergyLoadAdapter(data=fixture_df, seed=42)
+        adapter_shuffled = EnergyLoadAdapter(data=shuffled, seed=42)
+        params = {
+            "model_type": "ridge",
+            "lookback_window": 3,
+            "use_temperature": True,
+            "use_humidity": False,
+            "use_calendar": True,
+            "regularization": 1.0,
+            "n_estimators": 50,
+        }
+        m1 = adapter_sorted.run_experiment(params)
+        m2 = adapter_shuffled.run_experiment(params)
+        assert m1["mae"] == pytest.approx(m2["mae"], rel=1e-6)
+
+    def test_duplicate_timestamps_handled(
+        self, fixture_df: pd.DataFrame, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Duplicate timestamps should be deduplicated with a warning."""
+        duped = pd.concat([fixture_df, fixture_df.iloc[:5]], ignore_index=True)
+        with caplog.at_level(
+            logging.WARNING, logger="causal_optimizer.domain_adapters.energy_load"
+        ):
+            adapter = EnergyLoadAdapter(data=duped, seed=42)
+        assert any("duplicate timestamps" in m for m in caplog.messages)
+        space = adapter.get_search_space()
+        assert len(space.variables) == 7
+
+    def test_timestamp_parsed_as_datetime(self, fixture_df: pd.DataFrame) -> None:
+        """Timestamp column should be parsed to datetime."""
+        adapter = EnergyLoadAdapter(data=fixture_df, seed=42)
+        assert pd.api.types.is_datetime64_any_dtype(adapter._data["timestamp"])
+
+
+# ---------------------------------------------------------------------------
+# 12. Warning metrics (Task 5)
+# ---------------------------------------------------------------------------
+
+
+DEFAULT_PARAMS = {
+    "model_type": "ridge",
+    "lookback_window": 3,
+    "use_temperature": True,
+    "use_humidity": False,
+    "use_calendar": True,
+    "regularization": 1.0,
+    "n_estimators": 50,
+}
+
+
+class TestWarningMetrics:
+    """Warning/diagnostic metrics are present and valid."""
+
+    def test_warning_metrics_present(self, adapter: EnergyLoadAdapter) -> None:
+        metrics = adapter.run_experiment(DEFAULT_PARAMS)
+        assert "validation_set_size" in metrics
+        assert "nan_rows_dropped" in metrics
+        assert "train_fraction_actual" in metrics
+
+    def test_validation_set_size_is_positive(self, adapter: EnergyLoadAdapter) -> None:
+        metrics = adapter.run_experiment(DEFAULT_PARAMS)
+        assert metrics["validation_set_size"] > 0
+
+    def test_nan_rows_dropped_nonnegative(self, adapter: EnergyLoadAdapter) -> None:
+        metrics = adapter.run_experiment(DEFAULT_PARAMS)
+        assert metrics["nan_rows_dropped"] >= 0
+
+    def test_large_lookback_increases_nan_drops(self, fixture_df: pd.DataFrame) -> None:
+        adapter = EnergyLoadAdapter(data=fixture_df, seed=42)
+        params_small = {**DEFAULT_PARAMS, "lookback_window": 1}
+        params_large = {**DEFAULT_PARAMS, "lookback_window": 24}
+        m_small = adapter.run_experiment(params_small)
+        m_large = adapter.run_experiment(params_large)
+        assert m_large["nan_rows_dropped"] > m_small["nan_rows_dropped"]
+
+
+# ---------------------------------------------------------------------------
+# 13. Parquet loading (Task 3)
+# ---------------------------------------------------------------------------
+
+
+class TestParquetLoading:
+    """Test that Parquet files can be loaded."""
+
+    @pytest.fixture(autouse=True)
+    def _require_pyarrow(self) -> None:
+        pytest.importorskip("pyarrow")
+
+    def test_load_from_parquet(self, fixture_df: pd.DataFrame, tmp_path: Path) -> None:
+        parquet_path = tmp_path / "energy.parquet"
+        fixture_df.to_parquet(parquet_path, index=False)
+        adapter = EnergyLoadAdapter(data_path=str(parquet_path), seed=42)
+        space = adapter.get_search_space()
+        assert len(space.variables) == 7
+
+    def test_parquet_produces_same_metrics_as_csv(
+        self, fixture_df: pd.DataFrame, tmp_path: Path
+    ) -> None:
+        parquet_path = tmp_path / "energy.parquet"
+        fixture_df.to_parquet(parquet_path, index=False)
+        csv_adapter = EnergyLoadAdapter(data=fixture_df, seed=42)
+        parquet_adapter = EnergyLoadAdapter(data_path=str(parquet_path), seed=42)
+        params = {
+            "model_type": "ridge",
+            "lookback_window": 3,
+            "use_temperature": True,
+            "use_humidity": False,
+            "use_calendar": True,
+            "regularization": 1.0,
+            "n_estimators": 50,
+        }
+        m_csv = csv_adapter.run_experiment(params)
+        m_parquet = parquet_adapter.run_experiment(params)
+        # Compare deterministic metrics (runtime_seconds is wall-clock)
+        for key in ("mae", "rmse", "mape", "feature_count"):
+            assert m_csv[key] == pytest.approx(m_parquet[key], abs=1e-10)

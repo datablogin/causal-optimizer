@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import time
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -44,7 +45,7 @@ class EnergyLoadAdapter(DomainAdapter):
     Args:
         data: DataFrame with columns ``timestamp``, ``target_load``, and
             at least one covariate (e.g. ``temperature``).
-        data_path: Path to a CSV file (alternative to *data*).
+        data_path: Path to a CSV or Parquet file (alternative to *data*).
         seed: Random seed for reproducibility.
         train_ratio: Fraction of data used for training (default 0.7).
             The remainder is the validation set.  Split is blocked by time
@@ -61,7 +62,10 @@ class EnergyLoadAdapter(DomainAdapter):
         if data is not None:
             self._data = data.copy()
         elif data_path is not None:
-            self._data = pd.read_csv(data_path)
+            if Path(data_path).suffix == ".parquet":
+                self._data = pd.read_parquet(data_path)
+            else:
+                self._data = pd.read_csv(data_path)
         else:
             raise ValueError("Either 'data' or 'data_path' must be provided")
 
@@ -71,6 +75,21 @@ class EnergyLoadAdapter(DomainAdapter):
         self._train_ratio = train_ratio
 
         self._validate_data()
+
+        # Parse, sort, and deduplicate timestamps
+        try:
+            self._data["timestamp"] = pd.to_datetime(self._data["timestamp"])
+        except (ValueError, TypeError) as exc:
+            raise ValueError(f"Column 'timestamp' could not be parsed as datetime: {exc}") from exc
+        self._data = self._data.sort_values("timestamp", kind="mergesort").reset_index(drop=True)
+
+        n_before = len(self._data)
+        self._data = self._data.drop_duplicates(subset=["timestamp"], keep="first").reset_index(
+            drop=True
+        )
+        n_dupes = n_before - len(self._data)
+        if n_dupes > 0:
+            logger.warning("%d duplicate timestamps found; keeping first occurrence", n_dupes)
 
         n = len(self._data)
         self._train_end = int(n * self._train_ratio)
@@ -151,7 +170,8 @@ class EnergyLoadAdapter(DomainAdapter):
         Steps:
         1. Build a feature matrix from the selected features + lagged load.
         2. Train on the training split, predict on validation.
-        3. Return MAE, RMSE, MAPE, runtime_seconds, feature_count.
+        3. Return MAE, RMSE, MAPE, runtime_seconds, feature_count,
+           validation_set_size, nan_rows_dropped, train_fraction_actual.
         """
         t_start = time.monotonic()
 
@@ -190,7 +210,11 @@ class EnergyLoadAdapter(DomainAdapter):
         # Handle missing values: forward-fill then drop remaining NaN
         df[features] = df[features].ffill()
         mask = df[features + ["target_load"]].notna().all(axis=1)
+        # Includes lag-induced NaN rows (first `lookback` rows), so
+        # nan_rows_dropped >= lookback even for perfect data.
+        n_original = len(df)
         df = df[mask].reset_index(drop=True)
+        nan_rows_dropped = float(n_original - len(df))
 
         # Recompute split after dropping rows
         train_end = min(self._train_end, len(df) - 1)
@@ -254,6 +278,9 @@ class EnergyLoadAdapter(DomainAdapter):
             "mape": mape,
             "runtime_seconds": float(runtime),
             "feature_count": feature_count,
+            "validation_set_size": float(len(x_val)),
+            "nan_rows_dropped": nan_rows_dropped,
+            "train_fraction_actual": float(train_end / len(df)) if len(df) > 0 else 0.0,
         }
 
     def get_prior_graph(self) -> CausalGraph:
