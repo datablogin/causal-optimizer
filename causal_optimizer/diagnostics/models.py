@@ -80,7 +80,14 @@ class CoverageAnalysis(BaseModel):
     map_elites_filled_cells: int | None = None
     map_elites_total_cells: int | None = None
     search_space_coverage: float | None = None
-    kept_varied_vars: list[str] | None = None
+    kept_varied_vars: list[str] | None = Field(
+        default=None,
+        description=(
+            "Variables with variation across KEEP-only experiments. "
+            "None when no KEEP experiments exist; empty list when KEEP "
+            "experiments exist but all variables are constant."
+        ),
+    )
 
 
 class RobustnessAnalysis(BaseModel):

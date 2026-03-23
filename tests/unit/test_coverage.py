@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from causal_optimizer.diagnostics.coverage import analyze_coverage
 from causal_optimizer.diagnostics.models import CoverageAnalysis
 from causal_optimizer.types import (
@@ -238,3 +240,62 @@ class TestKeptVariedVarsField:
         # KEEP experiment exists but no variable varied within KEEP-only → empty list
         assert result.kept_varied_vars is not None
         assert result.kept_varied_vars == []
+
+
+class TestEdgeCases:
+    """Edge cases for coverage analysis."""
+
+    def test_all_discard_experiments_kept_varied_vars_is_none(self) -> None:
+        """When all experiments are DISCARD (zero KEEP rows), kept_varied_vars is None."""
+        log = ExperimentLog(
+            results=[
+                ExperimentResult(
+                    experiment_id="1",
+                    parameters={"X1": 1.0, "X2": 5.0, "X3": 3.0},
+                    metrics={"Y": 10.0},
+                    status=ExperimentStatus.DISCARD,
+                ),
+                ExperimentResult(
+                    experiment_id="2",
+                    parameters={"X1": 2.0, "X2": 5.0, "X3": 7.0},
+                    metrics={"Y": 8.0},
+                    status=ExperimentStatus.DISCARD,
+                ),
+            ]
+        )
+        ss = _make_search_space()
+        graph = _make_causal_graph()
+
+        result = analyze_coverage(log, ss, "Y", causal_graph=graph)
+
+        assert result.kept_varied_vars is None
+        # But broad coverage still works — X1, X3 varied across DISCARD experiments
+        assert "X1" not in (result.ancestors_never_intervened or [])
+        assert "X3" not in (result.ancestors_never_intervened or [])
+
+    def test_search_space_coverage_includes_discard_experiments(self) -> None:
+        """search_space_coverage should use KEEP+DISCARD parameter ranges."""
+        log = ExperimentLog(
+            results=[
+                ExperimentResult(
+                    experiment_id="1",
+                    parameters={"X1": 5.0, "X2": 5.0, "X3": 5.0},
+                    metrics={"Y": 10.0},
+                    status=ExperimentStatus.KEEP,
+                ),
+                ExperimentResult(
+                    experiment_id="2",
+                    parameters={"X1": 10.0, "X2": 10.0, "X3": 10.0},
+                    metrics={"Y": 6.0},
+                    status=ExperimentStatus.DISCARD,
+                ),
+            ]
+        )
+        ss = _make_search_space()
+
+        result = analyze_coverage(log, ss, "Y")
+
+        # With DISCARD included, each variable covers [5, 10] out of [0, 10] = 50%
+        # Average should be 0.5
+        assert result.search_space_coverage is not None
+        assert result.search_space_coverage == pytest.approx(0.5, abs=0.01)

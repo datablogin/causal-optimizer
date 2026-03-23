@@ -48,7 +48,7 @@ def analyze_coverage(
         if var.name in df_non_crash.columns:
             if df_non_crash[var.name].nunique() > 1:
                 varied_vars.add(var.name)
-            if df_keep[var.name].nunique() > 1:
+            if var.name in df_keep.columns and df_keep[var.name].nunique() > 1:
                 kept_varied_vars.add(var.name)
 
     # --- POMIS coverage ---
