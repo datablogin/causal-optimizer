@@ -113,6 +113,36 @@ class MarketingLogAdapter(DomainAdapter):
         if nan_cols:
             raise ValueError(f"Columns contain NaN values: {', '.join(nan_cols)}")
 
+        # Validate treatment column is binary {0, 1}
+        treatment_vals = self._data[self._treatment_col]
+        bad_values = set(treatment_vals.unique()) - {0, 1}
+        if bad_values:
+            raise ValueError(
+                f"Treatment column '{self._treatment_col}' must be binary (0/1), "
+                f"found values: {bad_values}"
+            )
+
+        # Validate propensity column values are in [0, 1]
+        if self._propensity_col in self._data.columns:
+            prop_vals = self._data[self._propensity_col]
+            p_min = float(prop_vals.min())
+            p_max = float(prop_vals.max())
+            if p_min < 0.0 or p_max > 1.0:
+                raise ValueError(
+                    f"Propensity column '{self._propensity_col}' values must be in [0, 1], "
+                    f"found range [{p_min}, {p_max}]"
+                )
+
+        # Warn when one treatment arm is entirely absent
+        unique_treatments = set(treatment_vals.unique())
+        if unique_treatments == {0} or unique_treatments == {1}:
+            logger.warning(
+                "Single treatment arm detected in column '%s': all values are %s. "
+                "IPS weighting requires both treated and control observations for reliable estimates.",
+                self._treatment_col,
+                next(iter(unique_treatments)),
+            )
+
     def get_search_space(self) -> SearchSpace:
         return SearchSpace(
             variables=[
