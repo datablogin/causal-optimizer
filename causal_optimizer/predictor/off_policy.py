@@ -96,6 +96,11 @@ class OffPolicyPredictor:
         self._experiment_log: ExperimentLog | None = None
         self._last_prediction: Prediction | None = None
 
+    @property
+    def last_prediction(self) -> Prediction | None:
+        """The prediction cached by the most recent ``should_run_experiment()`` call."""
+        return self._last_prediction
+
     def fit(
         self,
         experiment_log: ExperimentLog,

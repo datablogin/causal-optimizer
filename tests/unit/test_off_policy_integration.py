@@ -113,7 +113,7 @@ class TestPredictorSkipping:
         # First call: skip. Second call: run.
         engine._predictor.should_run_experiment.side_effect = [False, True]
         engine._predictor.fit.return_value = None
-        engine._predictor._last_prediction = None
+        engine._predictor.last_prediction = None
 
         result = engine.step()
         assert result is not None
@@ -132,7 +132,7 @@ class TestPredictorSkipping:
         # Always skip — but max_skips should break the loop
         engine._predictor.should_run_experiment.return_value = False
         engine._predictor.fit.return_value = None
-        engine._predictor._last_prediction = None
+        engine._predictor.last_prediction = None
 
         result = engine.step()
         assert result is not None

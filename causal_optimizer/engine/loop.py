@@ -497,7 +497,7 @@ class ExperimentEngine:
                 skips += 1
                 # Reuse cached prediction from should_run_experiment() to avoid
                 # a redundant predict() call on the same parameters.
-                prediction = self._predictor._last_prediction
+                prediction = self._predictor.last_prediction
                 if prediction is None:
                     prediction = self._predictor.predict(parameters)
                 if prediction is not None:
