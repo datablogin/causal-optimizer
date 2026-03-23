@@ -68,7 +68,12 @@ class ConvergenceAnalysis(BaseModel):
 
 
 class CoverageAnalysis(BaseModel):
-    """Analysis of search space and causal structure coverage."""
+    """Analysis of search space and causal structure coverage.
+
+    Ancestor and POMIS coverage use all non-crash experiments (KEEP + DISCARD).
+    ``kept_varied_vars`` reports the narrower KEEP-only subset for consumers
+    that need to distinguish retained-frontier coverage from exploration coverage.
+    """
 
     pomis_sets_total: int | None = None
     pomis_sets_explored: int | None = None

@@ -216,7 +216,7 @@ class TestKeptVariedVarsField:
         assert analysis.kept_varied_vars is None
 
     def test_kept_varied_vars_empty_list_when_keep_exists_but_constant(self) -> None:
-        """When KEEP experiments exist but all variables are constant,
+        """When KEEP experiments exist but all variables are constant within KEEP,
         kept_varied_vars should be [] (not None)."""
         log = ExperimentLog(
             results=[
@@ -228,6 +228,12 @@ class TestKeptVariedVarsField:
                 ),
                 ExperimentResult(
                     experiment_id="2",
+                    parameters={"X1": 5.0, "X2": 5.0, "X3": 5.0},
+                    metrics={"Y": 11.0},
+                    status=ExperimentStatus.KEEP,
+                ),
+                ExperimentResult(
+                    experiment_id="3",
                     parameters={"X1": 5.0, "X2": 5.0, "X3": 9.0},
                     metrics={"Y": 6.0},
                     status=ExperimentStatus.DISCARD,

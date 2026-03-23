@@ -38,6 +38,7 @@ def analyze_coverage(
         df_non_crash = df[df["status"] != ExperimentStatus.CRASH.value]
         df_keep = df[df["status"] == ExperimentStatus.KEEP.value]
     else:
+        # Legacy data without status column — treat all as both non-crash and KEEP
         df_non_crash = df
         df_keep = df
 
@@ -48,7 +49,7 @@ def analyze_coverage(
         if var.name in df_non_crash.columns:
             if df_non_crash[var.name].nunique() > 1:
                 varied_vars.add(var.name)
-            if var.name in df_keep.columns and df_keep[var.name].nunique() > 1:
+            if df_keep[var.name].nunique() > 1:
                 kept_varied_vars.add(var.name)
 
     # --- POMIS coverage ---
