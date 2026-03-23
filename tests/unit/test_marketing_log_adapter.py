@@ -494,61 +494,73 @@ class TestTreatmentBinaryValidation:
 
     def test_non_binary_treatment_raises(self) -> None:
         """Treatment with values outside {0, 1} should raise ValueError."""
-        df = pd.DataFrame({
-            "treatment": [0, 1, 2, 1, 0],
-            "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
-            "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
-        })
+        df = pd.DataFrame(
+            {
+                "treatment": [0, 1, 2, 1, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+            }
+        )
         with pytest.raises(ValueError, match="Treatment column.*must be binary"):
             MarketingLogAdapter(data=df, seed=42)
 
     def test_float_non_binary_treatment_raises(self) -> None:
         """Treatment with float values like 0.5 should raise ValueError."""
-        df = pd.DataFrame({
-            "treatment": [0.0, 0.5, 1.0, 0.0, 1.0],
-            "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
-            "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
-        })
+        df = pd.DataFrame(
+            {
+                "treatment": [0.0, 0.5, 1.0, 0.0, 1.0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+            }
+        )
         with pytest.raises(ValueError, match="Treatment column.*must be binary"):
             MarketingLogAdapter(data=df, seed=42)
 
     def test_negative_treatment_raises(self) -> None:
         """Treatment with negative values should raise ValueError."""
-        df = pd.DataFrame({
-            "treatment": [0, -1, 1, 0, 1],
-            "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
-            "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
-        })
+        df = pd.DataFrame(
+            {
+                "treatment": [0, -1, 1, 0, 1],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+            }
+        )
         with pytest.raises(ValueError, match="Treatment column.*must be binary"):
             MarketingLogAdapter(data=df, seed=42)
 
     def test_custom_treatment_col_non_binary_raises(self) -> None:
         """Non-binary treatment raises even with a custom column name."""
-        df = pd.DataFrame({
-            "t": [0, 1, 3, 1, 0],
-            "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
-            "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
-        })
+        df = pd.DataFrame(
+            {
+                "t": [0, 1, 3, 1, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+            }
+        )
         with pytest.raises(ValueError, match="Treatment column 't' must be binary"):
             MarketingLogAdapter(data=df, seed=42, treatment_col="t")
 
     def test_valid_binary_treatment_passes(self) -> None:
         """Valid binary {0, 1} treatment should not raise."""
-        df = pd.DataFrame({
-            "treatment": [0, 1, 0, 1, 0],
-            "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
-            "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
-        })
+        df = pd.DataFrame(
+            {
+                "treatment": [0, 1, 0, 1, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+            }
+        )
         adapter = MarketingLogAdapter(data=df, seed=42)
         assert adapter is not None
 
     def test_valid_binary_float_treatment_passes(self) -> None:
         """Valid binary {0.0, 1.0} as floats should not raise."""
-        df = pd.DataFrame({
-            "treatment": [0.0, 1.0, 0.0, 1.0, 0.0],
-            "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
-            "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
-        })
+        df = pd.DataFrame(
+            {
+                "treatment": [0.0, 1.0, 0.0, 1.0, 0.0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+            }
+        )
         adapter = MarketingLogAdapter(data=df, seed=42)
         assert adapter is not None
 
@@ -558,66 +570,78 @@ class TestPropensityBoundsValidation:
 
     def test_propensity_above_one_raises(self) -> None:
         """Propensity > 1 should raise ValueError."""
-        df = pd.DataFrame({
-            "treatment": [0, 1, 0, 1, 0],
-            "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
-            "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
-            "propensity": [0.3, 0.7, 0.4, 1.5, 0.35],
-        })
+        df = pd.DataFrame(
+            {
+                "treatment": [0, 1, 0, 1, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+                "propensity": [0.3, 0.7, 0.4, 1.5, 0.35],
+            }
+        )
         with pytest.raises(ValueError, match="Propensity column.*values must be in"):
             MarketingLogAdapter(data=df, seed=42)
 
     def test_propensity_below_zero_raises(self) -> None:
         """Propensity < 0 should raise ValueError."""
-        df = pd.DataFrame({
-            "treatment": [0, 1, 0, 1, 0],
-            "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
-            "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
-            "propensity": [-0.1, 0.7, 0.4, 0.6, 0.35],
-        })
+        df = pd.DataFrame(
+            {
+                "treatment": [0, 1, 0, 1, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+                "propensity": [-0.1, 0.7, 0.4, 0.6, 0.35],
+            }
+        )
         with pytest.raises(ValueError, match="Propensity column.*values must be in"):
             MarketingLogAdapter(data=df, seed=42)
 
     def test_custom_propensity_col_out_of_range_raises(self) -> None:
         """Out-of-range propensity raises even with a custom column name."""
-        df = pd.DataFrame({
-            "treatment": [0, 1, 0, 1, 0],
-            "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
-            "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
-            "ps": [0.3, 0.7, 0.4, 2.0, 0.35],
-        })
+        df = pd.DataFrame(
+            {
+                "treatment": [0, 1, 0, 1, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+                "ps": [0.3, 0.7, 0.4, 2.0, 0.35],
+            }
+        )
         with pytest.raises(ValueError, match="Propensity column 'ps' values must be in"):
             MarketingLogAdapter(data=df, seed=42, propensity_col="ps")
 
     def test_valid_propensity_passes(self) -> None:
         """Propensity in [0, 1] should not raise."""
-        df = pd.DataFrame({
-            "treatment": [0, 1, 0, 1, 0],
-            "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
-            "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
-            "propensity": [0.3, 0.7, 0.4, 0.6, 0.35],
-        })
+        df = pd.DataFrame(
+            {
+                "treatment": [0, 1, 0, 1, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+                "propensity": [0.3, 0.7, 0.4, 0.6, 0.35],
+            }
+        )
         adapter = MarketingLogAdapter(data=df, seed=42)
         assert adapter is not None
 
     def test_propensity_at_boundaries_passes(self) -> None:
         """Propensity at exact 0.0 and 1.0 boundaries should be valid."""
-        df = pd.DataFrame({
-            "treatment": [0, 1, 0, 1, 0],
-            "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
-            "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
-            "propensity": [0.0, 1.0, 0.5, 0.5, 0.5],
-        })
+        df = pd.DataFrame(
+            {
+                "treatment": [0, 1, 0, 1, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+                "propensity": [0.0, 1.0, 0.5, 0.5, 0.5],
+            }
+        )
         adapter = MarketingLogAdapter(data=df, seed=42)
         assert adapter is not None
 
     def test_missing_propensity_col_skips_validation(self) -> None:
         """When propensity column is absent, no propensity validation occurs."""
-        df = pd.DataFrame({
-            "treatment": [0, 1, 0, 1, 0],
-            "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
-            "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
-        })
+        df = pd.DataFrame(
+            {
+                "treatment": [0, 1, 0, 1, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+            }
+        )
         adapter = MarketingLogAdapter(data=df, seed=42)
         assert adapter is not None
 
@@ -625,35 +649,43 @@ class TestPropensityBoundsValidation:
 class TestSingleArmWarning:
     """Warn when one treatment arm is entirely absent."""
 
+    _LOGGER = "causal_optimizer.domain_adapters.marketing_logs"
+
     def test_all_treated_logs_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         """All-treated data (no control arm) should log a warning."""
-        df = pd.DataFrame({
-            "treatment": [1, 1, 1, 1, 1],
-            "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
-            "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
-        })
-        with caplog.at_level(logging.WARNING, logger="causal_optimizer.domain_adapters.marketing_logs"):
+        df = pd.DataFrame(
+            {
+                "treatment": [1, 1, 1, 1, 1],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+            }
+        )
+        with caplog.at_level(logging.WARNING, logger=self._LOGGER):
             MarketingLogAdapter(data=df, seed=42)
         assert any("single treatment arm" in r.message.lower() for r in caplog.records)
 
     def test_all_control_logs_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         """All-control data (no treated arm) should log a warning."""
-        df = pd.DataFrame({
-            "treatment": [0, 0, 0, 0, 0],
-            "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
-            "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
-        })
-        with caplog.at_level(logging.WARNING, logger="causal_optimizer.domain_adapters.marketing_logs"):
+        df = pd.DataFrame(
+            {
+                "treatment": [0, 0, 0, 0, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+            }
+        )
+        with caplog.at_level(logging.WARNING, logger=self._LOGGER):
             MarketingLogAdapter(data=df, seed=42)
         assert any("single treatment arm" in r.message.lower() for r in caplog.records)
 
     def test_both_arms_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         """Data with both arms should not log a single-arm warning."""
-        df = pd.DataFrame({
-            "treatment": [0, 1, 0, 1, 0],
-            "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
-            "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
-        })
-        with caplog.at_level(logging.WARNING, logger="causal_optimizer.domain_adapters.marketing_logs"):
+        df = pd.DataFrame(
+            {
+                "treatment": [0, 1, 0, 1, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+            }
+        )
+        with caplog.at_level(logging.WARNING, logger=self._LOGGER):
             MarketingLogAdapter(data=df, seed=42)
         assert not any("single treatment arm" in r.message.lower() for r in caplog.records)

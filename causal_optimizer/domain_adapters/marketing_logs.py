@@ -114,8 +114,8 @@ class MarketingLogAdapter(DomainAdapter):
             raise ValueError(f"Columns contain NaN values: {', '.join(nan_cols)}")
 
         # Validate treatment column is binary {0, 1}
-        treatment_vals = self._data[self._treatment_col]
-        bad_values = set(treatment_vals.unique()) - {0, 1}
+        unique_treatments = set(self._data[self._treatment_col].unique())
+        bad_values = unique_treatments - {0, 1}
         if bad_values:
             raise ValueError(
                 f"Treatment column '{self._treatment_col}' must be binary (0/1), "
@@ -134,11 +134,11 @@ class MarketingLogAdapter(DomainAdapter):
                 )
 
         # Warn when one treatment arm is entirely absent
-        unique_treatments = set(treatment_vals.unique())
         if unique_treatments == {0} or unique_treatments == {1}:
             logger.warning(
                 "Single treatment arm detected in column '%s': all values are %s. "
-                "IPS weighting requires both treated and control observations for reliable estimates.",
+                "IPS weighting requires both treated and control observations "
+                "for reliable estimates.",
                 self._treatment_col,
                 next(iter(unique_treatments)),
             )
