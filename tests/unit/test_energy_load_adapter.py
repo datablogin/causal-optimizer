@@ -6,7 +6,6 @@ metric completeness, no-leakage split, validation, and edge cases.
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 import numpy as np
@@ -467,23 +466,43 @@ class TestTimestampHandling:
         m2 = adapter_shuffled.run_experiment(params)
         assert m1["mae"] == pytest.approx(m2["mae"], rel=1e-6)
 
-    def test_duplicate_timestamps_handled(
-        self, fixture_df: pd.DataFrame, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """Duplicate timestamps should be deduplicated with a warning."""
+    def test_duplicate_timestamps_raises(self, fixture_df: pd.DataFrame) -> None:
+        """Duplicate timestamps should raise ValueError instead of silently dropping."""
         duped = pd.concat([fixture_df, fixture_df.iloc[:5]], ignore_index=True)
-        with caplog.at_level(
-            logging.WARNING, logger="causal_optimizer.domain_adapters.energy_load"
-        ):
-            adapter = EnergyLoadAdapter(data=duped, seed=42)
-        assert any("duplicate timestamps" in m for m in caplog.messages)
-        space = adapter.get_search_space()
-        assert len(space.variables) == 7
+        with pytest.raises(ValueError, match="duplicate timestamps"):
+            EnergyLoadAdapter(data=duped, seed=42)
 
     def test_timestamp_parsed_as_datetime(self, fixture_df: pd.DataFrame) -> None:
         """Timestamp column should be parsed to datetime."""
         adapter = EnergyLoadAdapter(data=fixture_df, seed=42)
         assert pd.api.types.is_datetime64_any_dtype(adapter._data["timestamp"])
+
+    def test_duplicate_timestamps_error_message(self, fixture_df: pd.DataFrame) -> None:
+        """ValueError message should mention count and multi-area guidance."""
+        duped = pd.concat([fixture_df, fixture_df.iloc[:5]], ignore_index=True)
+        with pytest.raises(ValueError, match=r"Found 5 duplicate timestamps"):
+            EnergyLoadAdapter(data=duped, seed=42)
+        with pytest.raises(ValueError, match="filter to one area"):
+            EnergyLoadAdapter(data=duped, seed=42)
+
+    def test_cadence_metrics_present(self, adapter: EnergyLoadAdapter) -> None:
+        """run_experiment output must include cadence_gaps and cadence_regularity."""
+        metrics = adapter.run_experiment(DEFAULT_PARAMS)
+        assert "cadence_gaps" in metrics
+        assert "cadence_regularity" in metrics
+
+    def test_regular_cadence_near_one(self, adapter: EnergyLoadAdapter) -> None:
+        """Fixture data is hourly; cadence_regularity should be > 0.95."""
+        metrics = adapter.run_experiment(DEFAULT_PARAMS)
+        assert metrics["cadence_regularity"] > 0.95
+
+    def test_irregular_cadence_detected(self, fixture_df: pd.DataFrame) -> None:
+        """Dropping every 3rd row should lower regularity and produce gaps."""
+        irregular = fixture_df.drop(fixture_df.index[::3]).reset_index(drop=True)
+        adapter = EnergyLoadAdapter(data=irregular, seed=42)
+        metrics = adapter.run_experiment(DEFAULT_PARAMS)
+        assert metrics["cadence_regularity"] < 0.8
+        assert metrics["cadence_gaps"] > 0
 
 
 # ---------------------------------------------------------------------------
