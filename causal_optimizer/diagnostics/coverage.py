@@ -32,14 +32,26 @@ def analyze_coverage(
     from causal_optimizer.types import ExperimentStatus
 
     df = experiment_log.to_dataframe()
+
+    # Broad set: all non-crash experiments (KEEP + DISCARD)
     if "status" in df.columns:
-        df = df[df["status"] == ExperimentStatus.KEEP.value]
+        df_non_crash = df[df["status"] != ExperimentStatus.CRASH.value]
+        df_keep = df[df["status"] == ExperimentStatus.KEEP.value]
+    else:
+        df_non_crash = df
+        df_keep = df
 
     # Identify which variables were actually varied (have more than one unique value)
     varied_vars: set[str] = set()
     for var in search_space.variables:
-        if var.name in df.columns and df[var.name].nunique() > 1:
+        if var.name in df_non_crash.columns and df_non_crash[var.name].nunique() > 1:
             varied_vars.add(var.name)
+
+    # Narrow set: only KEEP experiments
+    kept_varied_vars: set[str] = set()
+    for var in search_space.variables:
+        if var.name in df_keep.columns and df_keep[var.name].nunique() > 1:
+            kept_varied_vars.add(var.name)
 
     # --- POMIS coverage ---
     pomis_total: int | None = None
@@ -97,9 +109,9 @@ def analyze_coverage(
         if var.lower is None or var.upper is None:
             continue
         total_range = var.upper - var.lower
-        if total_range <= 0 or var.name not in df.columns:
+        if total_range <= 0 or var.name not in df_non_crash.columns:
             continue
-        col = df[var.name].dropna()
+        col = df_non_crash[var.name].dropna()
         if len(col) == 0:
             coverages.append(0.0)
             continue
@@ -119,4 +131,5 @@ def analyze_coverage(
         map_elites_filled_cells=me_filled,
         map_elites_total_cells=me_total,
         search_space_coverage=ss_coverage,
+        kept_varied_vars=sorted(kept_varied_vars) if kept_varied_vars else None,
     )
