@@ -480,10 +480,9 @@ class TestTimestampHandling:
     def test_duplicate_timestamps_error_message(self, fixture_df: pd.DataFrame) -> None:
         """ValueError message should mention count and multi-area guidance."""
         duped = pd.concat([fixture_df, fixture_df.iloc[:5]], ignore_index=True)
-        with pytest.raises(ValueError, match=r"Found 5 duplicate timestamps"):
+        with pytest.raises(ValueError, match=r"Found 5 duplicate timestamps") as exc_info:
             EnergyLoadAdapter(data=duped, seed=42)
-        with pytest.raises(ValueError, match="filter to one area"):
-            EnergyLoadAdapter(data=duped, seed=42)
+        assert "filter to one area" in str(exc_info.value)
 
     def test_cadence_metrics_present(self, adapter: EnergyLoadAdapter) -> None:
         """run_experiment output must include cadence_gaps and cadence_regularity."""

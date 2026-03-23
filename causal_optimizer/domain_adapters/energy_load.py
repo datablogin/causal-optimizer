@@ -91,9 +91,18 @@ class EnergyLoadAdapter(DomainAdapter):
                 "before passing."
             )
 
-        # Infer dominant cadence from consecutive timestamp differences
+        # Infer dominant cadence and precompute cadence metrics
         diffs = self._data["timestamp"].diff().dropna()
         self._cadence: pd.Timedelta = diffs.mode().iloc[0]
+        n_diffs = len(diffs)
+        if n_diffs > 0:
+            tolerance = self._cadence * 0.1
+            regular_count = int(((diffs - self._cadence).abs() <= tolerance).sum())
+            self._cadence_regularity = float(regular_count / n_diffs)
+            self._cadence_gaps = float(int((diffs > self._cadence * 1.5).sum()))
+        else:
+            self._cadence_regularity = 1.0
+            self._cadence_gaps = 0.0
 
         n = len(self._data)
         self._train_end = int(n * self._train_ratio)
@@ -276,19 +285,6 @@ class EnergyLoadAdapter(DomainAdapter):
         runtime = time.monotonic() - t_start
         feature_count = float(len(features))
 
-        # Cadence metrics
-        diffs = self._data["timestamp"].diff().dropna()
-        cadence = self._cadence
-        tolerance = cadence * 0.1
-        n_diffs = len(diffs)
-        if n_diffs > 0:
-            regular_count = int(((diffs - cadence).abs() <= tolerance).sum())
-            cadence_regularity = float(regular_count / n_diffs)
-            cadence_gaps = float(int((diffs > cadence * 1.5).sum()))
-        else:
-            cadence_regularity = 1.0
-            cadence_gaps = 0.0
-
         return {
             "mae": mae,
             "rmse": rmse,
@@ -298,8 +294,8 @@ class EnergyLoadAdapter(DomainAdapter):
             "validation_set_size": float(len(x_val)),
             "nan_rows_dropped": nan_rows_dropped,
             "train_fraction_actual": float(train_end / len(df)) if len(df) > 0 else 0.0,
-            "cadence_gaps": cadence_gaps,
-            "cadence_regularity": cadence_regularity,
+            "cadence_gaps": self._cadence_gaps,
+            "cadence_regularity": self._cadence_regularity,
         }
 
     def get_prior_graph(self) -> CausalGraph:
