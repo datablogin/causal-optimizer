@@ -321,13 +321,16 @@ class MarketingLogAdapter(DomainAdapter):
             zero_support = 0.0
             policy_value = float(np.sum(normalized_weights * outcome) / n)
         else:
-            # Pessimistic fallback: worst observed outcome for the objective direction
+            # Pessimistic fallback: worst observed outcome for the objective direction.
+            # When maximizing use min (lowest); when minimizing use max (highest).
             normalized_weights = np.zeros(n)
             zero_support = 1.0
             policy_value = float(outcome.max()) if self.get_minimize() else float(outcome.min())
             logger.warning("No policy-matching observations; using pessimistic fallback.")
 
-        # Total cost: sum of IPS-weighted costs for treated observations under policy
+        # Total cost: sum of IPS-weighted costs for treated observations under policy.
+        # In the zero-support branch normalized_weights is all-zeros, so total_cost
+        # is intentionally 0.0 (no cost can be attributed without matching data).
         treated_cost_weights = np.zeros(n)
         treated_cost_weights[match_treat] = normalized_weights[match_treat]
         total_cost = float(np.sum(treated_cost_weights * cost) / n)
