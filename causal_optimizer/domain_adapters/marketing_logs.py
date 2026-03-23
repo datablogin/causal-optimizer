@@ -318,15 +318,19 @@ class MarketingLogAdapter(DomainAdapter):
         weight_sum = weights.sum()
         if weight_sum > 0:
             normalized_weights = weights / weight_sum * n
+            zero_support = 0.0
+            policy_value = float(np.sum(normalized_weights * outcome) / n)
         else:
-            # Fallback: uniform weights if no matches
-            normalized_weights = np.ones(n)
-            logger.warning("No policy-matching observations; using uniform weights.")
+            # Pessimistic fallback: worst observed outcome for the objective direction.
+            # When maximizing use min (lowest); when minimizing use max (highest).
+            normalized_weights = np.zeros(n)
+            zero_support = 1.0
+            policy_value = float(outcome.max()) if self.get_minimize() else float(outcome.min())
+            logger.warning("No policy-matching observations; using pessimistic fallback.")
 
-        # Policy value: weighted average outcome
-        policy_value = float(np.sum(normalized_weights * outcome) / n)
-
-        # Total cost: sum of IPS-weighted costs for treated observations under policy
+        # Total cost: sum of IPS-weighted costs for treated observations under policy.
+        # In the zero-support branch normalized_weights is all-zeros, so total_cost
+        # is intentionally 0.0 (no cost can be attributed without matching data).
         treated_cost_weights = np.zeros(n)
         treated_cost_weights[match_treat] = normalized_weights[match_treat]
         total_cost = float(np.sum(treated_cost_weights * cost) / n)
@@ -352,6 +356,7 @@ class MarketingLogAdapter(DomainAdapter):
             "propensity_clip_fraction": propensity_clip_fraction,
             "max_ips_weight": max_ips_weight,
             "weight_cv": weight_cv,
+            "zero_support": zero_support,
         }
 
     def get_prior_graph(self) -> CausalGraph:

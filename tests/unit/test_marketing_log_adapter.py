@@ -192,7 +192,13 @@ class TestMetricCompleteness:
         self, adapter: MarketingLogAdapter, default_params: dict[str, float]
     ) -> None:
         metrics = adapter.run_experiment(default_params)
-        expected_keys = {"policy_value", "total_cost", "treated_fraction", "effective_sample_size"}
+        expected_keys = {
+            "policy_value",
+            "total_cost",
+            "treated_fraction",
+            "effective_sample_size",
+            "zero_support",
+        }
         assert expected_keys.issubset(set(metrics.keys()))
 
     def test_all_metrics_are_numeric(
@@ -760,3 +766,77 @@ class TestSingleArmWarning:
         with caplog.at_level(logging.WARNING, logger=self._LOGGER):
             MarketingLogAdapter(data=df, seed=42)
         assert not any("single treatment arm" in r.message.lower() for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# Zero-support guard (Issue #46)
+# ---------------------------------------------------------------------------
+
+
+class TestZeroSupportGuard:
+    """When no logged observations match the proposed policy, the adapter
+    should use a pessimistic fallback instead of the unweighted population mean.
+    """
+
+    @pytest.fixture
+    def zero_support_data(self) -> tuple[pd.DataFrame, np.ndarray]:
+        """All-treated DataFrame where a no-treat policy has zero support."""
+        rng = np.random.default_rng(99)
+        n = 50
+        outcomes = rng.uniform(10, 50, n)
+        df = pd.DataFrame(
+            {
+                "treatment": np.ones(n, dtype=int),
+                "outcome": outcomes,
+                "cost": rng.uniform(1, 5, n),
+                "propensity": np.full(n, 0.8),
+            }
+        )
+        return df, outcomes
+
+    @pytest.fixture
+    def zero_support_metrics(
+        self, zero_support_data: tuple[pd.DataFrame, np.ndarray]
+    ) -> dict[str, float]:
+        """Run a no-treat policy against all-treated data (zero support)."""
+        df, _outcomes = zero_support_data
+        adapter = MarketingLogAdapter(data=df, seed=42)
+        params = {
+            "eligibility_threshold": 0.99,
+            "email_share": 0.5,
+            "social_share_of_remainder": 0.5,
+            "min_propensity_clip": 0.05,
+            "regularization": 0.001,
+            "treatment_budget_pct": 0.1,
+        }
+        return adapter.run_experiment(params)
+
+    def test_zero_support_returns_pessimistic_policy_value(
+        self,
+        zero_support_data: tuple[pd.DataFrame, np.ndarray],
+        zero_support_metrics: dict[str, float],
+    ) -> None:
+        """policy_value should equal outcome.min(), below the population mean."""
+        _df, outcomes = zero_support_data
+        population_mean = float(outcomes.mean())
+        assert zero_support_metrics["policy_value"] < population_mean
+        assert zero_support_metrics["policy_value"] == pytest.approx(
+            float(outcomes.min()), abs=1e-10
+        )
+
+    def test_zero_support_effective_sample_size_is_zero(
+        self, zero_support_metrics: dict[str, float]
+    ) -> None:
+        """ESS must be 0.0 when no observations match the policy."""
+        assert zero_support_metrics["effective_sample_size"] == 0.0
+
+    def test_zero_support_metric_is_one(self, zero_support_metrics: dict[str, float]) -> None:
+        """zero_support metric must be 1.0 when weight_sum == 0."""
+        assert zero_support_metrics["zero_support"] == 1.0
+
+    def test_normal_case_zero_support_metric_is_zero(
+        self, adapter: MarketingLogAdapter, default_params: dict[str, float]
+    ) -> None:
+        """zero_support metric must be 0.0 when observations match the policy."""
+        metrics = adapter.run_experiment(default_params)
+        assert metrics["zero_support"] == 0.0
