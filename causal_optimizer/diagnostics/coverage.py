@@ -42,7 +42,8 @@ def analyze_coverage(
         df_non_crash = df
         df_keep = df
 
-    # Identify which variables were actually varied (have more than one unique value)
+    # Identify which variables were actually varied (have more than one unique value).
+    # df_keep is a row-filtered subset of df, so it shares columns with df_non_crash.
     varied_vars: set[str] = set()
     kept_varied_vars: set[str] = set()
     for var in search_space.variables:
