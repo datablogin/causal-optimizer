@@ -85,7 +85,7 @@ class MarketingLogAdapter(DomainAdapter):
         self._validate_data()
 
     def _validate_data(self) -> None:
-        """Validate that required columns exist and data is non-empty."""
+        """Validate required columns, data types, and value ranges."""
         if self._data.empty:
             raise ValueError("Empty DataFrame: data must contain at least one row.")
 
@@ -112,6 +112,52 @@ class MarketingLogAdapter(DomainAdapter):
             nan_cols.append(self._propensity_col)
         if nan_cols:
             raise ValueError(f"Columns contain NaN values: {', '.join(nan_cols)}")
+
+        # Validate treatment column is binary {0, 1}
+        unique_treatments = set(self._data[self._treatment_col].unique())
+        bad_values = unique_treatments - {0, 1}
+        if bad_values:
+            # Convert numpy scalars to plain Python types and sort for deterministic messages
+            bad_display = sorted(
+                (v.item() if hasattr(v, "item") else v for v in bad_values),
+                key=str,
+            )
+            raise ValueError(
+                f"Treatment column '{self._treatment_col}' must be binary (0/1), "
+                f"found values: {bad_display}"
+            )
+
+        # Validate propensity column values are in [0, 1]
+        if self._propensity_col in self._data.columns:
+            prop_vals = self._data[self._propensity_col]
+            if not pd.api.types.is_numeric_dtype(prop_vals):
+                raise ValueError(
+                    f"Propensity column '{self._propensity_col}' must be numeric, "
+                    f"found dtype: {prop_vals.dtype}"
+                )
+            p_min = float(prop_vals.min())
+            p_max = float(prop_vals.max())
+            if p_min < 0.0 or p_max > 1.0:
+                raise ValueError(
+                    f"Propensity column '{self._propensity_col}' values must be in [0, 1], "
+                    f"found range [{p_min}, {p_max}]"
+                )
+            if p_min == 0.0 or p_max == 1.0:
+                logger.warning(
+                    "Propensity column '%s' contains boundary values (0.0 or 1.0). "
+                    "IPS weights will be clipped during evaluation.",
+                    self._propensity_col,
+                )
+
+        # Warn when one treatment arm is entirely absent
+        if unique_treatments == {0} or unique_treatments == {1}:
+            logger.warning(
+                "Single treatment arm detected in column '%s': all values are %s. "
+                "IPS weighting requires both treated and control observations "
+                "for reliable estimates.",
+                self._treatment_col,
+                next(iter(unique_treatments)),
+            )
 
     def get_search_space(self) -> SearchSpace:
         return SearchSpace(

@@ -6,6 +6,7 @@ dataset validation, and metric outputs of the marketing log adapter.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -481,3 +482,281 @@ class TestParquetLoading:
             assert m_csv[key] == pytest.approx(m_parquet[key], abs=1e-10), (
                 f"Metric '{key}' differs between CSV and Parquet adapters"
             )
+
+
+# ---------------------------------------------------------------------------
+# Input validation: treatment binary & propensity bounds (Issue #47)
+# ---------------------------------------------------------------------------
+
+
+class TestTreatmentBinaryValidation:
+    """Treatment column must contain only 0/1 values."""
+
+    def test_non_binary_treatment_raises(self) -> None:
+        """Treatment with values outside {0, 1} should raise ValueError."""
+        df = pd.DataFrame(
+            {
+                "treatment": [0, 1, 2, 1, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+            }
+        )
+        with pytest.raises(ValueError, match="Treatment column.*must be binary"):
+            MarketingLogAdapter(data=df, seed=42)
+
+    def test_float_non_binary_treatment_raises(self) -> None:
+        """Treatment with float values like 0.5 should raise ValueError."""
+        df = pd.DataFrame(
+            {
+                "treatment": [0.0, 0.5, 1.0, 0.0, 1.0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+            }
+        )
+        with pytest.raises(ValueError, match="Treatment column.*must be binary"):
+            MarketingLogAdapter(data=df, seed=42)
+
+    def test_negative_treatment_raises(self) -> None:
+        """Treatment with negative values should raise ValueError."""
+        df = pd.DataFrame(
+            {
+                "treatment": [0, -1, 1, 0, 1],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+            }
+        )
+        with pytest.raises(ValueError, match="Treatment column.*must be binary"):
+            MarketingLogAdapter(data=df, seed=42)
+
+    def test_custom_treatment_col_non_binary_raises(self) -> None:
+        """Non-binary treatment raises even with a custom column name."""
+        df = pd.DataFrame(
+            {
+                "t": [0, 1, 3, 1, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+            }
+        )
+        with pytest.raises(ValueError, match="Treatment column 't' must be binary"):
+            MarketingLogAdapter(data=df, seed=42, treatment_col="t")
+
+    def test_string_treatment_raises(self) -> None:
+        """Treatment with string values should raise ValueError."""
+        df = pd.DataFrame(
+            {
+                "treatment": ["yes", "no", "yes", "no", "yes"],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+            }
+        )
+        with pytest.raises(ValueError, match="Treatment column.*must be binary"):
+            MarketingLogAdapter(data=df, seed=42)
+
+    def test_valid_binary_treatment_passes(self) -> None:
+        """Valid binary {0, 1} treatment should not raise."""
+        df = pd.DataFrame(
+            {
+                "treatment": [0, 1, 0, 1, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+            }
+        )
+        adapter = MarketingLogAdapter(data=df, seed=42)
+        assert adapter is not None
+
+    def test_valid_binary_float_treatment_passes(self) -> None:
+        """Valid binary {0.0, 1.0} as floats should not raise."""
+        df = pd.DataFrame(
+            {
+                "treatment": [0.0, 1.0, 0.0, 1.0, 0.0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+            }
+        )
+        adapter = MarketingLogAdapter(data=df, seed=42)
+        assert adapter is not None
+
+    def test_boolean_treatment_passes(self) -> None:
+        """Boolean treatment column should be accepted (True==1, False==0)."""
+        df = pd.DataFrame(
+            {
+                "treatment": [True, False, True, False, True],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+            }
+        )
+        adapter = MarketingLogAdapter(data=df, seed=42)
+        assert adapter is not None
+
+
+class TestPropensityBoundsValidation:
+    """Propensity column values must be in [0, 1]."""
+
+    def test_propensity_above_one_raises(self) -> None:
+        """Propensity > 1 should raise ValueError."""
+        df = pd.DataFrame(
+            {
+                "treatment": [0, 1, 0, 1, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+                "propensity": [0.3, 0.7, 0.4, 1.5, 0.35],
+            }
+        )
+        with pytest.raises(ValueError, match="Propensity column.*values must be in"):
+            MarketingLogAdapter(data=df, seed=42)
+
+    def test_propensity_below_zero_raises(self) -> None:
+        """Propensity < 0 should raise ValueError."""
+        df = pd.DataFrame(
+            {
+                "treatment": [0, 1, 0, 1, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+                "propensity": [-0.1, 0.7, 0.4, 0.6, 0.35],
+            }
+        )
+        with pytest.raises(ValueError, match="Propensity column.*values must be in"):
+            MarketingLogAdapter(data=df, seed=42)
+
+    def test_custom_propensity_col_out_of_range_raises(self) -> None:
+        """Out-of-range propensity raises even with a custom column name."""
+        df = pd.DataFrame(
+            {
+                "treatment": [0, 1, 0, 1, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+                "ps": [0.3, 0.7, 0.4, 2.0, 0.35],
+            }
+        )
+        with pytest.raises(ValueError, match="Propensity column 'ps' values must be in"):
+            MarketingLogAdapter(data=df, seed=42, propensity_col="ps")
+
+    def test_valid_propensity_passes(self) -> None:
+        """Propensity in [0, 1] should not raise."""
+        df = pd.DataFrame(
+            {
+                "treatment": [0, 1, 0, 1, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+                "propensity": [0.3, 0.7, 0.4, 0.6, 0.35],
+            }
+        )
+        adapter = MarketingLogAdapter(data=df, seed=42)
+        assert adapter is not None
+
+    def test_propensity_at_boundaries_passes(self) -> None:
+        """Propensity at exact 0.0 and 1.0 boundaries should be valid."""
+        df = pd.DataFrame(
+            {
+                "treatment": [0, 1, 0, 1, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+                "propensity": [0.0, 1.0, 0.5, 0.5, 0.5],
+            }
+        )
+        adapter = MarketingLogAdapter(data=df, seed=42)
+        assert adapter is not None
+
+    def test_non_numeric_propensity_raises(self) -> None:
+        """Propensity with non-numeric dtype should raise ValueError."""
+        df = pd.DataFrame(
+            {
+                "treatment": [0, 1, 0, 1, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+                "propensity": ["low", "high", "low", "high", "low"],
+            }
+        )
+        with pytest.raises(ValueError, match="Propensity column.*must be numeric"):
+            MarketingLogAdapter(data=df, seed=42)
+
+    def test_missing_propensity_col_skips_validation(self) -> None:
+        """When propensity column is absent, no propensity validation occurs."""
+        df = pd.DataFrame(
+            {
+                "treatment": [0, 1, 0, 1, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+            }
+        )
+        adapter = MarketingLogAdapter(data=df, seed=42)
+        assert adapter is not None
+
+
+class TestBoundaryPropensityWarning:
+    """Warn when propensity values are at exact 0.0 or 1.0 boundaries."""
+
+    _LOGGER = "causal_optimizer.domain_adapters.marketing_logs"
+
+    def test_boundary_propensity_logs_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Propensity at 0.0 or 1.0 should log a warning about clipping."""
+        df = pd.DataFrame(
+            {
+                "treatment": [0, 1, 0, 1, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+                "propensity": [0.0, 1.0, 0.5, 0.5, 0.5],
+            }
+        )
+        with caplog.at_level(logging.WARNING, logger=self._LOGGER):
+            MarketingLogAdapter(data=df, seed=42)
+        assert any("boundary values" in r.message.lower() for r in caplog.records)
+
+    def test_interior_propensity_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Propensity strictly inside (0, 1) should not log a boundary warning."""
+        df = pd.DataFrame(
+            {
+                "treatment": [0, 1, 0, 1, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+                "propensity": [0.3, 0.7, 0.4, 0.6, 0.35],
+            }
+        )
+        with caplog.at_level(logging.WARNING, logger=self._LOGGER):
+            MarketingLogAdapter(data=df, seed=42)
+        assert not any("boundary values" in r.message.lower() for r in caplog.records)
+
+
+class TestSingleArmWarning:
+    """Warn when one treatment arm is entirely absent."""
+
+    _LOGGER = "causal_optimizer.domain_adapters.marketing_logs"
+
+    def test_all_treated_logs_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """All-treated data (no control arm) should log a warning."""
+        df = pd.DataFrame(
+            {
+                "treatment": [1, 1, 1, 1, 1],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+            }
+        )
+        with caplog.at_level(logging.WARNING, logger=self._LOGGER):
+            MarketingLogAdapter(data=df, seed=42)
+        assert any("single treatment arm" in r.message.lower() for r in caplog.records)
+
+    def test_all_control_logs_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """All-control data (no treated arm) should log a warning."""
+        df = pd.DataFrame(
+            {
+                "treatment": [0, 0, 0, 0, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+            }
+        )
+        with caplog.at_level(logging.WARNING, logger=self._LOGGER):
+            MarketingLogAdapter(data=df, seed=42)
+        assert any("single treatment arm" in r.message.lower() for r in caplog.records)
+
+    def test_both_arms_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Data with both arms should not log a single-arm warning."""
+        df = pd.DataFrame(
+            {
+                "treatment": [0, 1, 0, 1, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+            }
+        )
+        with caplog.at_level(logging.WARNING, logger=self._LOGGER):
+            MarketingLogAdapter(data=df, seed=42)
+        assert not any("single treatment arm" in r.message.lower() for r in caplog.records)
