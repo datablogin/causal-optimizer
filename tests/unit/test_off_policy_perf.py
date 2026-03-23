@@ -14,6 +14,7 @@ from typing import Any
 from unittest.mock import patch
 
 import numpy as np
+import pytest
 
 from causal_optimizer.predictor.off_policy import OffPolicyPredictor, Prediction
 from causal_optimizer.types import (
@@ -166,7 +167,7 @@ class TestObsMinHistory:
         assert result is None
 
     def test_obs_predict_allowed_above_threshold(self) -> None:
-        """_observational_predict proceeds when history >= obs_min_history."""
+        """_observational_predict proceeds past the history gate when >= obs_min_history."""
         graph = CausalGraph(edges=[("x", "objective"), ("y", "objective")])
         predictor = OffPolicyPredictor(
             causal_graph=graph,
@@ -177,16 +178,21 @@ class TestObsMinHistory:
         log = _make_log(15)
         predictor.fit(log, ss, "objective")
 
-        # Actual DoWhy result depends on availability; we only verify the
-        # threshold gate did not short-circuit (tested via the below-threshold test).
-        assert predictor.obs_min_history == 10
+        # The history gate (15 >= 10) must NOT short-circuit.  If DoWhy is not
+        # installed the estimator class is None and the method returns None for
+        # a different reason — skip the test in that case.
+        if predictor._obs_estimator is None:
+            pytest.skip("DoWhy not installed; cannot verify history gate pass-through")
+        # With DoWhy present the method proceeds past the history gate.
+        # The result may still be None if no identification succeeds.
+        predictor._observational_predict({"x": 5.0, "y": 5.0})
 
 
 class TestEngineUsesLastPrediction:
     """engine/loop.py step() should reuse _last_prediction instead of calling predict() again."""
 
     def test_step_does_not_double_predict(self) -> None:
-        """When predictor skips, step() should use _last_prediction not call predict() again."""
+        """When predictor skips, step() should reuse cached prediction, not call predict() twice."""
         from causal_optimizer.engine.loop import ExperimentEngine
 
         class DummyRunner:
@@ -206,35 +212,22 @@ class TestEngineUsesLastPrediction:
         for _ in range(12):
             engine.step()
 
-        # Now patch the predictor to count predict() calls
-        original_predict = engine._predictor.predict
+        # Force the predictor to skip (low uncertainty relative to threshold)
+        engine._predictor.uncertainty_threshold = 999.0
+        engine._predictor._model_quality = 0.9  # pass quality guard
+
         predict_count = 0
+        original_predict = engine._predictor.predict
 
         def counting_predict(params: dict[str, Any]) -> Prediction | None:
             nonlocal predict_count
             predict_count += 1
             return original_predict(params)
 
-        # Mock should_run_experiment to return False (skip), setting _last_prediction
-        engine._predictor._last_prediction = Prediction(
-            expected_value=999.0,
-            uncertainty=0.01,
-            confidence_interval=(998.0, 1000.0),
-            model_quality=0.9,
-        )
-
-        with (
-            patch.object(engine._predictor, "predict", side_effect=counting_predict),
-            patch.object(
-                engine._predictor,
-                "should_run_experiment",
-                return_value=False,
-            ),
-        ):
-            # Set max_skips=1 so it retries once then runs
-            engine._max_skips = 1
+        engine._max_skips = 1
+        with patch.object(engine._predictor, "predict", side_effect=counting_predict):
             engine.step()
 
-        # predict() should NOT have been called for logging when _last_prediction is available
-        # (it may still be called inside should_run_experiment, but that's mocked)
-        assert predict_count == 0
+        # predict() should be called exactly once (inside should_run_heuristic),
+        # not a second time in the step() logging fallback.
+        assert predict_count == 1
