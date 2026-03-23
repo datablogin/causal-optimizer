@@ -125,10 +125,9 @@ class TestLastPredictionCache:
             predictor._model_quality = 0.5
 
         predictor.should_run_experiment({"x": 5.0, "y": 5.0})
-        # _last_prediction should be set even when returning True
-        # (it may be None if no predict was called due to cheap guards)
-        # The key requirement is the attribute exists
-        assert hasattr(predictor, "_last_prediction")
+        # When model quality >= 0.3, predict() is called and result is cached
+        assert predictor._last_prediction is not None
+        assert isinstance(predictor._last_prediction, Prediction)
 
     def test_last_prediction_none_when_no_model(self) -> None:
         """When there's no model, _last_prediction should be None."""

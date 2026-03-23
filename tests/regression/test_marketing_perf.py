@@ -28,7 +28,7 @@ def fixture_df() -> pd.DataFrame:
 
 @pytest.mark.slow
 class TestMarketingPerformance:
-    """Wall-clock performance regression for marketing pipeline."""
+    """CPU-time performance regression for marketing pipeline."""
 
     def test_15_experiments_under_15_seconds(self, fixture_df: pd.DataFrame) -> None:
         """15-experiment marketing pipeline should complete in < 15s CPU time.
