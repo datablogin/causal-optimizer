@@ -317,6 +317,7 @@ class OffPolicyPredictor:
                 )
                 return True
             prediction = self.predict(parameters)
+            self._last_prediction = prediction
             if prediction is None:
                 logger.debug(
                     "Epsilon controller chose observe (epsilon=%.3f), but predict() "
@@ -382,6 +383,8 @@ class OffPolicyPredictor:
             return None
 
         # Collect all identified estimates, then pick the tightest CI
+        from causal_optimizer.diagnostics.observational import IDENTIFICATION_METHODS
+
         candidates: list[ObservationalEstimate] = []
 
         for var_name, var_value in parameters.items():
@@ -390,8 +393,6 @@ class OffPolicyPredictor:
             if not isinstance(var_value, (int, float)):
                 continue
             # Try each identification method (backdoor, frontdoor, IV)
-            from causal_optimizer.diagnostics.observational import IDENTIFICATION_METHODS
-
             for method in IDENTIFICATION_METHODS:
                 try:
                     # Suppress repeated statsmodels/pygraphviz warnings from DoWhy
