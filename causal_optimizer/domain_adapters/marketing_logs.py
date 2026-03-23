@@ -117,8 +117,8 @@ class MarketingLogAdapter(DomainAdapter):
         unique_treatments = set(self._data[self._treatment_col].unique())
         bad_values = unique_treatments - {0, 1}
         if bad_values:
-            # Convert numpy scalars to plain Python types for readable error messages
-            bad_display = {v.item() if hasattr(v, "item") else v for v in bad_values}
+            # Convert numpy scalars to plain Python types and sort for deterministic messages
+            bad_display = sorted(v.item() if hasattr(v, "item") else v for v in bad_values)
             raise ValueError(
                 f"Treatment column '{self._treatment_col}' must be binary (0/1), "
                 f"found values: {bad_display}"
