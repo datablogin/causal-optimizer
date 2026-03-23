@@ -117,9 +117,11 @@ class MarketingLogAdapter(DomainAdapter):
         unique_treatments = set(self._data[self._treatment_col].unique())
         bad_values = unique_treatments - {0, 1}
         if bad_values:
+            # Convert numpy scalars to plain Python types for readable error messages
+            bad_display = {v.item() if hasattr(v, "item") else v for v in bad_values}
             raise ValueError(
                 f"Treatment column '{self._treatment_col}' must be binary (0/1), "
-                f"found values: {bad_values}"
+                f"found values: {bad_display}"
             )
 
         # Validate propensity column values are in [0, 1]
@@ -131,6 +133,12 @@ class MarketingLogAdapter(DomainAdapter):
                 raise ValueError(
                     f"Propensity column '{self._propensity_col}' values must be in [0, 1], "
                     f"found range [{p_min}, {p_max}]"
+                )
+            if p_min == 0.0 or p_max == 1.0:
+                logger.warning(
+                    "Propensity column '%s' contains boundary values (0.0 or 1.0). "
+                    "IPS weights will be clipped during evaluation.",
+                    self._propensity_col,
                 )
 
         # Warn when one treatment arm is entirely absent

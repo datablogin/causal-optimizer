@@ -646,6 +646,44 @@ class TestPropensityBoundsValidation:
         assert adapter is not None
 
 
+class TestBoundaryPropensityWarning:
+    """Warn when propensity values are at exact 0.0 or 1.0 boundaries."""
+
+    _LOGGER = "causal_optimizer.domain_adapters.marketing_logs"
+
+    def test_boundary_propensity_logs_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Propensity at 0.0 or 1.0 should log a warning about clipping."""
+        df = pd.DataFrame(
+            {
+                "treatment": [0, 1, 0, 1, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+                "propensity": [0.0, 1.0, 0.5, 0.5, 0.5],
+            }
+        )
+        with caplog.at_level(logging.WARNING, logger=self._LOGGER):
+            MarketingLogAdapter(data=df, seed=42)
+        assert any(
+            "boundary values" in r.message.lower() for r in caplog.records
+        )
+
+    def test_interior_propensity_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Propensity strictly inside (0, 1) should not log a boundary warning."""
+        df = pd.DataFrame(
+            {
+                "treatment": [0, 1, 0, 1, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+                "propensity": [0.3, 0.7, 0.4, 0.6, 0.35],
+            }
+        )
+        with caplog.at_level(logging.WARNING, logger=self._LOGGER):
+            MarketingLogAdapter(data=df, seed=42)
+        assert not any(
+            "boundary values" in r.message.lower() for r in caplog.records
+        )
+
+
 class TestSingleArmWarning:
     """Warn when one treatment arm is entirely absent."""
 
