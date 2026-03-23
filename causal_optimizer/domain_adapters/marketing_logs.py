@@ -321,10 +321,10 @@ class MarketingLogAdapter(DomainAdapter):
             zero_support = 0.0
             policy_value = float(np.sum(normalized_weights * outcome) / n)
         else:
-            # Pessimistic fallback: worst observed outcome (for maximize objectives)
+            # Pessimistic fallback: worst observed outcome for the objective direction
             normalized_weights = np.zeros(n)
             zero_support = 1.0
-            policy_value = float(outcome.min())
+            policy_value = float(outcome.max()) if self.get_minimize() else float(outcome.min())
             logger.warning("No policy-matching observations; using pessimistic fallback.")
 
         # Total cost: sum of IPS-weighted costs for treated observations under policy
