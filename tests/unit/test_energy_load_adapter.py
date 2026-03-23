@@ -514,6 +514,47 @@ class TestTimestampHandling:
         assert metrics["cadence_regularity"] < 0.8
         assert metrics["cadence_gaps"] > 0
 
+    def test_minimal_rows_cadence_defaults(self) -> None:
+        """Two-row data should compute cadence without error."""
+        df = pd.DataFrame(
+            {
+                "timestamp": ["2024-01-01 00:00:00", "2024-01-01 01:00:00"],
+                "target_load": [100.0, 110.0],
+                "temperature": [20.0, 21.0],
+            }
+        )
+        adapter = EnergyLoadAdapter(data=df, seed=42, train_ratio=0.5)
+        assert adapter._cadence == pd.Timedelta("1h")
+        assert adapter._cadence_regularity == 1.0
+        assert adapter._cadence_gaps == 0.0
+
+    def test_ambiguous_cadence_warns(self, caplog: pytest.LogCaptureFixture) -> None:
+        """When multiple modes tie, a warning should be logged."""
+        import logging
+
+        # Build data with exactly 2 equally-frequent intervals: 1h and 2h
+        timestamps = [
+            "2024-01-01 00:00:00",
+            "2024-01-01 01:00:00",  # +1h
+            "2024-01-01 03:00:00",  # +2h
+            "2024-01-01 04:00:00",  # +1h
+            "2024-01-01 06:00:00",  # +2h
+        ]
+        df = pd.DataFrame(
+            {
+                "timestamp": timestamps,
+                "target_load": [100.0, 110.0, 120.0, 115.0, 125.0],
+                "temperature": [20.0, 21.0, 22.0, 21.5, 23.0],
+            }
+        )
+        with caplog.at_level(
+            logging.WARNING, logger="causal_optimizer.domain_adapters.energy_load"
+        ):
+            adapter = EnergyLoadAdapter(data=df, seed=42, train_ratio=0.5)
+        assert any("Ambiguous cadence" in m for m in caplog.messages)
+        # Smallest mode (1h) should be selected
+        assert adapter._cadence == pd.Timedelta("1h")
+
 
 # ---------------------------------------------------------------------------
 # 12. Warning metrics (Task 5)

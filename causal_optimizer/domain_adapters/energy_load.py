@@ -76,7 +76,7 @@ class EnergyLoadAdapter(DomainAdapter):
 
         self._validate_data()
 
-        # Parse, sort, and deduplicate timestamps
+        # Parse, sort, and validate timestamps
         try:
             self._data["timestamp"] = pd.to_datetime(self._data["timestamp"])
         except (ValueError, TypeError) as exc:
@@ -108,7 +108,7 @@ class EnergyLoadAdapter(DomainAdapter):
             tolerance = self._cadence * 0.1
             regular_count = int(((diffs - self._cadence).abs() <= tolerance).sum())
             self._cadence_regularity = float(regular_count / n_diffs)
-            self._cadence_gaps = float(int((diffs > self._cadence * 1.5).sum()))
+            self._cadence_gaps = float((diffs > self._cadence * 1.5).sum())
         else:
             self._cadence = pd.Timedelta(0)
             self._cadence_regularity = 1.0
@@ -314,7 +314,12 @@ class EnergyLoadAdapter(DomainAdapter):
         }
 
     def get_prior_graph(self) -> CausalGraph:
-        """Energy load forecasting causal graph based on domain knowledge."""
+        """Energy load forecasting causal graph based on domain knowledge.
+
+        Note: ``cadence_gaps`` and ``cadence_regularity`` are diagnostic-only
+        metrics not modeled in this graph.  They describe input data quality,
+        not outcomes the optimizer should target.
+        """
         return CausalGraph(
             edges=[
                 ("lookback_window", "mae"),
