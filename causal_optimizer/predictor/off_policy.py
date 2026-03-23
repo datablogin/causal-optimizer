@@ -391,7 +391,8 @@ class OffPolicyPredictor:
                 try:
                     # Suppress repeated statsmodels/pygraphviz warnings from DoWhy
                     with warnings.catch_warnings():
-                        warnings.filterwarnings("ignore")
+                        warnings.filterwarnings("ignore", module=r"statsmodels.*")
+                        warnings.filterwarnings("ignore", module=r"pygraphviz.*")
                         est = estimator_cls(
                             causal_graph=self._causal_graph,
                             method=method,
