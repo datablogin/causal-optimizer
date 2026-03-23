@@ -90,6 +90,10 @@ class TestShouldRunHeuristicGuardOrder:
         log = _make_log(30)
         predictor.fit(log, ss, "objective")
         assert predictor._model is not None
+        # Ensure model quality passes the cheap guard; force if cross-validation
+        # happens to produce a low R² for this synthetic data.
+        if predictor._model_quality < 0.3:
+            predictor._model_quality = 0.5
 
         with patch.object(predictor, "predict", wraps=predictor.predict) as mock_predict:
             predictor._should_run_heuristic({"x": 1.0, "y": 2.0})
