@@ -14,7 +14,6 @@ from typing import Any
 from unittest.mock import patch
 
 import numpy as np
-import pytest
 
 from causal_optimizer.predictor.off_policy import OffPolicyPredictor, Prediction
 from causal_optimizer.types import (
@@ -41,7 +40,7 @@ def _make_log(n: int) -> ExperimentLog:
     """Create an experiment log with n results."""
     log = ExperimentLog()
     rng = np.random.default_rng(42)
-    for i in range(n):
+    for _i in range(n):
         x = rng.uniform(0, 10)
         y = rng.uniform(0, 10)
         log.results.append(
@@ -179,13 +178,8 @@ class TestObsMinHistory:
         log = _make_log(15)
         predictor.fit(log, ss, "objective")
 
-        # The method may still return None (DoWhy may not be installed),
-        # but it should at least attempt the estimation (not short-circuit)
-        # We verify the threshold is checked by testing with log size above and below
-        # Already tested below in test_obs_predict_skipped_below_threshold
-        # This test ensures it doesn't short-circuit when above threshold
-        # (actual result depends on DoWhy availability)
-        assert hasattr(predictor, "obs_min_history")
+        # Actual DoWhy result depends on availability; we only verify the
+        # threshold gate did not short-circuit (tested via the below-threshold test).
         assert predictor.obs_min_history == 10
 
 
@@ -230,15 +224,17 @@ class TestEngineUsesLastPrediction:
             model_quality=0.9,
         )
 
-        with patch.object(engine._predictor, "predict", side_effect=counting_predict):
-            with patch.object(
+        with (
+            patch.object(engine._predictor, "predict", side_effect=counting_predict),
+            patch.object(
                 engine._predictor,
                 "should_run_experiment",
                 return_value=False,
-            ):
-                # Set max_skips=1 so it retries once then runs
-                engine._max_skips = 1
-                engine.step()
+            ),
+        ):
+            # Set max_skips=1 so it retries once then runs
+            engine._max_skips = 1
+            engine.step()
 
         # predict() should NOT have been called for logging when _last_prediction is available
         # (it may still be called inside should_run_experiment, but that's mocked)
