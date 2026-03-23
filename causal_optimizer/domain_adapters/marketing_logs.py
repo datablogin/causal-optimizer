@@ -85,7 +85,7 @@ class MarketingLogAdapter(DomainAdapter):
         self._validate_data()
 
     def _validate_data(self) -> None:
-        """Validate that required columns exist and data is non-empty."""
+        """Validate required columns, data types, and value ranges."""
         if self._data.empty:
             raise ValueError("Empty DataFrame: data must contain at least one row.")
 
@@ -118,7 +118,10 @@ class MarketingLogAdapter(DomainAdapter):
         bad_values = unique_treatments - {0, 1}
         if bad_values:
             # Convert numpy scalars to plain Python types and sort for deterministic messages
-            bad_display = sorted(v.item() if hasattr(v, "item") else v for v in bad_values)
+            bad_display = sorted(
+                (v.item() if hasattr(v, "item") else v for v in bad_values),
+                key=str,
+            )
             raise ValueError(
                 f"Treatment column '{self._treatment_col}' must be binary (0/1), "
                 f"found values: {bad_display}"

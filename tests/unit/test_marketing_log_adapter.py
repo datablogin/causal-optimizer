@@ -540,6 +540,18 @@ class TestTreatmentBinaryValidation:
         with pytest.raises(ValueError, match="Treatment column 't' must be binary"):
             MarketingLogAdapter(data=df, seed=42, treatment_col="t")
 
+    def test_string_treatment_raises(self) -> None:
+        """Treatment with string values should raise ValueError."""
+        df = pd.DataFrame(
+            {
+                "treatment": ["yes", "no", "yes", "no", "yes"],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+            }
+        )
+        with pytest.raises(ValueError, match="Treatment column.*must be binary"):
+            MarketingLogAdapter(data=df, seed=42)
+
     def test_valid_binary_treatment_passes(self) -> None:
         """Valid binary {0, 1} treatment should not raise."""
         df = pd.DataFrame(
