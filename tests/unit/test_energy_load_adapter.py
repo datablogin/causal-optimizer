@@ -514,6 +514,20 @@ class TestTimestampHandling:
         assert metrics["cadence_regularity"] < 0.8
         assert metrics["cadence_gaps"] > 0
 
+    def test_single_row_cadence_defaults(self) -> None:
+        """Single-row data hits n_diffs == 0 branch with safe defaults."""
+        df = pd.DataFrame(
+            {
+                "timestamp": ["2024-01-01 00:00:00"],
+                "target_load": [100.0],
+                "temperature": [20.0],
+            }
+        )
+        adapter = EnergyLoadAdapter(data=df, seed=42, train_ratio=0.5)
+        assert adapter._cadence == pd.Timedelta(0)
+        assert adapter._cadence_regularity == 1.0
+        assert adapter._cadence_gaps == 0.0
+
     def test_minimal_rows_cadence_defaults(self) -> None:
         """Two-row data should compute cadence without error."""
         df = pd.DataFrame(
