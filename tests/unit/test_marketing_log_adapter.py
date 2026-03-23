@@ -772,26 +772,29 @@ class TestZeroSupportGuard:
     should use a pessimistic fallback instead of the unweighted population mean.
     """
 
-    def test_zero_support_returns_pessimistic_policy_value(self) -> None:
-        """All rows are treatment=1, but policy says don't treat anyone.
-
-        The policy has zero support in the data, so policy_value should
-        fall back to outcome.min() (pessimistic for a maximize objective),
-        which must be strictly less than the population mean.
-        """
+    @pytest.fixture
+    def zero_support_data(self) -> tuple[pd.DataFrame, np.ndarray]:
+        """All-treated DataFrame where a no-treat policy has zero support."""
         rng = np.random.default_rng(99)
         n = 50
         outcomes = rng.uniform(10, 50, n)
         df = pd.DataFrame(
             {
-                "treatment": np.ones(n, dtype=int),  # all treated
+                "treatment": np.ones(n, dtype=int),
                 "outcome": outcomes,
                 "cost": rng.uniform(1, 5, n),
                 "propensity": np.full(n, 0.8),
             }
         )
+        return df, outcomes
+
+    @pytest.fixture
+    def zero_support_metrics(
+        self, zero_support_data: tuple[pd.DataFrame, np.ndarray]
+    ) -> dict[str, float]:
+        """Run a no-treat policy against all-treated data (zero support)."""
+        df, _outcomes = zero_support_data
         adapter = MarketingLogAdapter(data=df, seed=42)
-        # Policy that treats nobody: high threshold + low budget → all excluded
         params = {
             "eligibility_threshold": 0.99,
             "email_share": 0.5,
@@ -800,58 +803,30 @@ class TestZeroSupportGuard:
             "regularization": 0.001,
             "treatment_budget_pct": 0.1,
         }
-        metrics = adapter.run_experiment(params)
+        return adapter.run_experiment(params)
+
+    def test_zero_support_returns_pessimistic_policy_value(
+        self,
+        zero_support_data: tuple[pd.DataFrame, np.ndarray],
+        zero_support_metrics: dict[str, float],
+    ) -> None:
+        """policy_value should equal outcome.min(), below the population mean."""
+        _df, outcomes = zero_support_data
         population_mean = float(outcomes.mean())
-        # Pessimistic fallback must be below the population mean
-        assert metrics["policy_value"] < population_mean
-        # Should equal outcome.min()
-        assert metrics["policy_value"] == pytest.approx(float(outcomes.min()), abs=1e-10)
+        assert zero_support_metrics["policy_value"] < population_mean
+        assert zero_support_metrics["policy_value"] == pytest.approx(
+            float(outcomes.min()), abs=1e-10
+        )
 
-    def test_zero_support_effective_sample_size_is_zero(self) -> None:
+    def test_zero_support_effective_sample_size_is_zero(
+        self, zero_support_metrics: dict[str, float]
+    ) -> None:
         """ESS must be 0.0 when no observations match the policy."""
-        n = 50
-        df = pd.DataFrame(
-            {
-                "treatment": np.ones(n, dtype=int),
-                "outcome": np.random.default_rng(99).uniform(10, 50, n),
-                "cost": np.random.default_rng(99).uniform(1, 5, n),
-                "propensity": np.full(n, 0.8),
-            }
-        )
-        adapter = MarketingLogAdapter(data=df, seed=42)
-        params = {
-            "eligibility_threshold": 0.99,
-            "email_share": 0.5,
-            "social_share_of_remainder": 0.5,
-            "min_propensity_clip": 0.05,
-            "regularization": 0.001,
-            "treatment_budget_pct": 0.1,
-        }
-        metrics = adapter.run_experiment(params)
-        assert metrics["effective_sample_size"] == 0.0
+        assert zero_support_metrics["effective_sample_size"] == 0.0
 
-    def test_zero_support_metric_is_one(self) -> None:
+    def test_zero_support_metric_is_one(self, zero_support_metrics: dict[str, float]) -> None:
         """zero_support metric must be 1.0 when weight_sum == 0."""
-        n = 50
-        df = pd.DataFrame(
-            {
-                "treatment": np.ones(n, dtype=int),
-                "outcome": np.random.default_rng(99).uniform(10, 50, n),
-                "cost": np.random.default_rng(99).uniform(1, 5, n),
-                "propensity": np.full(n, 0.8),
-            }
-        )
-        adapter = MarketingLogAdapter(data=df, seed=42)
-        params = {
-            "eligibility_threshold": 0.99,
-            "email_share": 0.5,
-            "social_share_of_remainder": 0.5,
-            "min_propensity_clip": 0.05,
-            "regularization": 0.001,
-            "treatment_budget_pct": 0.1,
-        }
-        metrics = adapter.run_experiment(params)
-        assert metrics["zero_support"] == 1.0
+        assert zero_support_metrics["zero_support"] == 1.0
 
     def test_normal_case_zero_support_metric_is_zero(
         self, adapter: MarketingLogAdapter, default_params: dict[str, float]
