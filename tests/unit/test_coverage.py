@@ -168,20 +168,27 @@ class TestKeptVariedVarsField:
         assert "X3" not in result.kept_varied_vars
 
     def test_kept_varied_vars_is_subset_of_varied(self) -> None:
-        """kept_varied_vars should always be a subset of the broader varied set."""
+        """kept_varied_vars should always be a subset of the broader varied set,
+        including when DISCARD experiments add extra varied variables."""
         log = ExperimentLog(
             results=[
                 ExperimentResult(
                     experiment_id="1",
-                    parameters={"X1": 1.0, "X2": 5.0, "X3": 3.0},
+                    parameters={"X1": 1.0, "X2": 5.0, "X3": 5.0},
                     metrics={"Y": 10.0},
                     status=ExperimentStatus.KEEP,
                 ),
                 ExperimentResult(
                     experiment_id="2",
-                    parameters={"X1": 2.0, "X2": 7.0, "X3": 3.0},
-                    metrics={"Y": 8.0},
+                    parameters={"X1": 3.0, "X2": 5.0, "X3": 5.0},
+                    metrics={"Y": 12.0},
                     status=ExperimentStatus.KEEP,
+                ),
+                ExperimentResult(
+                    experiment_id="3",
+                    parameters={"X1": 1.0, "X2": 9.0, "X3": 8.0},
+                    metrics={"Y": 6.0},
+                    status=ExperimentStatus.DISCARD,
                 ),
             ]
         )
@@ -190,12 +197,44 @@ class TestKeptVariedVarsField:
 
         result = analyze_coverage(log, ss, "Y", causal_graph=graph)
 
-        # When all experiments are KEEP, kept_varied_vars == varied_vars
+        # kept_varied_vars must be a strict subset of ancestors_intervened
+        # X1 varied in KEEP -> in both sets
+        # X2, X3 varied only via DISCARD -> in ancestors_intervened but NOT kept_varied_vars
         assert result.kept_varied_vars is not None
+        assert result.ancestors_intervened is not None
+        assert set(result.kept_varied_vars) <= set(result.ancestors_intervened)
+        assert set(result.kept_varied_vars) < set(result.ancestors_intervened)
         assert "X1" in result.kept_varied_vars
-        assert "X2" in result.kept_varied_vars
+        assert "X2" not in result.kept_varied_vars
+        assert "X2" in result.ancestors_intervened
 
     def test_kept_varied_vars_default_none_on_model(self) -> None:
         """CoverageAnalysis.kept_varied_vars defaults to None."""
         analysis = CoverageAnalysis()
         assert analysis.kept_varied_vars is None
+
+    def test_kept_varied_vars_empty_list_when_keep_exists_but_constant(self) -> None:
+        """When KEEP experiments exist but all variables are constant,
+        kept_varied_vars should be [] (not None)."""
+        log = ExperimentLog(
+            results=[
+                ExperimentResult(
+                    experiment_id="1",
+                    parameters={"X1": 5.0, "X2": 5.0, "X3": 5.0},
+                    metrics={"Y": 10.0},
+                    status=ExperimentStatus.KEEP,
+                ),
+                ExperimentResult(
+                    experiment_id="2",
+                    parameters={"X1": 5.0, "X2": 5.0, "X3": 9.0},
+                    metrics={"Y": 6.0},
+                    status=ExperimentStatus.DISCARD,
+                ),
+            ]
+        )
+        ss = _make_search_space()
+        result = analyze_coverage(log, ss, "Y")
+
+        # KEEP experiment exists but no variable varied within KEEP-only → empty list
+        assert result.kept_varied_vars is not None
+        assert result.kept_varied_vars == []

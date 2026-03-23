@@ -43,15 +43,13 @@ def analyze_coverage(
 
     # Identify which variables were actually varied (have more than one unique value)
     varied_vars: set[str] = set()
-    for var in search_space.variables:
-        if var.name in df_non_crash.columns and df_non_crash[var.name].nunique() > 1:
-            varied_vars.add(var.name)
-
-    # Narrow set: only KEEP experiments
     kept_varied_vars: set[str] = set()
     for var in search_space.variables:
-        if var.name in df_keep.columns and df_keep[var.name].nunique() > 1:
-            kept_varied_vars.add(var.name)
+        if var.name in df_non_crash.columns:
+            if df_non_crash[var.name].nunique() > 1:
+                varied_vars.add(var.name)
+            if df_keep[var.name].nunique() > 1:
+                kept_varied_vars.add(var.name)
 
     # --- POMIS coverage ---
     pomis_total: int | None = None
@@ -131,5 +129,5 @@ def analyze_coverage(
         map_elites_filled_cells=me_filled,
         map_elites_total_cells=me_total,
         search_space_coverage=ss_coverage,
-        kept_varied_vars=sorted(kept_varied_vars) if kept_varied_vars else None,
+        kept_varied_vars=sorted(kept_varied_vars) if len(df_keep) > 0 else None,
     )
