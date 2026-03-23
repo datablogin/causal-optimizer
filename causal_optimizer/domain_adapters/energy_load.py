@@ -83,13 +83,17 @@ class EnergyLoadAdapter(DomainAdapter):
             raise ValueError(f"Column 'timestamp' could not be parsed as datetime: {exc}") from exc
         self._data = self._data.sort_values("timestamp", kind="mergesort").reset_index(drop=True)
 
-        n_before = len(self._data)
-        self._data = self._data.drop_duplicates(subset=["timestamp"], keep="first").reset_index(
-            drop=True
-        )
-        n_dupes = n_before - len(self._data)
+        n_dupes = int(self._data["timestamp"].duplicated().sum())
         if n_dupes > 0:
-            logger.warning("%d duplicate timestamps found; keeping first occurrence", n_dupes)
+            raise ValueError(
+                f"Found {n_dupes} duplicate timestamps. This adapter requires single-series "
+                "data with unique timestamps. If you have multi-area data, filter to one area "
+                "before passing."
+            )
+
+        # Infer dominant cadence from consecutive timestamp differences
+        diffs = self._data["timestamp"].diff().dropna()
+        self._cadence: pd.Timedelta = diffs.mode().iloc[0]
 
         n = len(self._data)
         self._train_end = int(n * self._train_ratio)
@@ -272,6 +276,19 @@ class EnergyLoadAdapter(DomainAdapter):
         runtime = time.monotonic() - t_start
         feature_count = float(len(features))
 
+        # Cadence metrics
+        diffs = self._data["timestamp"].diff().dropna()
+        cadence = self._cadence
+        tolerance = cadence * 0.1
+        n_diffs = len(diffs)
+        if n_diffs > 0:
+            regular_count = int(((diffs - cadence).abs() <= tolerance).sum())
+            cadence_regularity = float(regular_count / n_diffs)
+            cadence_gaps = float(int((diffs > cadence * 1.5).sum()))
+        else:
+            cadence_regularity = 1.0
+            cadence_gaps = 0.0
+
         return {
             "mae": mae,
             "rmse": rmse,
@@ -281,6 +298,8 @@ class EnergyLoadAdapter(DomainAdapter):
             "validation_set_size": float(len(x_val)),
             "nan_rows_dropped": nan_rows_dropped,
             "train_fraction_actual": float(train_end / len(df)) if len(df) > 0 else 0.0,
+            "cadence_gaps": cadence_gaps,
+            "cadence_regularity": cadence_regularity,
         }
 
     def get_prior_graph(self) -> CausalGraph:
