@@ -760,3 +760,102 @@ class TestSingleArmWarning:
         with caplog.at_level(logging.WARNING, logger=self._LOGGER):
             MarketingLogAdapter(data=df, seed=42)
         assert not any("single treatment arm" in r.message.lower() for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# Zero-support guard (Issue #46)
+# ---------------------------------------------------------------------------
+
+
+class TestZeroSupportGuard:
+    """When no logged observations match the proposed policy, the adapter
+    should use a pessimistic fallback instead of the unweighted population mean.
+    """
+
+    def test_zero_support_returns_pessimistic_policy_value(self) -> None:
+        """All rows are treatment=1, but policy says don't treat anyone.
+
+        The policy has zero support in the data, so policy_value should
+        fall back to outcome.min() (pessimistic for a maximize objective),
+        which must be strictly less than the population mean.
+        """
+        rng = np.random.default_rng(99)
+        n = 50
+        outcomes = rng.uniform(10, 50, n)
+        df = pd.DataFrame(
+            {
+                "treatment": np.ones(n, dtype=int),  # all treated
+                "outcome": outcomes,
+                "cost": rng.uniform(1, 5, n),
+                "propensity": np.full(n, 0.8),
+            }
+        )
+        adapter = MarketingLogAdapter(data=df, seed=42)
+        # Policy that treats nobody: high threshold + low budget → all excluded
+        params = {
+            "eligibility_threshold": 0.99,
+            "email_share": 0.5,
+            "social_share_of_remainder": 0.5,
+            "min_propensity_clip": 0.05,
+            "regularization": 0.001,
+            "treatment_budget_pct": 0.1,
+        }
+        metrics = adapter.run_experiment(params)
+        population_mean = float(outcomes.mean())
+        # Pessimistic fallback must be below the population mean
+        assert metrics["policy_value"] < population_mean
+        # Should equal outcome.min()
+        assert metrics["policy_value"] == pytest.approx(float(outcomes.min()), abs=1e-10)
+
+    def test_zero_support_effective_sample_size_is_zero(self) -> None:
+        """ESS must be 0.0 when no observations match the policy."""
+        n = 50
+        df = pd.DataFrame(
+            {
+                "treatment": np.ones(n, dtype=int),
+                "outcome": np.random.default_rng(99).uniform(10, 50, n),
+                "cost": np.random.default_rng(99).uniform(1, 5, n),
+                "propensity": np.full(n, 0.8),
+            }
+        )
+        adapter = MarketingLogAdapter(data=df, seed=42)
+        params = {
+            "eligibility_threshold": 0.99,
+            "email_share": 0.5,
+            "social_share_of_remainder": 0.5,
+            "min_propensity_clip": 0.05,
+            "regularization": 0.001,
+            "treatment_budget_pct": 0.1,
+        }
+        metrics = adapter.run_experiment(params)
+        assert metrics["effective_sample_size"] == 0.0
+
+    def test_zero_support_metric_is_one(self) -> None:
+        """zero_support metric must be 1.0 when weight_sum == 0."""
+        n = 50
+        df = pd.DataFrame(
+            {
+                "treatment": np.ones(n, dtype=int),
+                "outcome": np.random.default_rng(99).uniform(10, 50, n),
+                "cost": np.random.default_rng(99).uniform(1, 5, n),
+                "propensity": np.full(n, 0.8),
+            }
+        )
+        adapter = MarketingLogAdapter(data=df, seed=42)
+        params = {
+            "eligibility_threshold": 0.99,
+            "email_share": 0.5,
+            "social_share_of_remainder": 0.5,
+            "min_propensity_clip": 0.05,
+            "regularization": 0.001,
+            "treatment_budget_pct": 0.1,
+        }
+        metrics = adapter.run_experiment(params)
+        assert metrics["zero_support"] == 1.0
+
+    def test_normal_case_zero_support_metric_is_zero(
+        self, adapter: MarketingLogAdapter, default_params: dict[str, float]
+    ) -> None:
+        """zero_support metric must be 0.0 when observations match the policy."""
+        metrics = adapter.run_experiment(default_params)
+        assert metrics["zero_support"] == 0.0
