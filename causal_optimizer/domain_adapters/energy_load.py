@@ -93,14 +93,15 @@ class EnergyLoadAdapter(DomainAdapter):
 
         # Infer dominant cadence and precompute cadence metrics
         diffs = self._data["timestamp"].diff().dropna()
-        self._cadence: pd.Timedelta = diffs.mode().iloc[0]
         n_diffs = len(diffs)
         if n_diffs > 0:
+            self._cadence: pd.Timedelta = diffs.mode().iloc[0]
             tolerance = self._cadence * 0.1
             regular_count = int(((diffs - self._cadence).abs() <= tolerance).sum())
             self._cadence_regularity = float(regular_count / n_diffs)
             self._cadence_gaps = float(int((diffs > self._cadence * 1.5).sum()))
         else:
+            self._cadence = pd.Timedelta(0)
             self._cadence_regularity = 1.0
             self._cadence_gaps = 0.0
 

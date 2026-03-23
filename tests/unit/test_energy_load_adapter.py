@@ -440,6 +440,17 @@ class TestFeatureEffects:
         )
 
 
+DEFAULT_PARAMS = {
+    "model_type": "ridge",
+    "lookback_window": 3,
+    "use_temperature": True,
+    "use_humidity": False,
+    "use_calendar": True,
+    "regularization": 1.0,
+    "n_estimators": 50,
+}
+
+
 # ---------------------------------------------------------------------------
 # 11. Timestamp handling (Task 4)
 # ---------------------------------------------------------------------------
@@ -507,17 +518,6 @@ class TestTimestampHandling:
 # ---------------------------------------------------------------------------
 # 12. Warning metrics (Task 5)
 # ---------------------------------------------------------------------------
-
-
-DEFAULT_PARAMS = {
-    "model_type": "ridge",
-    "lookback_window": 3,
-    "use_temperature": True,
-    "use_humidity": False,
-    "use_calendar": True,
-    "regularization": 1.0,
-    "n_estimators": 50,
-}
 
 
 class TestWarningMetrics:
