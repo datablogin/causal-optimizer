@@ -130,6 +130,11 @@ class MarketingLogAdapter(DomainAdapter):
         # Validate propensity column values are in [0, 1]
         if self._propensity_col in self._data.columns:
             prop_vals = self._data[self._propensity_col]
+            if not pd.api.types.is_numeric_dtype(prop_vals):
+                raise ValueError(
+                    f"Propensity column '{self._propensity_col}' must be numeric, "
+                    f"found dtype: {prop_vals.dtype}"
+                )
             p_min = float(prop_vals.min())
             p_max = float(prop_vals.max())
             if p_min < 0.0 or p_max > 1.0:

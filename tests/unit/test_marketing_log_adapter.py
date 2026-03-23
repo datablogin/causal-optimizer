@@ -576,6 +576,18 @@ class TestTreatmentBinaryValidation:
         adapter = MarketingLogAdapter(data=df, seed=42)
         assert adapter is not None
 
+    def test_boolean_treatment_passes(self) -> None:
+        """Boolean treatment column should be accepted (True==1, False==0)."""
+        df = pd.DataFrame(
+            {
+                "treatment": [True, False, True, False, True],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+            }
+        )
+        adapter = MarketingLogAdapter(data=df, seed=42)
+        assert adapter is not None
+
 
 class TestPropensityBoundsValidation:
     """Propensity column values must be in [0, 1]."""
@@ -644,6 +656,19 @@ class TestPropensityBoundsValidation:
         )
         adapter = MarketingLogAdapter(data=df, seed=42)
         assert adapter is not None
+
+    def test_non_numeric_propensity_raises(self) -> None:
+        """Propensity with non-numeric dtype should raise ValueError."""
+        df = pd.DataFrame(
+            {
+                "treatment": [0, 1, 0, 1, 0],
+                "outcome": [10.0, 20.0, 15.0, 25.0, 12.0],
+                "cost": [1.0, 2.0, 1.5, 2.5, 1.2],
+                "propensity": ["low", "high", "low", "high", "low"],
+            }
+        )
+        with pytest.raises(ValueError, match="Propensity column.*must be numeric"):
+            MarketingLogAdapter(data=df, seed=42)
 
     def test_missing_propensity_col_skips_validation(self) -> None:
         """When propensity column is absent, no propensity validation occurs."""
