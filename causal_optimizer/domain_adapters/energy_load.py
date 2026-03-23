@@ -96,7 +96,7 @@ class EnergyLoadAdapter(DomainAdapter):
         diffs = self._data["timestamp"].diff().dropna()
         n_diffs = len(diffs)
         if n_diffs > 0:
-            mode_vals = diffs.mode()
+            mode_vals = diffs.mode().sort_values().reset_index(drop=True)
             if len(mode_vals) > 1:
                 logger.warning(
                     "Ambiguous cadence: %d equally-frequent intervals found; "

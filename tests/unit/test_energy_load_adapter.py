@@ -551,6 +551,9 @@ class TestTimestampHandling:
             logging.WARNING, logger="causal_optimizer.domain_adapters.energy_load"
         ):
             adapter = EnergyLoadAdapter(data=df, seed=42, train_ratio=0.5)
+        # Verify fixture actually produces ambiguous cadence
+        diffs = adapter._data["timestamp"].diff().dropna()
+        assert len(diffs.mode()) > 1, "Fixture should produce ambiguous cadence"
         assert any("Ambiguous cadence" in m for m in caplog.messages)
         # Smallest mode (1h) should be selected
         assert adapter._cadence == pd.Timedelta("1h")
