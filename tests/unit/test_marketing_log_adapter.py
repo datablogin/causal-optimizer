@@ -192,7 +192,13 @@ class TestMetricCompleteness:
         self, adapter: MarketingLogAdapter, default_params: dict[str, float]
     ) -> None:
         metrics = adapter.run_experiment(default_params)
-        expected_keys = {"policy_value", "total_cost", "treated_fraction", "effective_sample_size"}
+        expected_keys = {
+            "policy_value",
+            "total_cost",
+            "treated_fraction",
+            "effective_sample_size",
+            "zero_support",
+        }
         assert expected_keys.issubset(set(metrics.keys()))
 
     def test_all_metrics_are_numeric(
