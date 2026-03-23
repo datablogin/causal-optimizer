@@ -91,11 +91,20 @@ class EnergyLoadAdapter(DomainAdapter):
                 "before passing."
             )
 
-        # Infer dominant cadence and precompute cadence metrics
+        # Infer dominant cadence and precompute cadence metrics.
+        # These reflect the raw input series, not the post-NaN-drop training data.
         diffs = self._data["timestamp"].diff().dropna()
         n_diffs = len(diffs)
         if n_diffs > 0:
-            self._cadence: pd.Timedelta = diffs.mode().iloc[0]
+            mode_vals = diffs.mode()
+            if len(mode_vals) > 1:
+                logger.warning(
+                    "Ambiguous cadence: %d equally-frequent intervals found; "
+                    "using smallest (%s) as dominant cadence.",
+                    len(mode_vals),
+                    mode_vals.iloc[0],
+                )
+            self._cadence: pd.Timedelta = mode_vals.iloc[0]
             tolerance = self._cadence * 0.1
             regular_count = int(((diffs - self._cadence).abs() <= tolerance).sum())
             self._cadence_regularity = float(regular_count / n_diffs)
@@ -185,7 +194,12 @@ class EnergyLoadAdapter(DomainAdapter):
         1. Build a feature matrix from the selected features + lagged load.
         2. Train on the training split, predict on validation.
         3. Return MAE, RMSE, MAPE, runtime_seconds, feature_count,
-           validation_set_size, nan_rows_dropped, train_fraction_actual.
+           validation_set_size, nan_rows_dropped, train_fraction_actual,
+           cadence_gaps, cadence_regularity.
+
+        Note: ``cadence_gaps`` and ``cadence_regularity`` are properties of the
+        raw input series (computed once at init), not of the post-NaN-drop
+        training/validation data.
         """
         t_start = time.monotonic()
 
