@@ -495,8 +495,11 @@ class ExperimentEngine:
             # Check if the predictor recommends observing (not running) this experiment
             if skips < self._max_skips and not self._predictor.should_run_experiment(parameters):
                 skips += 1
-                # Get predicted outcome for logging purposes (not logged to experiment log)
-                prediction = self._predictor.predict(parameters)
+                # Reuse cached prediction from should_run_experiment() to avoid
+                # a redundant predict() call on the same parameters.
+                prediction = self._predictor.last_prediction
+                if prediction is None:
+                    prediction = self._predictor.predict(parameters)
                 if prediction is not None:
                     logger.info(
                         "Observation (predicted): objective=%.4f "
