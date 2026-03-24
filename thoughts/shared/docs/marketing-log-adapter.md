@@ -32,8 +32,8 @@ The adapter validates data at construction time. The following checks are applie
 - **NaN values** — raises `ValueError` if the treatment, outcome, cost, or propensity columns contain any NaN values.
 - **Binary treatment enforcement** — raises `ValueError` if the treatment column contains values other than `{0, 1}`.
 - **Propensity range** — raises `ValueError` if propensity values fall outside `[0, 1]`.
-- **Boundary propensity warning** — emits a `logger.warning` when propensity values include 0.0 or 1.0, since IPS weights will be clipped during evaluation.
-- **Single-arm data warning** — emits a `logger.warning` when all observations have the same treatment value (all 0 or all 1), because IPS weighting requires both treated and control observations for reliable estimates.
+- **Boundary propensity warning** — logs a warning when propensity values include 0.0 or 1.0, since IPS weights will be clipped during evaluation.
+- **Single-arm data warning** — logs a warning when all observations have the same treatment value (all 0 or all 1), because IPS weighting requires both treated and control observations for reliable estimates.
 
 Exactly one of `data` (DataFrame) or `data_path` (file path) must be provided. `data_path` accepts both CSV and `.parquet` files, detected by file extension.
 
@@ -105,10 +105,15 @@ min_propensity_clip          --> policy_value
 2. **Hardcoded optional column names.** The `channel` and `segment` columns are detected by exact name (`"channel"`, `"segment"`). Unlike the required columns, these are not configurable via constructor parameters.
 3. **Segment scoring defaults unknown segments to low-value.** Any segment value other than `"high_value"` or `"medium"` receives a score of 0.2 (the `"low"` weight), with no warning.
 4. **`seed` parameter is unused.** Accepted for API consistency with other adapters, but evaluation is fully deterministic given fixed data and parameters.
-5. **Zero-support fallback is intentionally pessimistic.** When no logged observations match the proposed policy (i.e., the IPS weight sum is zero), the adapter cannot compute a meaningful IPS estimate. Instead of returning an arbitrary value, it sets `zero_support = 1.0` and uses a pessimistic fallback for `policy_value`: the minimum observed outcome (when maximizing) or the maximum observed outcome (when minimizing). This prevents the optimizer from rewarding policies that have no empirical support in the logged data. The adapter also emits a `logger.warning` in this case. At construction time, propensity bounds are validated (values must be in `[0, 1]`), and boundary propensities (exactly 0.0 or 1.0) trigger a warning. During evaluation, propensities are clipped to `[min_propensity_clip, 1 - min_propensity_clip]` to stabilize IPS weights.
+5. **Zero-support and propensity handling.** The adapter addresses positivity violations at three levels:
+   - **Construction-time validation:** Propensity values must be in `[0, 1]`. Boundary values (exactly 0.0 or 1.0) trigger a logged warning, since they will be clipped during evaluation.
+   - **Runtime clipping:** During evaluation, propensities are clipped to `[min_propensity_clip, 1 - min_propensity_clip]` to stabilize IPS weights.
+   - **Zero-support fallback:** When no logged observations match the proposed policy (IPS weight sum is zero), the adapter cannot compute a meaningful IPS estimate. It sets `zero_support = 1.0` and uses a pessimistic fallback for `policy_value`: the minimum observed outcome (when maximizing) or the maximum observed outcome (when minimizing). This prevents the optimizer from rewarding policies that have no empirical support in the logged data. The adapter also logs a warning in this case.
 6. **Fixture data is synthetic.** The 300-row fixture dataset has realistic confounding (segment affects both propensity and outcome) but is generated, not real marketing data.
 
 ## Runtime Notes
+
+This section documents engine-level behavior that directly affects how the `MarketingLogAdapter` interacts with the optimization loop. It is included here rather than in engine-level docs because users configuring this adapter are the most likely to encounter it.
 
 The off-policy predictor (`OffPolicyPredictor`) gates observational (DoWhy) causal estimation behind `obs_min_history`, which defaults to 20. When `epsilon_mode=True` is enabled on the engine, the predictor will not attempt observational estimates until the experiment log contains at least 20 results. This avoids expensive DoWhy calls on small experiment logs where there is insufficient data for reliable causal estimation. Users who enable `epsilon_mode` and wonder why observational estimates only appear after 20 experiments can adjust this threshold via the `obs_min_history` parameter on `OffPolicyPredictor`.
 
