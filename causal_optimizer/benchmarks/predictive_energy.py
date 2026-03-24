@@ -48,10 +48,7 @@ def load_energy_frame(data_path: str, area_id: str | None = None) -> pd.DataFram
             without an explicit area_id selection.
     """
     p = Path(data_path)
-    if p.suffix == ".parquet":
-        df = pd.read_parquet(data_path)
-    else:
-        df = pd.read_csv(data_path)
+    df = pd.read_parquet(data_path) if p.suffix == ".parquet" else pd.read_csv(data_path)
 
     # Validate required columns
     required = {"timestamp", "target_load", "temperature"}
@@ -71,8 +68,7 @@ def load_energy_frame(data_path: str, area_id: str | None = None) -> pd.DataFram
         df = df[df["area_id"] == area_id].reset_index(drop=True)
         if df.empty:
             raise ValueError(
-                f"Empty result after filtering to area_id={area_id!r}; "
-                "no rows match that value"
+                f"Empty result after filtering to area_id={area_id!r}; no rows match that value"
             )
     elif "area_id" in df.columns and df["area_id"].nunique() > 1:
         raise ValueError(

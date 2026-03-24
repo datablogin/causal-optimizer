@@ -42,9 +42,7 @@ def fixture_df() -> pd.DataFrame:
 class TestSplitTimeFrame:
     """Tests for split_time_frame partitioning."""
 
-    def test_split_produces_correct_approximate_proportions(
-        self, fixture_df: pd.DataFrame
-    ) -> None:
+    def test_split_produces_correct_approximate_proportions(self, fixture_df: pd.DataFrame) -> None:
         """With 200 rows and 0.5/0.25/0.25 fracs, partitions should be ~100/50/50."""
         train, val, test = split_time_frame(fixture_df, train_frac=0.5, val_frac=0.25)
         total = len(fixture_df)
@@ -53,9 +51,7 @@ class TestSplitTimeFrame:
         assert len(test) == pytest.approx(total * 0.25, abs=2)
         assert len(train) + len(val) + len(test) == total
 
-    def test_no_leakage_test_after_val_after_train(
-        self, fixture_df: pd.DataFrame
-    ) -> None:
+    def test_no_leakage_test_after_val_after_train(self, fixture_df: pd.DataFrame) -> None:
         """All test timestamps must be strictly after all val timestamps,
         and all val timestamps must be strictly after all train timestamps."""
         train, val, test = split_time_frame(fixture_df, train_frac=0.5, val_frac=0.25)
@@ -126,9 +122,7 @@ class TestLoadEnergyFrame:
     def test_empty_csv_raises(self, tmp_path: Path) -> None:
         """An empty CSV (headers only) should raise ValueError."""
         empty = tmp_path / "empty.csv"
-        pd.DataFrame(columns=["timestamp", "target_load", "temperature"]).to_csv(
-            empty, index=False
-        )
+        pd.DataFrame(columns=["timestamp", "target_load", "temperature"]).to_csv(empty, index=False)
         with pytest.raises(ValueError, match="[Ee]mpty"):
             load_energy_frame(str(empty))
 
