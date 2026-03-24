@@ -25,8 +25,17 @@ Column names for treatment, outcome, cost, and propensity are configurable via c
 
 ### Validation
 
-- Raises `ValueError` on missing required columns, empty DataFrames, or NaN values in required/propensity columns.
-- Exactly one of `data` (DataFrame) or `data_path` (CSV path) must be provided.
+The adapter validates data at construction time. The following checks are applied:
+
+- **Empty DataFrame** — raises `ValueError` if the DataFrame has zero rows.
+- **Missing required columns** — raises `ValueError` if any of the treatment, outcome, or cost columns are absent.
+- **NaN values** — raises `ValueError` if the treatment, outcome, cost, or propensity columns contain any NaN values.
+- **Binary treatment enforcement** — raises `ValueError` if the treatment column contains values other than `{0, 1}`.
+- **Propensity range** — raises `ValueError` if propensity values fall outside `[0, 1]`.
+- **Boundary propensity warning** — logs a warning when propensity values include 0.0 or 1.0, since IPS weights will be clipped during evaluation.
+- **Single-arm data warning** — logs a warning when all observations have the same treatment value (all 0 or all 1), because IPS weighting requires both treated and control observations for reliable estimates.
+
+Exactly one of `data` (DataFrame) or `data_path` (file path) must be provided. `data_path` supports `.parquet` files (detected by the `.parquet` extension) and any other extension is read as CSV via `pd.read_csv()`.
 
 ## Search Variables
 
@@ -47,6 +56,10 @@ Column names for treatment, outcome, cost, and propensity are configurable via c
 | `total_cost` | float | IPS-weighted total cost for treated observations, normalized by population size |
 | `treated_fraction` | float | Fraction of observations assigned treatment by the policy |
 | `effective_sample_size` | float | Kish's effective sample size from IPS weights. 0.0 when no observations match the policy. |
+| `propensity_clip_fraction` | float | Fraction of observations whose propensity was clipped by `min_propensity_clip` |
+| `max_ips_weight` | float | Largest IPS weight in the evaluation. High values signal variance risk. |
+| `weight_cv` | float | Coefficient of variation of positive IPS weights. Higher values indicate less stable estimates. |
+| `zero_support` | float | 1.0 when no logged observations match the proposed policy (zero IPS support), 0.0 otherwise |
 
 ## Objective
 
@@ -92,8 +105,17 @@ min_propensity_clip          --> policy_value
 2. **Hardcoded optional column names.** The `channel` and `segment` columns are detected by exact name (`"channel"`, `"segment"`). Unlike the required columns, these are not configurable via constructor parameters.
 3. **Segment scoring defaults unknown segments to low-value.** Any segment value other than `"high_value"` or `"medium"` receives a score of 0.2 (the `"low"` weight), with no warning.
 4. **`seed` parameter is unused.** Accepted for API consistency with other adapters, but evaluation is fully deterministic given fixed data and parameters.
-5. **No positivity violation warnings.** Extreme propensities are clipped silently. The adapter returns `effective_sample_size = 0.0` when no observations match the policy, signaling a degenerate estimate.
+5. **Zero-support and propensity handling.** The adapter addresses positivity violations at three levels:
+   - **Construction-time validation:** Propensity values must be in `[0, 1]`. Boundary values (exactly 0.0 or 1.0) trigger a logged warning, since they will be clipped during evaluation.
+   - **Runtime clipping:** During evaluation, propensities are clipped to `[min_propensity_clip, 1 - min_propensity_clip]` to stabilize IPS weights.
+   - **Zero-support fallback:** When no logged observations match the proposed policy (IPS weight sum is zero), the adapter cannot compute a meaningful IPS estimate. It sets `zero_support = 1.0` and uses a pessimistic fallback for `policy_value`: the minimum observed outcome (when maximizing) or the maximum observed outcome (when minimizing). This prevents the optimizer from rewarding policies that have no empirical support in the logged data. The adapter also logs a warning in this case.
 6. **Fixture data is synthetic.** The 300-row fixture dataset has realistic confounding (segment affects both propensity and outcome) but is generated, not real marketing data.
+
+## Runtime Notes
+
+This section documents engine-level behavior that directly affects how the `MarketingLogAdapter` interacts with the optimization loop. It is included here rather than in engine-level docs because users configuring this adapter are the most likely to encounter it.
+
+The off-policy predictor (`OffPolicyPredictor`) gates observational (DoWhy) causal estimation behind `obs_min_history`, which defaults to 20. The predictor will not attempt observational estimates until the experiment log contains at least 20 results, regardless of whether `epsilon_mode` is enabled. This avoids expensive DoWhy calls on small experiment logs where there is insufficient data for reliable causal estimation. This threshold can be adjusted via the `obs_min_history` parameter on `OffPolicyPredictor`.
 
 ## Fixture Dataset
 
