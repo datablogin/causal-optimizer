@@ -30,11 +30,11 @@ _MIN_PARTITION_ROWS = 10
 # ── Data loading ─────────────────────────────────────────────────────
 
 
-def load_energy_frame(data_path: str, area_id: str | None = None) -> pd.DataFrame:
+def load_energy_frame(data_path: str | Path, area_id: str | None = None) -> pd.DataFrame:
     """Load CSV or Parquet energy data, optionally filtering by area_id.
 
     Args:
-        data_path: Path to a ``.csv`` or ``.parquet`` file.
+        data_path: ``str`` or :class:`~pathlib.Path` to a ``.csv`` or ``.parquet`` file.
         area_id: If provided, filter to rows where ``area_id == area_id``.
             Raises if the column is absent.
 
@@ -48,7 +48,7 @@ def load_energy_frame(data_path: str, area_id: str | None = None) -> pd.DataFram
             without an explicit area_id selection.
     """
     p = Path(data_path)
-    df = pd.read_parquet(data_path) if p.suffix == ".parquet" else pd.read_csv(data_path)
+    df = pd.read_parquet(data_path) if p.suffix.lower() == ".parquet" else pd.read_csv(data_path)
 
     # Validate required columns
     required = {"timestamp", "target_load", "temperature"}
@@ -135,6 +135,8 @@ def split_time_frame(
             "Data must have unique timestamps for a single-series split."
         )
 
+    # int() truncation may make train+val slightly smaller than expected;
+    # the test set absorbs any rounding remainder.
     n = len(df)
     train_end = int(n * train_frac)
     val_end = train_end + int(n * val_frac)
@@ -177,9 +179,6 @@ class ValidationEnergyRunner:
         val_df: pd.DataFrame,
         seed: int | None = None,
     ) -> None:
-        self._train_df = train_df
-        self._val_df = val_df
-        self._seed = seed
         combined = pd.concat([train_df, val_df], ignore_index=True)
         train_ratio = len(train_df) / len(combined)
         self._adapter = EnergyLoadAdapter(data=combined, seed=seed, train_ratio=train_ratio)
@@ -187,8 +186,11 @@ class ValidationEnergyRunner:
     def run(self, parameters: dict[str, Any]) -> dict[str, float]:
         """Run an experiment using the validation split.
 
-        Delegates to the pre-constructed EnergyLoadAdapter (built once
-        in ``__init__`` to avoid redundant data processing per call).
+        Delegates to the pre-constructed :class:`EnergyLoadAdapter`.
+        The adapter is built once at construction time to avoid
+        re-validating and re-sorting the combined frame on every call.
+        Note that ``run_experiment`` still re-processes features
+        internally per call; the saving is in the constructor-time checks.
         """
         return self._adapter.run_experiment(parameters)
 

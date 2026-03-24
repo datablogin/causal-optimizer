@@ -21,6 +21,16 @@ from causal_optimizer.benchmarks.predictive_energy import (
 
 FIXTURE_PATH = Path(__file__).resolve().parent.parent / "fixtures" / "energy_load_fixture.csv"
 
+_RIDGE_PARAMS: dict[str, object] = {
+    "model_type": "ridge",
+    "lookback_window": 3,
+    "use_temperature": True,
+    "use_humidity": False,
+    "use_calendar": True,
+    "regularization": 1.0,
+    "n_estimators": 50,
+}
+
 
 def _has_pyarrow() -> bool:
     try:
@@ -197,43 +207,23 @@ class TestValidationEnergyRunner:
 
     def test_deterministic_for_fixed_seed(self, fixture_df: pd.DataFrame) -> None:
         """Same seed + same params should produce identical metrics."""
-        train, val, test = split_time_frame(fixture_df, train_frac=0.5, val_frac=0.25)
-
-        params = {
-            "model_type": "ridge",
-            "lookback_window": 3,
-            "use_temperature": True,
-            "use_humidity": False,
-            "use_calendar": True,
-            "regularization": 1.0,
-            "n_estimators": 50,
-        }
+        train, val, _test = split_time_frame(fixture_df, train_frac=0.5, val_frac=0.25)
 
         runner1 = ValidationEnergyRunner(train_df=train, val_df=val, seed=42)
         runner2 = ValidationEnergyRunner(train_df=train, val_df=val, seed=42)
 
-        result1 = runner1.run(params)
-        result2 = runner2.run(params)
+        result1 = runner1.run(dict(_RIDGE_PARAMS))
+        result2 = runner2.run(dict(_RIDGE_PARAMS))
 
         assert result1["mae"] == result2["mae"]
         assert result1["rmse"] == result2["rmse"]
 
     def test_run_returns_expected_metric_keys(self, fixture_df: pd.DataFrame) -> None:
         """Runner should return dict with mae, rmse, and other standard keys."""
-        train, val, test = split_time_frame(fixture_df, train_frac=0.5, val_frac=0.25)
+        train, val, _test = split_time_frame(fixture_df, train_frac=0.5, val_frac=0.25)
 
         runner = ValidationEnergyRunner(train_df=train, val_df=val, seed=42)
-        result = runner.run(
-            {
-                "model_type": "ridge",
-                "lookback_window": 3,
-                "use_temperature": True,
-                "use_humidity": False,
-                "use_calendar": True,
-                "regularization": 1.0,
-                "n_estimators": 50,
-            }
-        )
+        result = runner.run(dict(_RIDGE_PARAMS))
 
         assert "mae" in result
         assert "rmse" in result
@@ -251,17 +241,7 @@ class TestEvaluateOnTest:
         """evaluate_on_test should return a dict containing 'mae'."""
         train, val, test = split_time_frame(fixture_df, train_frac=0.5, val_frac=0.25)
 
-        params = {
-            "model_type": "ridge",
-            "lookback_window": 3,
-            "use_temperature": True,
-            "use_humidity": False,
-            "use_calendar": True,
-            "regularization": 1.0,
-            "n_estimators": 50,
-        }
-
-        result = evaluate_on_test(train, val, test, params, seed=42)
+        result = evaluate_on_test(train, val, test, dict(_RIDGE_PARAMS), seed=42)
         assert "mae" in result
         assert isinstance(result["mae"], float)
         assert result["mae"] > 0
@@ -270,19 +250,25 @@ class TestEvaluateOnTest:
         """Same inputs and seed should produce identical test metrics."""
         train, val, test = split_time_frame(fixture_df, train_frac=0.5, val_frac=0.25)
 
-        params = {
-            "model_type": "ridge",
-            "lookback_window": 3,
-            "use_temperature": True,
-            "use_humidity": False,
-            "use_calendar": True,
-            "regularization": 1.0,
-            "n_estimators": 50,
-        }
-
-        r1 = evaluate_on_test(train, val, test, params, seed=42)
-        r2 = evaluate_on_test(train, val, test, params, seed=42)
+        r1 = evaluate_on_test(train, val, test, dict(_RIDGE_PARAMS), seed=42)
+        r2 = evaluate_on_test(train, val, test, dict(_RIDGE_PARAMS), seed=42)
         assert r1["mae"] == r2["mae"]
+
+    def test_val_and_test_metrics_differ(self, fixture_df: pd.DataFrame) -> None:
+        """Validation runner and test evaluation should produce different MAE.
+
+        This confirms the harness is actually evaluating on different data
+        partitions — the whole point of the locked split.
+        """
+        train, val, test = split_time_frame(fixture_df, train_frac=0.5, val_frac=0.25)
+
+        runner = ValidationEnergyRunner(train_df=train, val_df=val, seed=42)
+        val_metrics = runner.run(dict(_RIDGE_PARAMS))
+        test_metrics = evaluate_on_test(train, val, test, dict(_RIDGE_PARAMS), seed=42)
+
+        assert val_metrics["mae"] != test_metrics["mae"], (
+            "Validation and test MAE should differ — they evaluate on different partitions"
+        )
 
 
 # ── PredictiveBenchmarkResult ────────────────────────────────────────
