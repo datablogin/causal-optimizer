@@ -259,7 +259,18 @@ class EnergyLoadAdapter(DomainAdapter):
         if self._split_timestamp is not None and "timestamp" in df.columns:
             train_mask = df["timestamp"] < self._split_timestamp
             train_end = int(train_mask.sum())
-            train_end = max(1, train_end)
+            if train_end == 0:
+                raise ValueError(
+                    "Preprocessing removed all training rows before the split boundary "
+                    f"({self._split_timestamp}). Try reducing lookback_window "
+                    f"(current: {lookback})."
+                )
+            if train_end >= len(df):
+                raise ValueError(
+                    "Preprocessing removed all validation/test rows after the split "
+                    f"boundary ({self._split_timestamp}). Try reducing lookback_window "
+                    f"(current: {lookback})."
+                )
         else:
             train_end = min(self._train_end, len(df) - 1)
             train_end = max(1, train_end)  # ensure at least 1 training row

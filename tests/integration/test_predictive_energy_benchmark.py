@@ -373,3 +373,23 @@ class TestNoLeakageWithLagFeatures:
         assert metrics["validation_set_size"] > 0
         assert metrics["mae"] > 0
         assert val_max_ts < test_min_ts
+
+    def test_lookback_exceeding_train_raises_not_leaks(self) -> None:
+        """When lookback drops all training rows, the adapter must raise, not leak.
+
+        Small dataset (50 rows) + lookback_window=35 means all rows before the
+        split boundary are NaN-dropped.  The adapter should raise ValueError
+        rather than silently treating the first validation row as training.
+        """
+        small_df = pd.DataFrame(
+            {
+                "timestamp": pd.date_range("2024-01-01", periods=50, freq="h"),
+                "target_load": range(50),
+                "temperature": [20.0] * 50,
+            }
+        )
+        train, val, _test = split_time_frame(small_df, train_frac=0.6, val_frac=0.2)
+        runner = ValidationEnergyRunner(train_df=train, val_df=val, seed=42)
+
+        with pytest.raises(ValueError, match="[Pp]reprocessing removed all training rows"):
+            runner.run({**_RIDGE_PARAMS, "lookback_window": 35})
