@@ -269,8 +269,16 @@ def main() -> None:
     args = parse_args()
 
     # Parse comma-separated lists
-    budgets = [int(b.strip()) for b in args.budgets.split(",")]
-    seeds = [int(s.strip()) for s in args.seeds.split(",")]
+    try:
+        budgets = [int(b.strip()) for b in args.budgets.split(",")]
+    except ValueError as exc:
+        print(f"ERROR: --budgets must be comma-separated integers: {exc}", file=sys.stderr)
+        sys.exit(1)
+    try:
+        seeds = [int(s.strip()) for s in args.seeds.split(",")]
+    except ValueError as exc:
+        print(f"ERROR: --seeds must be comma-separated integers: {exc}", file=sys.stderr)
+        sys.exit(1)
     strategies = [s.strip() for s in args.strategies.split(",")]
 
     # Validate budget values
