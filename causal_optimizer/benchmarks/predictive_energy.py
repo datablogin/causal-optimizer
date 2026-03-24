@@ -187,7 +187,10 @@ class ValidationEnergyRunner:
         val_timestamps = pd.to_datetime(val_df["timestamp"])
         split_ts = val_timestamps.min()
         self._adapter = EnergyLoadAdapter(
-            data=combined, seed=seed, train_ratio=train_ratio, split_timestamp=split_ts,
+            data=combined,
+            seed=seed,
+            train_ratio=train_ratio,
+            split_timestamp=split_ts,
         )
 
     def run(self, parameters: dict[str, Any]) -> dict[str, float]:
@@ -235,7 +238,10 @@ def evaluate_on_test(
     test_timestamps = pd.to_datetime(test_df["timestamp"])
     split_ts = test_timestamps.min()
     adapter = EnergyLoadAdapter(
-        data=combined, seed=seed, train_ratio=train_ratio, split_timestamp=split_ts,
+        data=combined,
+        seed=seed,
+        train_ratio=train_ratio,
+        split_timestamp=split_ts,
     )
     return adapter.run(parameters)
 
