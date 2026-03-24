@@ -35,7 +35,7 @@ The adapter validates data at construction time. The following checks are applie
 - **Boundary propensity warning** — logs a warning when propensity values include 0.0 or 1.0, since IPS weights will be clipped during evaluation.
 - **Single-arm data warning** — logs a warning when all observations have the same treatment value (all 0 or all 1), because IPS weighting requires both treated and control observations for reliable estimates.
 
-Exactly one of `data` (DataFrame) or `data_path` (file path) must be provided. `data_path` accepts both CSV and `.parquet` files, detected by file extension.
+Exactly one of `data` (DataFrame) or `data_path` (file path) must be provided. `data_path` supports `.parquet` files (detected by the `.parquet` extension) and any other extension is read as CSV via `pd.read_csv()`.
 
 ## Search Variables
 
@@ -115,7 +115,7 @@ min_propensity_clip          --> policy_value
 
 This section documents engine-level behavior that directly affects how the `MarketingLogAdapter` interacts with the optimization loop. It is included here rather than in engine-level docs because users configuring this adapter are the most likely to encounter it.
 
-The off-policy predictor (`OffPolicyPredictor`) gates observational (DoWhy) causal estimation behind `obs_min_history`, which defaults to 20. When `epsilon_mode=True` is enabled on the engine, the predictor will not attempt observational estimates until the experiment log contains at least 20 results. This avoids expensive DoWhy calls on small experiment logs where there is insufficient data for reliable causal estimation. Users who enable `epsilon_mode` and wonder why observational estimates only appear after 20 experiments can adjust this threshold via the `obs_min_history` parameter on `OffPolicyPredictor`.
+The off-policy predictor (`OffPolicyPredictor`) gates observational (DoWhy) causal estimation behind `obs_min_history`, which defaults to 20. The predictor will not attempt observational estimates until the experiment log contains at least 20 results, regardless of whether `epsilon_mode` is enabled. This avoids expensive DoWhy calls on small experiment logs where there is insufficient data for reliable causal estimation. This threshold can be adjusted via the `obs_min_history` parameter on `OffPolicyPredictor`.
 
 ## Fixture Dataset
 
