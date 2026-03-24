@@ -19,6 +19,7 @@ import argparse
 import dataclasses
 import json
 import logging
+import math
 import sys
 import time
 from typing import Any
@@ -40,6 +41,21 @@ from causal_optimizer.engine.loop import ExperimentEngine
 logger = logging.getLogger(__name__)
 
 _VALID_STRATEGIES: frozenset[str] = frozenset({"random", "surrogate_only", "causal"})
+
+
+def _sanitize_for_json(obj: Any) -> Any:
+    """Replace ``float('inf')`` and ``float('nan')`` with ``None`` recursively.
+
+    Ensures the output dict is RFC 8259 compliant (standard JSON has no
+    representation for Infinity or NaN).
+    """
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_for_json(v) for v in obj]
+    if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+        return None
+    return obj
 
 
 # ── CLI ──────────────────────────────────────────────────────────────
@@ -223,8 +239,8 @@ def _print_summary(results: list[PredictiveBenchmarkResult]) -> None:
         groups.setdefault(key, []).append(r)
 
     # Header
-    print(f"{'Strategy':<16} {'Budget':>6}  {'Val MAE':>16}  {'Test MAE':>16}  {'Gap':>16}")
-    print("-" * 78)
+    print(f"{'Strategy':<16} {'Budget':>6}  {'Val MAE':>20}  {'Test MAE':>20}  {'Gap':>20}")
+    print("-" * 90)
 
     for (strategy, budget), group in sorted(groups.items()):
         val_maes = [r.best_validation_mae for r in group if r.best_validation_mae != float("inf")]
@@ -236,9 +252,9 @@ def _print_summary(results: list[PredictiveBenchmarkResult]) -> None:
         ]
         print(
             f"{strategy:<16} {budget:>6}  "
-            f"{_fmt_mean_std(val_maes):>16}  "
-            f"{_fmt_mean_std(test_maes):>16}  "
-            f"{_fmt_mean_std(gaps):>16}"
+            f"{_fmt_mean_std(val_maes):>20}  "
+            f"{_fmt_mean_std(test_maes):>20}  "
+            f"{_fmt_mean_std(gaps):>20}"
         )
 
 
@@ -255,6 +271,15 @@ def main() -> None:
     budgets = [int(b.strip()) for b in args.budgets.split(",")]
     seeds = [int(s.strip()) for s in args.seeds.split(",")]
     strategies = [s.strip() for s in args.strategies.split(",")]
+
+    # Validate budget values
+    for b in budgets:
+        if b <= 0:
+            print(
+                f"ERROR: All budgets must be positive integers, got {b!r}.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
     # Validate strategy names
     for s in strategies:
@@ -304,10 +329,11 @@ def main() -> None:
                         exc_info=True,
                     )
 
-    # Write JSON output
+    # Write JSON output — replace inf/nan with None for RFC 8259 compliance
     output_data = [dataclasses.asdict(r) for r in results]
+    output_data = [_sanitize_for_json(d) for d in output_data]
     with open(args.output, "w") as f:
-        json.dump(output_data, f, indent=2, default=str)
+        json.dump(output_data, f, indent=2, default=str, allow_nan=False)
     logger.info("Wrote %d results to %s", len(results), args.output)
 
     # Print summary table
