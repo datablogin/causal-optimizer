@@ -48,7 +48,7 @@ def load_energy_frame(data_path: str | Path, area_id: str | None = None) -> pd.D
             without an explicit area_id selection.
     """
     p = Path(data_path)
-    df = pd.read_parquet(data_path) if p.suffix.lower() == ".parquet" else pd.read_csv(data_path)
+    df = pd.read_parquet(p) if p.suffix.lower() == ".parquet" else pd.read_csv(p)
 
     # Validate required columns
     required = {"timestamp", "target_load", "temperature"}
