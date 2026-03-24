@@ -22,6 +22,7 @@ import logging
 import math
 import sys
 import time
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -289,6 +290,10 @@ def main() -> None:
                 file=sys.stderr,
             )
             sys.exit(1)
+
+    # Fail-fast: ensure output directory exists before spending time on computation
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Load and split data
     logger.info("Loading data from %s", args.data_path)
