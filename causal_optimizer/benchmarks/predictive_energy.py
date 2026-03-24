@@ -73,7 +73,7 @@ def load_energy_frame(data_path: str | Path, area_id: str | None = None) -> pd.D
     elif "area_id" in df.columns and df["area_id"].nunique() > 1:
         raise ValueError(
             f"Data contains {df['area_id'].nunique()} distinct area_id values. "
-            "Specify --area-id to select one."
+            "Pass area_id= to select one."
         )
 
     return df
@@ -189,10 +189,10 @@ class ValidationEnergyRunner:
         Delegates to the pre-constructed :class:`EnergyLoadAdapter`.
         The adapter is built once at construction time to avoid
         re-validating and re-sorting the combined frame on every call.
-        Note that ``run_experiment`` still re-processes features
+        Note that ``run()`` still re-processes features
         internally per call; the saving is in the constructor-time checks.
         """
-        return self._adapter.run_experiment(parameters)
+        return self._adapter.run(parameters)
 
 
 # ── Test evaluation ──────────────────────────────────────────────────
@@ -224,7 +224,7 @@ def evaluate_on_test(
     combined = pd.concat([train_df, val_df, test_df], ignore_index=True)
     train_ratio = (len(train_df) + len(val_df)) / len(combined)
     adapter = EnergyLoadAdapter(data=combined, seed=seed, train_ratio=train_ratio)
-    return adapter.run_experiment(parameters)
+    return adapter.run(parameters)
 
 
 # ── Result container ─────────────────────────────────────────────────
