@@ -45,15 +45,26 @@ _VALID_STRATEGIES: frozenset[str] = frozenset({"random", "surrogate_only", "caus
 
 
 def _sanitize_for_json(obj: Any) -> Any:
-    """Replace ``float('inf')`` and ``float('nan')`` with ``None`` recursively.
+    """Recursively convert a nested dict/list to JSON-safe Python types.
 
-    Ensures the output dict is RFC 8259 compliant (standard JSON has no
-    representation for Infinity or NaN).
+    - Replaces ``float('inf')`` and ``float('nan')`` with ``None``
+      (RFC 8259 has no representation for Infinity or NaN).
+    - Converts numpy scalars (``np.integer``, ``np.floating``, ``np.bool_``)
+      to their Python counterparts so ``json.dump`` doesn't choke.
     """
     if isinstance(obj, dict):
         return {k: _sanitize_for_json(v) for k, v in obj.items()}
     if isinstance(obj, list):
         return [_sanitize_for_json(v) for v in obj]
+    # numpy scalar conversions (must come before float/int checks
+    # since np.floating is not always a subclass of float)
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, np.floating):
+        val = float(obj)
+        return None if (math.isnan(val) or math.isinf(val)) else val
+    if isinstance(obj, np.bool_):
+        return bool(obj)
     if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
         return None
     return obj
@@ -244,12 +255,12 @@ def _print_summary(results: list[PredictiveBenchmarkResult]) -> None:
     print("-" * 90)
 
     for (strategy, budget), group in sorted(groups.items()):
-        val_maes = [r.best_validation_mae for r in group if r.best_validation_mae != float("inf")]
-        test_maes = [r.test_mae for r in group if r.test_mae != float("inf")]
+        val_maes = [r.best_validation_mae for r in group if math.isfinite(r.best_validation_mae)]
+        test_maes = [r.test_mae for r in group if math.isfinite(r.test_mae)]
         gaps = [
             r.validation_test_gap
             for r in group
-            if r.best_validation_mae != float("inf") and r.test_mae != float("inf")
+            if math.isfinite(r.best_validation_mae) and math.isfinite(r.test_mae)
         ]
         print(
             f"{strategy:<16} {budget:>6}  "
@@ -346,7 +357,7 @@ def main() -> None:
     output_data = [dataclasses.asdict(r) for r in results]
     output_data = [_sanitize_for_json(d) for d in output_data]
     with open(args.output, "w") as f:
-        json.dump(output_data, f, indent=2, default=str, allow_nan=False)
+        json.dump(output_data, f, indent=2, allow_nan=False)
     logger.info("Wrote %d results to %s", len(results), args.output)
 
     # Print summary table
