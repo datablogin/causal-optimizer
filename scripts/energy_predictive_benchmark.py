@@ -35,7 +35,7 @@ from causal_optimizer.benchmarks.predictive_energy import (
     load_energy_frame,
     split_time_frame,
 )
-from causal_optimizer.benchmarks.runner import _sample_random_params
+from causal_optimizer.benchmarks.runner import sample_random_params
 from causal_optimizer.domain_adapters.energy_load import EnergyLoadAdapter
 from causal_optimizer.engine.loop import ExperimentEngine
 
@@ -165,7 +165,7 @@ def run_strategy(
         best_params: dict[str, Any] | None = None
         rng = np.random.default_rng(seed)
         for _ in range(budget):
-            params = _sample_random_params(space, rng)
+            params = sample_random_params(space, rng)
             metrics = runner.run(params)
             mae = metrics.get("mae", float("inf"))
             if mae < best_mae:
@@ -192,7 +192,10 @@ def run_strategy(
 
     runtime = time.perf_counter() - t_start
 
-    # If no valid result, return sentinel values
+    # If no valid result, return sentinel values.
+    # Note: inf - inf = nan for validation_test_gap; this is intentional.
+    # _sanitize_for_json converts it to null, and _print_summary filters
+    # it out via math.isfinite.
     if best_params is None:
         logger.warning(
             "Strategy %r with budget=%d seed=%d produced no valid results; skipping test eval.",
@@ -356,9 +359,9 @@ def main() -> None:
     # Write JSON output — replace inf/nan with None for RFC 8259 compliance
     output_data = [dataclasses.asdict(r) for r in results]
     output_data = [_sanitize_for_json(d) for d in output_data]
-    with open(args.output, "w") as f:
+    with open(output_path, "w") as f:
         json.dump(output_data, f, indent=2, allow_nan=False)
-    logger.info("Wrote %d results to %s", len(results), args.output)
+    logger.info("Wrote %d results to %s", len(results), output_path)
 
     # Print summary table
     if results:

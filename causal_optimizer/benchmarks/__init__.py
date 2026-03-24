@@ -15,7 +15,11 @@ from causal_optimizer.benchmarks.predictive_energy import (
     load_energy_frame,
     split_time_frame,
 )
-from causal_optimizer.benchmarks.runner import BenchmarkResult, BenchmarkRunner
+from causal_optimizer.benchmarks.runner import (
+    BenchmarkResult,
+    BenchmarkRunner,
+    sample_random_params,
+)
 from causal_optimizer.benchmarks.toy_graph import ToyGraphBenchmark
 
 if TYPE_CHECKING:
@@ -56,5 +60,6 @@ __all__ = [
     "ValidationEnergyRunner",
     "evaluate_on_test",
     "load_energy_frame",
+    "sample_random_params",
     "split_time_frame",
 ]
