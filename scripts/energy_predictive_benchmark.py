@@ -33,9 +33,9 @@ from causal_optimizer.benchmarks.predictive_energy import (
     load_energy_frame,
     split_time_frame,
 )
+from causal_optimizer.benchmarks.runner import _sample_random_params
 from causal_optimizer.domain_adapters.energy_load import EnergyLoadAdapter
 from causal_optimizer.engine.loop import ExperimentEngine
-from causal_optimizer.types import SearchSpace, VariableType
 
 logger = logging.getLogger(__name__)
 
@@ -92,32 +92,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 # ── Strategy runner ──────────────────────────────────────────────────
-
-
-def _sample_random_params(space: SearchSpace, rng: np.random.Generator) -> dict[str, Any]:
-    """Sample uniformly random parameters from a search space."""
-    params: dict[str, Any] = {}
-    for var in space.variables:
-        if var.variable_type == VariableType.CONTINUOUS:
-            lower = var.lower if var.lower is not None else -1.0
-            upper = var.upper if var.upper is not None else 1.0
-            params[var.name] = float(rng.uniform(lower, upper))
-        elif var.variable_type == VariableType.INTEGER:
-            lower = int(var.lower) if var.lower is not None else 0
-            upper = int(var.upper) if var.upper is not None else 10
-            params[var.name] = int(rng.integers(lower, upper + 1))
-        elif var.variable_type == VariableType.BOOLEAN:
-            params[var.name] = bool(rng.choice([True, False]))
-        elif var.variable_type == VariableType.CATEGORICAL:
-            choices = var.choices or []
-            if not choices:
-                msg = f"Variable {var.name!r} is CATEGORICAL but has no choices defined."
-                raise ValueError(msg)
-            params[var.name] = choices[int(rng.integers(0, len(choices)))]
-        else:
-            msg = f"Unsupported variable type {var.variable_type!r} for variable {var.name!r}."
-            raise ValueError(msg)
-    return params
 
 
 def run_strategy(
@@ -232,6 +206,14 @@ def run_strategy(
 # ── Summary table ────────────────────────────────────────────────────
 
 
+def _fmt_mean_std(values: list[float]) -> str:
+    """Format a list of values as ``mean +/- std``."""
+    if not values:
+        return "N/A"
+    arr = np.array(values)
+    return f"{arr.mean():.4f} +/- {arr.std():.4f}"
+
+
 def _print_summary(results: list[PredictiveBenchmarkResult]) -> None:
     """Print a compact summary table to stdout."""
     # Group by (strategy, budget)
@@ -241,10 +223,7 @@ def _print_summary(results: list[PredictiveBenchmarkResult]) -> None:
         groups.setdefault(key, []).append(r)
 
     # Header
-    print(
-        f"{'Strategy':<16} {'Budget':>6}  "
-        f"{'Val MAE':>16}  {'Test MAE':>16}  {'Gap':>16}"
-    )
+    print(f"{'Strategy':<16} {'Budget':>6}  {'Val MAE':>16}  {'Test MAE':>16}  {'Gap':>16}")
     print("-" * 78)
 
     for (strategy, budget), group in sorted(groups.items()):
@@ -255,16 +234,11 @@ def _print_summary(results: list[PredictiveBenchmarkResult]) -> None:
             for r in group
             if r.best_validation_mae != float("inf") and r.test_mae != float("inf")
         ]
-
-        def _fmt(values: list[float]) -> str:
-            if not values:
-                return "N/A"
-            arr = np.array(values)
-            return f"{arr.mean():.4f} +/- {arr.std():.4f}"
-
         print(
             f"{strategy:<16} {budget:>6}  "
-            f"{_fmt(val_maes):>16}  {_fmt(test_maes):>16}  {_fmt(gaps):>16}"
+            f"{_fmt_mean_std(val_maes):>16}  "
+            f"{_fmt_mean_std(test_maes):>16}  "
+            f"{_fmt_mean_std(gaps):>16}"
         )
 
 
@@ -286,8 +260,7 @@ def main() -> None:
     for s in strategies:
         if s not in _VALID_STRATEGIES:
             print(
-                f"ERROR: Unknown strategy {s!r}. "
-                f"Must be one of {sorted(_VALID_STRATEGIES)}.",
+                f"ERROR: Unknown strategy {s!r}. Must be one of {sorted(_VALID_STRATEGIES)}.",
                 file=sys.stderr,
             )
             sys.exit(1)
