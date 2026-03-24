@@ -85,6 +85,18 @@ class TestSplitTimeFrame:
         with pytest.raises(ValueError, match="[Ff]raction|[Rr]oom"):
             split_time_frame(fixture_df, train_frac=0.8, val_frac=0.3)
 
+    def test_negative_fraction_raises(self, fixture_df: pd.DataFrame) -> None:
+        """Negative train_frac or val_frac should raise ValueError."""
+        with pytest.raises(ValueError, match="positive"):
+            split_time_frame(fixture_df, train_frac=-0.1, val_frac=0.2)
+        with pytest.raises(ValueError, match="positive"):
+            split_time_frame(fixture_df, train_frac=0.6, val_frac=-0.1)
+
+    def test_zero_fraction_raises(self, fixture_df: pd.DataFrame) -> None:
+        """Zero train_frac or val_frac should raise ValueError."""
+        with pytest.raises(ValueError, match="positive"):
+            split_time_frame(fixture_df, train_frac=0.0, val_frac=0.2)
+
     def test_partition_minimum_size(self) -> None:
         """Each partition must have at least 10 rows; small data should raise."""
         # 25 rows: with default fracs 0.6/0.2, test gets 25*0.2 = 5 rows < 10
@@ -280,14 +292,13 @@ class TestPredictiveBenchmarkResult:
     """Tests for the result dataclass."""
 
     def test_fields_exist(self) -> None:
-        """Dataclass should store all required fields."""
+        """Dataclass should store all required fields and auto-compute gap."""
         result = PredictiveBenchmarkResult(
             strategy="causal",
             budget=30,
             seed=42,
             best_validation_mae=50.0,
             test_mae=55.0,
-            validation_test_gap=5.0,
             selected_parameters={"model_type": "ridge"},
             runtime_seconds=1.5,
         )
@@ -299,3 +310,16 @@ class TestPredictiveBenchmarkResult:
         assert result.validation_test_gap == 5.0
         assert result.selected_parameters == {"model_type": "ridge"}
         assert result.runtime_seconds == 1.5
+
+    def test_validation_test_gap_auto_computed(self) -> None:
+        """validation_test_gap should be auto-computed as test_mae - best_validation_mae."""
+        result = PredictiveBenchmarkResult(
+            strategy="random",
+            budget=10,
+            seed=0,
+            best_validation_mae=100.0,
+            test_mae=120.0,
+            selected_parameters={},
+            runtime_seconds=0.5,
+        )
+        assert result.validation_test_gap == pytest.approx(20.0)

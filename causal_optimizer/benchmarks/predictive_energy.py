@@ -16,7 +16,7 @@ Public API
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -109,6 +109,12 @@ def split_time_frame(
     if df.empty:
         raise ValueError("Empty DataFrame: cannot split an empty dataset")
 
+    if train_frac <= 0 or val_frac <= 0:
+        raise ValueError(
+            f"train_frac and val_frac must both be positive, "
+            f"got train_frac={train_frac}, val_frac={val_frac}"
+        )
+
     if train_frac + val_frac >= 1.0:
         raise ValueError(
             f"Fractions must leave room for a test set: "
@@ -174,17 +180,17 @@ class ValidationEnergyRunner:
         self._train_df = train_df
         self._val_df = val_df
         self._seed = seed
+        combined = pd.concat([train_df, val_df], ignore_index=True)
+        train_ratio = len(train_df) / len(combined)
+        self._adapter = EnergyLoadAdapter(data=combined, seed=seed, train_ratio=train_ratio)
 
     def run(self, parameters: dict[str, Any]) -> dict[str, float]:
         """Run an experiment using the validation split.
 
-        Internally concatenates train+val, creates an EnergyLoadAdapter
-        with the appropriate train_ratio, and runs the experiment.
+        Delegates to the pre-constructed EnergyLoadAdapter (built once
+        in ``__init__`` to avoid redundant data processing per call).
         """
-        combined = pd.concat([self._train_df, self._val_df], ignore_index=True)
-        train_ratio = len(self._train_df) / len(combined)
-        adapter = EnergyLoadAdapter(data=combined, seed=self._seed, train_ratio=train_ratio)
-        return adapter.run_experiment(parameters)
+        return self._adapter.run_experiment(parameters)
 
 
 # ── Test evaluation ──────────────────────────────────────────────────
@@ -242,6 +248,9 @@ class PredictiveBenchmarkResult:
     seed: int
     best_validation_mae: float
     test_mae: float
-    validation_test_gap: float
     selected_parameters: dict[str, Any]
     runtime_seconds: float
+    validation_test_gap: float = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.validation_test_gap = self.test_mae - self.best_validation_mae
