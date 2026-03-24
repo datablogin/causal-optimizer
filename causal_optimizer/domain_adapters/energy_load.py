@@ -50,6 +50,11 @@ class EnergyLoadAdapter(DomainAdapter):
         train_ratio: Fraction of data used for training (default 0.7).
             The remainder is the validation set.  Split is blocked by time
             (no shuffling) to prevent leakage.
+        split_timestamp: If provided, the train/validation boundary is
+            determined by this timestamp instead of ``train_ratio``.  All
+            rows with ``timestamp < split_timestamp`` are training; the
+            rest are validation.  This survives lag-induced NaN dropping
+            and prevents leakage in benchmark harnesses.
     """
 
     def __init__(
@@ -58,6 +63,7 @@ class EnergyLoadAdapter(DomainAdapter):
         data_path: str | None = None,
         seed: int | None = None,
         train_ratio: float = 0.7,
+        split_timestamp: pd.Timestamp | None = None,
     ) -> None:
         if data is not None:
             self._data = data.copy()
@@ -113,6 +119,8 @@ class EnergyLoadAdapter(DomainAdapter):
             self._cadence = pd.Timedelta(0)
             self._cadence_regularity = 1.0
             self._cadence_gaps = 0.0
+
+        self._split_timestamp = split_timestamp
 
         n = len(self._data)
         self._train_end = int(n * self._train_ratio)
@@ -244,9 +252,28 @@ class EnergyLoadAdapter(DomainAdapter):
         df = df[mask].reset_index(drop=True)
         nan_rows_dropped = float(n_original - len(df))
 
-        # Recompute split after dropping rows
-        train_end = min(self._train_end, len(df) - 1)
-        train_end = max(1, train_end)  # ensure at least 1 training row
+        # Recompute split after dropping rows.
+        # When split_timestamp is set, use it to find the exact boundary
+        # in the post-drop frame — this prevents lag-induced NaN drops from
+        # shifting the split and leaking validation rows into training.
+        if self._split_timestamp is not None and "timestamp" in df.columns:
+            train_mask = df["timestamp"] < self._split_timestamp
+            train_end = int(train_mask.sum())
+            if train_end == 0:
+                raise ValueError(
+                    "Preprocessing removed all training rows before the split boundary "
+                    f"({self._split_timestamp}). Try reducing lookback_window "
+                    f"(current: {lookback})."
+                )
+            if train_end >= len(df):
+                raise ValueError(
+                    "Preprocessing removed all validation/test rows after the split "
+                    f"boundary ({self._split_timestamp}). Try reducing lookback_window "
+                    f"(current: {lookback})."
+                )
+        else:
+            train_end = min(self._train_end, len(df) - 1)
+            train_end = max(1, train_end)  # ensure at least 1 training row
 
         x_train = df.loc[: train_end - 1, features].values
         y_train = df.loc[: train_end - 1, "target_load"].values

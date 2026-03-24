@@ -8,6 +8,13 @@ from causal_optimizer.benchmarks.complete_graph import CompleteGraphBenchmark
 from causal_optimizer.benchmarks.high_dimensional import HighDimensionalSparseBenchmark
 from causal_optimizer.benchmarks.interaction import InteractionBenchmark
 from causal_optimizer.benchmarks.interaction_scm import InteractionSCM
+from causal_optimizer.benchmarks.predictive_energy import (
+    PredictiveBenchmarkResult,
+    ValidationEnergyRunner,
+    evaluate_on_test,
+    load_energy_frame,
+    split_time_frame,
+)
 from causal_optimizer.benchmarks.runner import BenchmarkResult, BenchmarkRunner
 from causal_optimizer.benchmarks.toy_graph import ToyGraphBenchmark
 
@@ -44,5 +51,10 @@ __all__ = [
     "HighDimensionalSparseBenchmark",
     "InteractionBenchmark",
     "InteractionSCM",
+    "PredictiveBenchmarkResult",
     "ToyGraphBenchmark",
+    "ValidationEnergyRunner",
+    "evaluate_on_test",
+    "load_energy_frame",
+    "split_time_frame",
 ]
