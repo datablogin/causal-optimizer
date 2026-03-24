@@ -363,7 +363,7 @@ def main() -> None:
     # Write JSON output — replace inf/nan with None for RFC 8259 compliance
     output_data = [dataclasses.asdict(r) for r in results]
     output_data = [_sanitize_for_json(d) for d in output_data]
-    with open(output_path, "w") as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         json.dump(output_data, f, indent=2, allow_nan=False)
     logger.info("Wrote %d results to %s", len(results), output_path)
 
