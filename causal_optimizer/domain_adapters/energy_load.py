@@ -76,20 +76,43 @@ class EnergyLoadAdapter(DomainAdapter):
 
         self._validate_data()
 
-        # Parse, sort, and deduplicate timestamps
+        # Parse, sort, and validate timestamps
         try:
             self._data["timestamp"] = pd.to_datetime(self._data["timestamp"])
         except (ValueError, TypeError) as exc:
             raise ValueError(f"Column 'timestamp' could not be parsed as datetime: {exc}") from exc
         self._data = self._data.sort_values("timestamp", kind="mergesort").reset_index(drop=True)
 
-        n_before = len(self._data)
-        self._data = self._data.drop_duplicates(subset=["timestamp"], keep="first").reset_index(
-            drop=True
-        )
-        n_dupes = n_before - len(self._data)
+        n_dupes = int(self._data["timestamp"].duplicated().sum())
         if n_dupes > 0:
-            logger.warning("%d duplicate timestamps found; keeping first occurrence", n_dupes)
+            raise ValueError(
+                f"Found {n_dupes} duplicate timestamps. This adapter requires single-series "
+                "data with unique timestamps. If you have multi-area data, filter to one area "
+                "before passing."
+            )
+
+        # Infer dominant cadence and precompute cadence metrics.
+        # These reflect the raw input series, not the post-NaN-drop training data.
+        diffs = self._data["timestamp"].diff().dropna()
+        n_diffs = len(diffs)
+        if n_diffs > 0:
+            mode_vals = diffs.mode().sort_values().reset_index(drop=True)
+            if len(mode_vals) > 1:
+                logger.warning(
+                    "Ambiguous cadence: %d equally-frequent intervals found; "
+                    "using smallest (%s) as dominant cadence.",
+                    len(mode_vals),
+                    mode_vals.iloc[0],
+                )
+            self._cadence: pd.Timedelta = mode_vals.iloc[0]
+            tolerance = self._cadence * 0.1
+            regular_count = int(((diffs - self._cadence).abs() <= tolerance).sum())
+            self._cadence_regularity = float(regular_count / n_diffs)
+            self._cadence_gaps = float((diffs > self._cadence * 1.5).sum())
+        else:
+            self._cadence = pd.Timedelta(0)
+            self._cadence_regularity = 1.0
+            self._cadence_gaps = 0.0
 
         n = len(self._data)
         self._train_end = int(n * self._train_ratio)
@@ -171,7 +194,12 @@ class EnergyLoadAdapter(DomainAdapter):
         1. Build a feature matrix from the selected features + lagged load.
         2. Train on the training split, predict on validation.
         3. Return MAE, RMSE, MAPE, runtime_seconds, feature_count,
-           validation_set_size, nan_rows_dropped, train_fraction_actual.
+           validation_set_size, nan_rows_dropped, train_fraction_actual,
+           cadence_gaps, cadence_regularity.
+
+        Note: ``cadence_gaps`` and ``cadence_regularity`` are properties of the
+        raw input series (computed once at init), not of the post-NaN-drop
+        training/validation data.
         """
         t_start = time.monotonic()
 
@@ -281,10 +309,17 @@ class EnergyLoadAdapter(DomainAdapter):
             "validation_set_size": float(len(x_val)),
             "nan_rows_dropped": nan_rows_dropped,
             "train_fraction_actual": float(train_end / len(df)) if len(df) > 0 else 0.0,
+            "cadence_gaps": self._cadence_gaps,
+            "cadence_regularity": self._cadence_regularity,
         }
 
     def get_prior_graph(self) -> CausalGraph:
-        """Energy load forecasting causal graph based on domain knowledge."""
+        """Energy load forecasting causal graph based on domain knowledge.
+
+        Note: ``cadence_gaps`` and ``cadence_regularity`` are diagnostic-only
+        metrics not modeled in this graph.  They describe input data quality,
+        not outcomes the optimizer should target.
+        """
         return CausalGraph(
             edges=[
                 ("lookback_window", "mae"),

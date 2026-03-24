@@ -6,7 +6,6 @@ metric completeness, no-leakage split, validation, and edge cases.
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 import numpy as np
@@ -441,6 +440,17 @@ class TestFeatureEffects:
         )
 
 
+DEFAULT_PARAMS = {
+    "model_type": "ridge",
+    "lookback_window": 3,
+    "use_temperature": True,
+    "use_humidity": False,
+    "use_calendar": True,
+    "regularization": 1.0,
+    "n_estimators": 50,
+}
+
+
 # ---------------------------------------------------------------------------
 # 11. Timestamp handling (Task 4)
 # ---------------------------------------------------------------------------
@@ -467,39 +477,105 @@ class TestTimestampHandling:
         m2 = adapter_shuffled.run_experiment(params)
         assert m1["mae"] == pytest.approx(m2["mae"], rel=1e-6)
 
-    def test_duplicate_timestamps_handled(
-        self, fixture_df: pd.DataFrame, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """Duplicate timestamps should be deduplicated with a warning."""
+    def test_duplicate_timestamps_raises(self, fixture_df: pd.DataFrame) -> None:
+        """Duplicate timestamps should raise ValueError instead of silently dropping."""
         duped = pd.concat([fixture_df, fixture_df.iloc[:5]], ignore_index=True)
-        with caplog.at_level(
-            logging.WARNING, logger="causal_optimizer.domain_adapters.energy_load"
-        ):
-            adapter = EnergyLoadAdapter(data=duped, seed=42)
-        assert any("duplicate timestamps" in m for m in caplog.messages)
-        space = adapter.get_search_space()
-        assert len(space.variables) == 7
+        with pytest.raises(ValueError, match="duplicate timestamps"):
+            EnergyLoadAdapter(data=duped, seed=42)
 
     def test_timestamp_parsed_as_datetime(self, fixture_df: pd.DataFrame) -> None:
         """Timestamp column should be parsed to datetime."""
         adapter = EnergyLoadAdapter(data=fixture_df, seed=42)
         assert pd.api.types.is_datetime64_any_dtype(adapter._data["timestamp"])
 
+    def test_duplicate_timestamps_error_message(self, fixture_df: pd.DataFrame) -> None:
+        """ValueError message should mention count and multi-area guidance."""
+        duped = pd.concat([fixture_df, fixture_df.iloc[:5]], ignore_index=True)
+        with pytest.raises(ValueError, match=r"Found 5 duplicate timestamps") as exc_info:
+            EnergyLoadAdapter(data=duped, seed=42)
+        assert "filter to one area" in str(exc_info.value)
+
+    def test_cadence_metrics_present(self, adapter: EnergyLoadAdapter) -> None:
+        """run_experiment output must include cadence_gaps and cadence_regularity."""
+        metrics = adapter.run_experiment(DEFAULT_PARAMS)
+        assert "cadence_gaps" in metrics
+        assert "cadence_regularity" in metrics
+
+    def test_regular_cadence_near_one(self, adapter: EnergyLoadAdapter) -> None:
+        """Fixture data is hourly; cadence_regularity should be > 0.95."""
+        metrics = adapter.run_experiment(DEFAULT_PARAMS)
+        assert metrics["cadence_regularity"] > 0.95
+
+    def test_irregular_cadence_detected(self, fixture_df: pd.DataFrame) -> None:
+        """Dropping every 3rd row should lower regularity and produce gaps."""
+        irregular = fixture_df.drop(fixture_df.index[::3]).reset_index(drop=True)
+        adapter = EnergyLoadAdapter(data=irregular, seed=42)
+        metrics = adapter.run_experiment(DEFAULT_PARAMS)
+        assert metrics["cadence_regularity"] < 0.8
+        assert metrics["cadence_gaps"] > 0
+
+    def test_single_row_cadence_defaults(self) -> None:
+        """Single-row data hits n_diffs == 0 branch with safe defaults."""
+        df = pd.DataFrame(
+            {
+                "timestamp": ["2024-01-01 00:00:00"],
+                "target_load": [100.0],
+                "temperature": [20.0],
+            }
+        )
+        adapter = EnergyLoadAdapter(data=df, seed=42, train_ratio=0.5)
+        assert adapter._cadence == pd.Timedelta(0)
+        assert adapter._cadence_regularity == 1.0
+        assert adapter._cadence_gaps == 0.0
+
+    def test_minimal_rows_cadence_defaults(self) -> None:
+        """Two-row data should compute cadence without error."""
+        df = pd.DataFrame(
+            {
+                "timestamp": ["2024-01-01 00:00:00", "2024-01-01 01:00:00"],
+                "target_load": [100.0, 110.0],
+                "temperature": [20.0, 21.0],
+            }
+        )
+        adapter = EnergyLoadAdapter(data=df, seed=42, train_ratio=0.5)
+        assert adapter._cadence == pd.Timedelta("1h")
+        assert adapter._cadence_regularity == 1.0
+        assert adapter._cadence_gaps == 0.0
+
+    def test_ambiguous_cadence_warns(self, caplog: pytest.LogCaptureFixture) -> None:
+        """When multiple modes tie, a warning should be logged."""
+        import logging
+
+        # Build data with exactly 2 equally-frequent intervals: 1h and 2h
+        timestamps = [
+            "2024-01-01 00:00:00",
+            "2024-01-01 01:00:00",  # +1h
+            "2024-01-01 03:00:00",  # +2h
+            "2024-01-01 04:00:00",  # +1h
+            "2024-01-01 06:00:00",  # +2h
+        ]
+        df = pd.DataFrame(
+            {
+                "timestamp": timestamps,
+                "target_load": [100.0, 110.0, 120.0, 115.0, 125.0],
+                "temperature": [20.0, 21.0, 22.0, 21.5, 23.0],
+            }
+        )
+        with caplog.at_level(
+            logging.WARNING, logger="causal_optimizer.domain_adapters.energy_load"
+        ):
+            adapter = EnergyLoadAdapter(data=df, seed=42, train_ratio=0.5)
+        # Verify fixture actually produces ambiguous cadence
+        diffs = adapter._data["timestamp"].diff().dropna()
+        assert len(diffs.mode()) > 1, "Fixture should produce ambiguous cadence"
+        assert any("Ambiguous cadence" in m for m in caplog.messages)
+        # Smallest mode (1h) should be selected
+        assert adapter._cadence == pd.Timedelta("1h")
+
 
 # ---------------------------------------------------------------------------
 # 12. Warning metrics (Task 5)
 # ---------------------------------------------------------------------------
-
-
-DEFAULT_PARAMS = {
-    "model_type": "ridge",
-    "lookback_window": 3,
-    "use_temperature": True,
-    "use_humidity": False,
-    "use_calendar": True,
-    "regularization": 1.0,
-    "n_estimators": 50,
-}
 
 
 class TestWarningMetrics:
