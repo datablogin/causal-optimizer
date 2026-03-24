@@ -163,9 +163,10 @@ def split_time_frame(
 class ValidationEnergyRunner:
     """Validation-phase runner implementing the ExperimentRunner protocol.
 
-    Concatenates train+val, computes train_ratio from their lengths,
-    creates an :class:`EnergyLoadAdapter` with that ratio, and delegates
-    to ``adapter.run_experiment()``.
+    Concatenates train+val and uses the max training timestamp as an
+    explicit split boundary.  This ensures that lag-induced NaN dropping
+    in :class:`EnergyLoadAdapter` cannot shift the boundary and leak
+    validation rows into training.
 
     Args:
         train_df: Training partition (from :func:`split_time_frame`).
@@ -181,7 +182,13 @@ class ValidationEnergyRunner:
     ) -> None:
         combined = pd.concat([train_df, val_df], ignore_index=True)
         train_ratio = len(train_df) / len(combined)
-        self._adapter = EnergyLoadAdapter(data=combined, seed=seed, train_ratio=train_ratio)
+        # Use the first validation timestamp as the split boundary so the
+        # adapter splits correctly even after dropping lag-induced NaN rows.
+        val_timestamps = pd.to_datetime(val_df["timestamp"])
+        split_ts = val_timestamps.min()
+        self._adapter = EnergyLoadAdapter(
+            data=combined, seed=seed, train_ratio=train_ratio, split_timestamp=split_ts,
+        )
 
     def run(self, parameters: dict[str, Any]) -> dict[str, float]:
         """Run an experiment using the validation split.
@@ -207,9 +214,9 @@ def evaluate_on_test(
 ) -> dict[str, float]:
     """One-shot evaluation on the held-out test set.
 
-    Combines all three partitions, sets ``train_ratio = (train+val) / total``,
-    creates an :class:`EnergyLoadAdapter`, and runs the experiment.  The
-    adapter's validation window is thus the test set.
+    Combines all three partitions and uses the first test timestamp as
+    the split boundary.  Training data is everything before that timestamp
+    (train + val); the adapter's validation window is thus the test set.
 
     Args:
         train_df: Training partition.
@@ -223,7 +230,13 @@ def evaluate_on_test(
     """
     combined = pd.concat([train_df, val_df, test_df], ignore_index=True)
     train_ratio = (len(train_df) + len(val_df)) / len(combined)
-    adapter = EnergyLoadAdapter(data=combined, seed=seed, train_ratio=train_ratio)
+    # Use the first test timestamp as the split boundary so lag-induced
+    # NaN dropping cannot leak test rows into training.
+    test_timestamps = pd.to_datetime(test_df["timestamp"])
+    split_ts = test_timestamps.min()
+    adapter = EnergyLoadAdapter(
+        data=combined, seed=seed, train_ratio=train_ratio, split_timestamp=split_ts,
+    )
     return adapter.run(parameters)
 
 
