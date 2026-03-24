@@ -54,7 +54,7 @@ def _sanitize_for_json(obj: Any) -> Any:
     """
     if isinstance(obj, dict):
         return {k: _sanitize_for_json(v) for k, v in obj.items()}
-    if isinstance(obj, list):
+    if isinstance(obj, (list, tuple)):
         return [_sanitize_for_json(v) for v in obj]
     # numpy scalar conversions (must come before float/int checks
     # since np.floating is not always a subclass of float)
@@ -152,12 +152,10 @@ def run_strategy(
 
     t_start = time.perf_counter()
 
-    # Build adapter components
+    # Build adapter — needed by all strategies for the search space and runner.
+    # Graph and descriptors are only needed for engine-based strategies.
     adapter = EnergyLoadAdapter(data=pd.concat([train_df, val_df], ignore_index=True), seed=seed)
     space = adapter.get_search_space()
-    graph = adapter.get_prior_graph() if strategy == "causal" else None
-    descriptor_names = adapter.get_descriptor_names()
-
     runner = ValidationEnergyRunner(train_df=train_df, val_df=val_df, seed=seed)
 
     if strategy == "random":
@@ -172,6 +170,12 @@ def run_strategy(
                 best_mae = mae
                 best_params = params
     else:
+        # Both "surrogate_only" and "causal" use ExperimentEngine.  The only
+        # difference is that "causal" passes the prior graph while
+        # "surrogate_only" passes None — the engine then relies on its RF
+        # surrogate without causal focus variables.
+        graph = adapter.get_prior_graph() if strategy == "causal" else None
+        descriptor_names = adapter.get_descriptor_names()
         engine = ExperimentEngine(
             search_space=space,
             runner=runner,
