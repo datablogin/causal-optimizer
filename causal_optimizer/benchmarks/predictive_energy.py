@@ -48,7 +48,13 @@ def load_energy_frame(data_path: str | Path, area_id: str | None = None) -> pd.D
             without an explicit area_id selection.
     """
     p = Path(data_path)
-    df = pd.read_parquet(p) if p.suffix.lower() == ".parquet" else pd.read_csv(p)
+    suffix = p.suffix.lower()
+    if suffix == ".parquet":
+        df = pd.read_parquet(p)
+    elif suffix == ".csv":
+        df = pd.read_csv(p)
+    else:
+        raise ValueError(f"Unsupported file format {suffix!r}. Expected '.csv' or '.parquet'.")
 
     # Validate required columns
     required = {"timestamp", "target_load", "temperature"}
@@ -181,6 +187,8 @@ class ValidationEnergyRunner:
         seed: int | None = None,
     ) -> None:
         combined = pd.concat([train_df, val_df], ignore_index=True)
+        if len(combined) == 0:
+            raise ValueError("train_df and val_df must not both be empty")
         train_ratio = len(train_df) / len(combined)
         # Use the first validation timestamp as the split boundary so the
         # adapter splits correctly even after dropping lag-induced NaN rows.
@@ -232,6 +240,8 @@ def evaluate_on_test(
         Metrics dict including ``mae``, ``rmse``, ``mape``, etc.
     """
     combined = pd.concat([train_df, val_df, test_df], ignore_index=True)
+    if len(combined) == 0:
+        raise ValueError("train_df, val_df, and test_df must not all be empty")
     train_ratio = (len(train_df) + len(val_df)) / len(combined)
     # Use the first test timestamp as the split boundary so lag-induced
     # NaN dropping cannot leak test rows into training.
