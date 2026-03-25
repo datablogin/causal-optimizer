@@ -4,8 +4,9 @@
 
 - **URL:** https://github.com/datablogin/causal-optimizer/pull/64
 - **Branch:** `sprint-14/benchmark-tests-docs`
-- **Commit:** `fbdf3c0` (follow-up review fixes)
-- **Previous commits:** `78d239d` (gauntlet pass), `9a0600c` (polish)
+- **Final commit:** `734aa01` (verification doc update) — **merged 2026-03-25**
+- **Previous commits:** `fbdf3c0` (isfinite fix), `78d239d` (gauntlet pass), `9a0600c` (polish)
+- **Status:** MERGED
 
 ## Changes Since Previous Review
 
