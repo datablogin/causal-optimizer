@@ -2,9 +2,9 @@
 
 ## PR Details
 
-- **URL:** (will be filled after PR creation)
+- **URL:** https://github.com/datablogin/causal-optimizer/pull/64
 - **Branch:** `sprint-14/benchmark-tests-docs`
-- **Commit:** (will be filled after commit)
+- **Commit:** `9a0600c` (polish pass) / `5e72d6e` (initial)
 - **Worktree:** `/Users/robertwelborn/Projects/causal-optimizer/.claude/worktrees/agent-a4b89242`
 
 ## Changes
