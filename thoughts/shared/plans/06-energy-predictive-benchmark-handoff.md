@@ -91,13 +91,13 @@ scripts/
 
 tests/integration/
   test_predictive_energy_benchmark.py   # PR #59 — harness unit/integration tests
-  test_predictive_energy_smoke.py       # PR #61 — end-to-end smoke tests
+  test_predictive_energy_smoke.py       # PR #64 (issue #61) — end-to-end smoke tests
 
 tests/regression/
-  test_predictive_energy_reproducibility.py  # PR #61 — seed determinism checks
+  test_predictive_energy_reproducibility.py  # PR #64 (issue #61) — seed determinism checks
 
 thoughts/shared/docs/
-  predictive-energy-benchmark.md  # PR #61 — benchmark documentation
+  predictive-energy-benchmark.md  # PR #64 (issue #61) — benchmark documentation
 ```
 
 ## Shipped API — What Actually Merged
@@ -275,7 +275,7 @@ Deliverables:
 
 Status: **Shipped and merged.**
 
-### Agent 3: Tests And Docs (#61)
+### Agent 3: Tests And Docs (#61 / PR #64)
 
 Goal:
 
@@ -287,7 +287,7 @@ Deliverables:
 2. one reproducibility regression test
 3. benchmark doc describing dataset contract, split strategy, outputs, and limitations
 
-Status: **In progress.**
+Status: **PR #64 open, under review.**
 
 ## Notes On The Scaffold
 

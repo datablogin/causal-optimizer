@@ -9,6 +9,9 @@ The fixture dataset (200 rows) uses relaxed split fractions
 (0.5/0.25/0.25) to leave each partition with enough rows after
 lag-feature creation in ``EnergyLoadAdapter`` (up to 48 rows can be
 dropped for ``lookback_window=48``).
+
+All tests are marked ``@pytest.mark.slow`` because engine-based strategies
+(surrogate_only, causal) take ~8s each on the fixture data.
 """
 
 from __future__ import annotations
@@ -46,16 +49,26 @@ def split_frames() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     return split_time_frame(df, train_frac=_SPLIT_FRACS[0], val_frac=_SPLIT_FRACS[1])
 
 
-def _assert_valid_result(result: PredictiveBenchmarkResult | None, strategy: str) -> None:
+def _assert_valid_result(
+    result: PredictiveBenchmarkResult | None,
+    strategy: str,
+    budget: int,
+    seed: int,
+) -> None:
     """Shared assertions for any strategy result."""
-    assert result is not None
+    assert result is not None, f"run_strategy('{strategy}') returned None — all experiments crashed"
     assert isinstance(result, PredictiveBenchmarkResult)
     assert result.strategy == strategy
+    assert result.budget == budget
+    assert result.seed == seed
     assert result.test_mae > 0
     assert result.best_validation_mae > 0
     assert result.runtime_seconds > 0
+    assert isinstance(result.selected_parameters, dict)
+    assert len(result.selected_parameters) > 0
 
 
+@pytest.mark.slow
 class TestSmokeBenchmarkRandom:
     """Smoke test: random strategy completes and produces valid result."""
 
@@ -71,11 +84,7 @@ class TestSmokeBenchmarkRandom:
         return result
 
     def test_random_returns_valid_result(self, random_result: PredictiveBenchmarkResult) -> None:
-        _assert_valid_result(random_result, "random")
-        assert random_result.budget == _BUDGET
-        assert random_result.seed == _SEED
-        assert isinstance(random_result.selected_parameters, dict)
-        assert len(random_result.selected_parameters) > 0
+        _assert_valid_result(random_result, "random", _BUDGET, _SEED)
 
     def test_random_gap_is_computed(self, random_result: PredictiveBenchmarkResult) -> None:
         assert random_result.validation_test_gap == pytest.approx(
@@ -83,6 +92,7 @@ class TestSmokeBenchmarkRandom:
         )
 
 
+@pytest.mark.slow
 class TestSmokeBenchmarkSurrogateOnly:
     """Smoke test: surrogate_only strategy completes and produces valid result."""
 
@@ -91,9 +101,10 @@ class TestSmokeBenchmarkSurrogateOnly:
     ) -> None:
         train, val, test = split_frames
         result = run_strategy("surrogate_only", _BUDGET, _SEED, train, val, test)
-        _assert_valid_result(result, "surrogate_only")
+        _assert_valid_result(result, "surrogate_only", _BUDGET, _SEED)
 
 
+@pytest.mark.slow
 class TestSmokeBenchmarkCausal:
     """Smoke test: causal strategy completes and produces valid result."""
 
@@ -102,4 +113,4 @@ class TestSmokeBenchmarkCausal:
     ) -> None:
         train, val, test = split_frames
         result = run_strategy("causal", _BUDGET, _SEED, train, val, test)
-        _assert_valid_result(result, "causal")
+        _assert_valid_result(result, "causal", _BUDGET, _SEED)
