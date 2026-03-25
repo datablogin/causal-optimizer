@@ -5,8 +5,9 @@ Runs the benchmark harness twice with identical parameters and asserts that
 This catches non-determinism from unseeded RNG, floating-point ordering
 changes, or data-dependent race conditions.
 
-Covers both ``random`` (direct sampling) and ``surrogate_only`` (engine-based
-with RF surrogate) strategies since they exercise different code paths.
+Covers ``random`` (direct sampling), ``surrogate_only`` (engine with RF
+surrogate), and ``causal`` (engine with prior graph) strategies since they
+exercise different code paths.
 
 All tests in this file are marked ``@pytest.mark.slow`` because even a
 budget of 3 takes several seconds per strategy on the fixture data.
@@ -100,6 +101,49 @@ class TestSurrogateOnlyReproducibility:
         train, val, test = split_frames
         r1 = run_strategy("surrogate_only", _BUDGET, _SEED, train, val, test)
         r2 = run_strategy("surrogate_only", _BUDGET, _SEED, train, val, test)
+        assert r1 is not None
+        assert r2 is not None
+        return r1, r2
+
+    def test_validation_mae_is_reproducible(
+        self,
+        run_pair: tuple[PredictiveBenchmarkResult, PredictiveBenchmarkResult],
+    ) -> None:
+        r1, r2 = run_pair
+        assert r1.best_validation_mae == r2.best_validation_mae
+
+    def test_test_mae_is_reproducible(
+        self,
+        run_pair: tuple[PredictiveBenchmarkResult, PredictiveBenchmarkResult],
+    ) -> None:
+        r1, r2 = run_pair
+        assert r1.test_mae == r2.test_mae
+
+    def test_selected_parameters_are_reproducible(
+        self,
+        run_pair: tuple[PredictiveBenchmarkResult, PredictiveBenchmarkResult],
+    ) -> None:
+        r1, r2 = run_pair
+        assert r1.selected_parameters == r2.selected_parameters
+
+
+@pytest.mark.slow
+class TestCausalReproducibility:
+    """Two identical runs of strategy='causal' must produce identical metrics.
+
+    The causal strategy exercises ExperimentEngine with the prior graph,
+    which activates POMIS-guided focus variables and causal ancestor
+    selection — a different code path from surrogate_only.
+    """
+
+    @pytest.fixture(scope="class")
+    def run_pair(
+        self, split_frames: tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
+    ) -> tuple[PredictiveBenchmarkResult, PredictiveBenchmarkResult]:
+        """Run strategy='causal' twice with the same seed."""
+        train, val, test = split_frames
+        r1 = run_strategy("causal", _BUDGET, _SEED, train, val, test)
+        r2 = run_strategy("causal", _BUDGET, _SEED, train, val, test)
         assert r1 is not None
         assert r2 is not None
         return r1, r2
