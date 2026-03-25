@@ -17,7 +17,10 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from causal_optimizer.benchmarks.predictive_energy import split_time_frame
+from causal_optimizer.benchmarks.predictive_energy import (
+    PredictiveBenchmarkResult,
+    split_time_frame,
+)
 
 # Import run_strategy from the scripts directory.
 _SCRIPTS_DIR = str(Path(__file__).resolve().parent.parent.parent / "scripts")
@@ -44,32 +47,35 @@ def split_frames() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
 class TestRandomReproducibility:
     """Two identical runs of strategy='random' must produce identical metrics."""
 
-    def test_validation_mae_is_reproducible(
+    @pytest.fixture(scope="class")
+    def run_pair(
         self, split_frames: tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
-    ) -> None:
+    ) -> tuple[PredictiveBenchmarkResult, PredictiveBenchmarkResult]:
+        """Run strategy='random' twice with the same seed and return both results."""
         train, val, test = split_frames
         r1 = run_strategy("random", _BUDGET, _SEED, train, val, test)
         r2 = run_strategy("random", _BUDGET, _SEED, train, val, test)
         assert r1 is not None
         assert r2 is not None
+        return r1, r2
+
+    def test_validation_mae_is_reproducible(
+        self,
+        run_pair: tuple[PredictiveBenchmarkResult, PredictiveBenchmarkResult],
+    ) -> None:
+        r1, r2 = run_pair
         assert r1.best_validation_mae == r2.best_validation_mae
 
     def test_test_mae_is_reproducible(
-        self, split_frames: tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
+        self,
+        run_pair: tuple[PredictiveBenchmarkResult, PredictiveBenchmarkResult],
     ) -> None:
-        train, val, test = split_frames
-        r1 = run_strategy("random", _BUDGET, _SEED, train, val, test)
-        r2 = run_strategy("random", _BUDGET, _SEED, train, val, test)
-        assert r1 is not None
-        assert r2 is not None
+        r1, r2 = run_pair
         assert r1.test_mae == r2.test_mae
 
     def test_selected_parameters_are_reproducible(
-        self, split_frames: tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
+        self,
+        run_pair: tuple[PredictiveBenchmarkResult, PredictiveBenchmarkResult],
     ) -> None:
-        train, val, test = split_frames
-        r1 = run_strategy("random", _BUDGET, _SEED, train, val, test)
-        r2 = run_strategy("random", _BUDGET, _SEED, train, val, test)
-        assert r1 is not None
-        assert r2 is not None
+        r1, r2 = run_pair
         assert r1.selected_parameters == r2.selected_parameters

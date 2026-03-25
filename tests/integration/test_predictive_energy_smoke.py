@@ -45,69 +45,60 @@ def split_frames() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     return split_time_frame(df, train_frac=_SPLIT_FRACS[0], val_frac=_SPLIT_FRACS[1])
 
 
+def _assert_valid_result(result: PredictiveBenchmarkResult | None, strategy: str) -> None:
+    """Shared assertions for any strategy result."""
+    assert result is not None
+    assert isinstance(result, PredictiveBenchmarkResult)
+    assert result.strategy == strategy
+    assert result.test_mae > 0
+    assert result.best_validation_mae > 0
+    assert result.runtime_seconds > 0
+
+
 class TestSmokeBenchmarkRandom:
     """Smoke test: random strategy completes and produces valid result."""
 
-    def test_random_returns_benchmark_result(
+    @pytest.fixture(scope="class")
+    def random_result(
         self, split_frames: tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
-    ) -> None:
+    ) -> PredictiveBenchmarkResult:
         train, val, test = split_frames
-        result = run_strategy("random", _BUDGET, _SEED, train, val, test)
-        assert isinstance(result, PredictiveBenchmarkResult)
-
-    def test_random_all_fields_populated(
-        self, split_frames: tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
-    ) -> None:
-        train, val, test = split_frames
-        result = run_strategy("random", _BUDGET, _SEED, train, val, test)
+        result: PredictiveBenchmarkResult | None = run_strategy(
+            "random", _BUDGET, _SEED, train, val, test
+        )
         assert result is not None
-        assert result.strategy == "random"
-        assert result.budget == _BUDGET
-        assert result.seed == _SEED
-        assert result.test_mae > 0
-        assert result.best_validation_mae > 0
-        assert result.runtime_seconds > 0
-        assert isinstance(result.selected_parameters, dict)
-        assert len(result.selected_parameters) > 0
+        return result
 
-    def test_random_gap_is_computed(
-        self, split_frames: tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
-    ) -> None:
-        train, val, test = split_frames
-        result = run_strategy("random", _BUDGET, _SEED, train, val, test)
-        assert result is not None
-        assert result.validation_test_gap == pytest.approx(
-            result.test_mae - result.best_validation_mae
+    def test_random_returns_valid_result(self, random_result: PredictiveBenchmarkResult) -> None:
+        _assert_valid_result(random_result, "random")
+        assert random_result.budget == _BUDGET
+        assert random_result.seed == _SEED
+        assert isinstance(random_result.selected_parameters, dict)
+        assert len(random_result.selected_parameters) > 0
+
+    def test_random_gap_is_computed(self, random_result: PredictiveBenchmarkResult) -> None:
+        assert random_result.validation_test_gap == pytest.approx(
+            random_result.test_mae - random_result.best_validation_mae
         )
 
 
 class TestSmokeBenchmarkSurrogateOnly:
     """Smoke test: surrogate_only strategy completes and produces valid result."""
 
-    def test_surrogate_only_returns_benchmark_result(
+    def test_surrogate_only_returns_valid_result(
         self, split_frames: tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
     ) -> None:
         train, val, test = split_frames
         result = run_strategy("surrogate_only", _BUDGET, _SEED, train, val, test)
-        assert result is not None
-        assert isinstance(result, PredictiveBenchmarkResult)
-        assert result.strategy == "surrogate_only"
-        assert result.test_mae > 0
-        assert result.best_validation_mae > 0
-        assert result.runtime_seconds > 0
+        _assert_valid_result(result, "surrogate_only")
 
 
 class TestSmokeBenchmarkCausal:
     """Smoke test: causal strategy completes and produces valid result."""
 
-    def test_causal_returns_benchmark_result(
+    def test_causal_returns_valid_result(
         self, split_frames: tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
     ) -> None:
         train, val, test = split_frames
         result = run_strategy("causal", _BUDGET, _SEED, train, val, test)
-        assert result is not None
-        assert isinstance(result, PredictiveBenchmarkResult)
-        assert result.strategy == "causal"
-        assert result.test_mae > 0
-        assert result.best_validation_mae > 0
-        assert result.runtime_seconds > 0
+        _assert_valid_result(result, "causal")
