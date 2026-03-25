@@ -5,9 +5,10 @@ fixture dataset with a tiny budget (3 experiments).  They verify that each
 strategy completes without error and produces a fully-populated
 :class:`PredictiveBenchmarkResult`.
 
-The fixture dataset (200 rows) requires relaxed split fractions
-(0.5/0.25/0.25) so that every partition has at least 10 rows after the
-``_MIN_PARTITION_ROWS`` check in ``split_time_frame``.
+The fixture dataset (200 rows) uses relaxed split fractions
+(0.5/0.25/0.25) to leave each partition with enough rows after
+lag-feature creation in ``EnergyLoadAdapter`` (up to 48 rows can be
+dropped for ``lookback_window=48``).
 """
 
 from __future__ import annotations

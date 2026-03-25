@@ -11,7 +11,7 @@
 
 ### New files
 
-1. **`tests/integration/test_predictive_energy_smoke.py`** — 5 smoke tests calling `run_strategy` from the benchmark script on the 200-row fixture dataset with budget=3. Tests each strategy ("random", "surrogate_only", "causal") and verifies `PredictiveBenchmarkResult` fields are populated (`test_mae > 0`, `best_validation_mae > 0`, `runtime_seconds > 0`, gap auto-computed).
+1. **`tests/integration/test_predictive_energy_smoke.py`** — 4 smoke tests calling `run_strategy` from the benchmark script on the 200-row fixture dataset with budget=3. Tests each strategy ("random", "surrogate_only", "causal") and verifies `PredictiveBenchmarkResult` fields are populated (`test_mae > 0`, `best_validation_mae > 0`, `runtime_seconds > 0`, gap auto-computed).
 
 2. **`tests/regression/test_predictive_energy_reproducibility.py`** — 3 reproducibility tests marked `@pytest.mark.slow`. Runs `run_strategy("random", budget=3, seed=42)` twice and asserts `best_validation_mae`, `test_mae`, and `selected_parameters` are exactly equal across runs.
 
@@ -37,7 +37,7 @@ uv run mypy causal_optimizer/
 ## New Tests Only
 
 ```bash
-# Smoke tests (5 tests, ~26s)
+# Smoke tests (4 tests, ~26s)
 uv run pytest tests/integration/test_predictive_energy_smoke.py -v
 
 # Reproducibility tests (3 tests, ~2s, marked slow)
