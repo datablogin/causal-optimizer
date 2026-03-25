@@ -66,6 +66,8 @@ def _assert_valid_result(
     assert result.runtime_seconds > 0
     assert isinstance(result.selected_parameters, dict)
     assert len(result.selected_parameters) > 0
+    # validation_test_gap is auto-computed in __post_init__
+    assert result.validation_test_gap == pytest.approx(result.test_mae - result.best_validation_mae)
 
 
 @pytest.mark.slow

@@ -13,7 +13,7 @@
 
 1. **`tests/integration/test_predictive_energy_smoke.py`** — 4 smoke tests calling `run_strategy` from the benchmark script on the 200-row fixture dataset with budget=3. Tests each strategy ("random", "surrogate_only", "causal") and verifies `PredictiveBenchmarkResult` fields are populated (`test_mae > 0`, `best_validation_mae > 0`, `runtime_seconds > 0`, gap auto-computed).
 
-2. **`tests/regression/test_predictive_energy_reproducibility.py`** — 3 reproducibility tests marked `@pytest.mark.slow`. Runs `run_strategy("random", budget=3, seed=42)` twice and asserts `best_validation_mae`, `test_mae`, and `selected_parameters` are exactly equal across runs.
+2. **`tests/regression/test_predictive_energy_reproducibility.py`** — 9 reproducibility tests (3 per strategy) marked `@pytest.mark.slow`. Runs each strategy ("random", "surrogate_only", "causal") twice with seed=42, budget=3 and asserts `best_validation_mae`, `test_mae`, and `selected_parameters` are exactly equal across runs.
 
 3. **`thoughts/shared/docs/predictive-energy-benchmark.md`** — Benchmark documentation covering dataset contract, locked split, strategies, output artifact schema, example commands, key rule (test performance required for claims), and limitations.
 
