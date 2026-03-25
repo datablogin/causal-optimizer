@@ -16,6 +16,7 @@ All tests are marked ``@pytest.mark.slow`` because engine-based strategies
 
 from __future__ import annotations
 
+import math
 import sys
 from pathlib import Path
 
@@ -62,7 +63,11 @@ def _assert_valid_result(
     assert result.budget == budget
     assert result.seed == seed
     assert result.test_mae > 0
+    assert math.isfinite(result.test_mae), f"test_mae is not finite: {result.test_mae}"
     assert result.best_validation_mae > 0
+    assert math.isfinite(result.best_validation_mae), (
+        f"best_validation_mae is not finite: {result.best_validation_mae}"
+    )
     assert result.runtime_seconds > 0
     assert isinstance(result.selected_parameters, dict)
     assert len(result.selected_parameters) > 0
