@@ -7,9 +7,13 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 # The script lives under scripts/, which is not a package.  Add it to
 # sys.path so we can import it by module name.
@@ -21,6 +25,7 @@ from energy_predictive_benchmark import (  # noqa: E402, I001
     _fmt_mean_std,
     _sanitize_for_json,
     parse_args,
+    run_strategy,
 )
 
 
@@ -147,3 +152,72 @@ class TestFmtMeanStd:
         result = _fmt_mean_std([0.1234, 0.5678])
         # "X.XXXX +/- X.XXXX" = 18 chars max for typical 4-decimal values
         assert len(result) <= 20
+
+
+# ── run_strategy ─────────────────────────────────────────────────────
+
+_FIXTURE_PATH = Path(__file__).resolve().parent.parent / "fixtures" / "energy_load_fixture.csv"
+
+
+class TestRunStrategy:
+    """Tests for run_strategy behavior."""
+
+    @pytest.fixture()
+    def _splits(self) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        from causal_optimizer.benchmarks.predictive_energy import (
+            load_energy_frame,
+            split_time_frame,
+        )
+
+        df = load_energy_frame(str(_FIXTURE_PATH))
+        return split_time_frame(df, train_frac=0.5, val_frac=0.25)
+
+    def test_runtime_includes_test_evaluation(
+        self, _splits: tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
+    ) -> None:
+        """runtime_seconds should cover the full run including test eval."""
+        train, val, test = _splits
+        result = run_strategy("random", budget=2, seed=0, train_df=train, val_df=val, test_df=test)
+        assert result is not None
+        # runtime must be positive and should include test eval time
+        assert result.runtime_seconds > 0
+
+    def test_returns_none_when_engine_all_crash(
+        self, _splits: tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
+    ) -> None:
+        """Engine-based strategy returns None when all experiments crash.
+
+        ExperimentEngine catches per-experiment exceptions and marks them
+        CRASH, so best_result() returns None. run_strategy should then
+        return None instead of a sentinel row.
+        """
+        from unittest.mock import patch
+
+        train, val, test = _splits
+
+        # Patch the runner's run method to always raise, simulating crashes.
+        # ExperimentEngine catches these and marks results as CRASH.
+        with patch.object(
+            __import__("energy_predictive_benchmark"),
+            "ValidationEnergyRunner",
+        ) as mock_cls:
+            mock_runner = mock_cls.return_value
+            mock_runner.run.side_effect = RuntimeError("simulated crash")
+            result = run_strategy(
+                "surrogate_only",
+                budget=3,
+                seed=0,
+                train_df=train,
+                val_df=val,
+                test_df=test,
+            )
+
+        assert result is None
+
+    def test_invalid_strategy_raises(
+        self, _splits: tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
+    ) -> None:
+        """Unknown strategy name should raise ValueError."""
+        train, val, test = _splits
+        with pytest.raises(ValueError, match="Unknown strategy"):
+            run_strategy("bogus", budget=2, seed=0, train_df=train, val_df=val, test_df=test)

@@ -129,7 +129,7 @@ def run_strategy(
     train_df: pd.DataFrame,
     val_df: pd.DataFrame,
     test_df: pd.DataFrame,
-) -> PredictiveBenchmarkResult:
+) -> PredictiveBenchmarkResult | None:
     """Run one strategy on the predictive energy benchmark.
 
     Args:
@@ -141,7 +141,8 @@ def run_strategy(
         test_df: Test partition.
 
     Returns:
-        A :class:`PredictiveBenchmarkResult` with validation and test metrics.
+        A :class:`PredictiveBenchmarkResult` with validation and test metrics,
+        or ``None`` if no valid result was produced (all experiments crashed).
 
     Raises:
         ValueError: If *strategy* is not in ``_VALID_STRATEGIES``.
@@ -194,28 +195,15 @@ def run_strategy(
             best_mae = float("inf")
             best_params = None
 
-    runtime = time.perf_counter() - t_start
-
-    # If no valid result, return sentinel values.
-    # Note: inf - inf = nan for validation_test_gap; this is intentional.
-    # _sanitize_for_json converts it to null, and _print_summary filters
-    # it out via math.isfinite.
+    # If no valid result, skip — do not serialize a sentinel row.
     if best_params is None:
         logger.warning(
-            "Strategy %r with budget=%d seed=%d produced no valid results; skipping test eval.",
+            "Strategy %r with budget=%d seed=%d produced no valid results; skipping.",
             strategy,
             budget,
             seed,
         )
-        return PredictiveBenchmarkResult(
-            strategy=strategy,
-            budget=budget,
-            seed=seed,
-            best_validation_mae=float("inf"),
-            test_mae=float("inf"),
-            selected_parameters={},
-            runtime_seconds=runtime,
-        )
+        return None
 
     # Evaluate best config on held-out test set
     test_metrics = evaluate_on_test(
@@ -226,6 +214,9 @@ def run_strategy(
         seed=seed,
     )
     test_mae = test_metrics.get("mae", float("inf"))
+
+    # Timer covers the full strategy run including test evaluation.
+    runtime = time.perf_counter() - t_start
 
     return PredictiveBenchmarkResult(
         strategy=strategy,
@@ -350,7 +341,8 @@ def main() -> None:
                 )
                 try:
                     result = run_strategy(strategy, budget, seed, train_df, val_df, test_df)
-                    results.append(result)
+                    if result is not None:
+                        results.append(result)
                 except Exception:
                     logger.warning(
                         "Strategy %s budget=%d seed=%d failed; skipping.",
