@@ -228,7 +228,7 @@ class BenchmarkRunner:
         best_so_far = float("inf")
 
         for _ in range(budget):
-            params = _sample_random_params(space, sample_rng)
+            params = sample_random_params(space, sample_rng)
             metrics = bench.run(params)
             # TODO: hardcodes "objective" key and min(); see engine TODO above
             obj = metrics.get("objective", float("inf"))
@@ -269,7 +269,7 @@ class BenchmarkRunner:
         return None
 
 
-def _sample_random_params(space: SearchSpace, rng: np.random.Generator) -> dict[str, Any]:
+def sample_random_params(space: SearchSpace, rng: np.random.Generator) -> dict[str, Any]:
     """Sample uniformly random parameters from a search space."""
     params: dict[str, Any] = {}
     for var in space.variables:
