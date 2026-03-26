@@ -2,7 +2,7 @@
 
 Centralizes the ``sys.path`` manipulation needed to import ``run_strategy``
 from ``scripts/energy_predictive_benchmark.py`` and the ``split_frames``
-fixture used by both smoke and reproducibility tests.
+fixture used by smoke tests in this directory.
 """
 
 from __future__ import annotations

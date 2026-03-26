@@ -20,7 +20,7 @@ import math
 from typing import TYPE_CHECKING
 
 import pytest
-from energy_predictive_benchmark import run_strategy  # noqa: E402
+from energy_predictive_benchmark import run_strategy
 
 from causal_optimizer.benchmarks.predictive_energy import PredictiveBenchmarkResult
 
