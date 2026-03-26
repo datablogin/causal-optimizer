@@ -27,8 +27,6 @@ from causal_optimizer.benchmarks.predictive_energy import (
 )
 
 # Import run_strategy from the scripts directory.
-# The integration conftest.py centralizes this for smoke tests, but since
-# regression tests are in a sibling directory, we need our own sys.path setup.
 _SCRIPTS_DIR = str(Path(__file__).resolve().parent.parent.parent / "scripts")
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
