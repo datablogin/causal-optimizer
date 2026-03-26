@@ -29,6 +29,22 @@ logger = logging.getLogger(__name__)
 #: Uses a leading underscore to avoid collision with user-defined metric names.
 _SCALARIZED_KEY = "__scalarized_objective__"
 
+# --- Candidate generation constants ---
+#: In causal mode, split the 100-candidate budget: half LHS, half targeted.
+_CAUSAL_LHS_CANDIDATES = 50
+_CAUSAL_TARGETED_CANDIDATES = 50
+#: In surrogate-only mode, use 100 pure LHS candidates.
+_SURROGATE_ONLY_CANDIDATES = 100
+#: Parent vs non-parent weight ratio in causal exploitation (before normalization).
+_PARENT_WEIGHT = 0.7
+_NON_PARENT_WEIGHT = 0.3
+#: Continuous perturbation scale for exploitation (fixed 10% of range).
+_EXPLOITATION_SCALE = 0.1
+#: Continuous perturbation scale range for targeted candidates (10-30% of range).
+_TARGETED_SCALE_RANGE = (0.1, 0.3)
+#: Seed offset (prime) for targeted candidate generation to avoid LHS seed collision.
+_TARGETED_SEED_OFFSET = 7919
+
 
 def _derive_seed(seed: int | None, step: int) -> int | None:
     """Derive a step-specific seed from a base seed.
@@ -286,7 +302,12 @@ def _suggest_exploitation(
         eligible_var_names = {v.name for _, v in eligible_vars}
         parent_focus = {name for name in parent_names if name in eligible_var_names}
         if parent_focus and len(parent_focus) < len(eligible_vars):
-            weights = np.array([0.7 if v.name in parent_focus else 0.3 for _, v in eligible_vars])
+            weights = np.array(
+                [
+                    _PARENT_WEIGHT if v.name in parent_focus else _NON_PARENT_WEIGHT
+                    for _, v in eligible_vars
+                ]
+            )
             weights = weights / weights.sum()
         else:
             weights = None
@@ -304,24 +325,7 @@ def _suggest_exploitation(
 
     for choice_idx in chosen:
         _idx, var = eligible_vars[choice_idx]
-        is_continuous = var.variable_type == VariableType.CONTINUOUS
-        is_integer = var.variable_type == VariableType.INTEGER
-        has_bounds = var.lower is not None and var.upper is not None
-        if is_continuous and has_bounds:
-            current = params.get(var.name, (var.lower + var.upper) / 2)
-            scale = (var.upper - var.lower) * 0.1  # 10% perturbation
-            new_val = current + rng.normal(0, scale)
-            params[var.name] = float(np.clip(new_val, var.lower, var.upper))
-        elif is_integer and has_bounds:
-            current = params.get(var.name, int((var.lower + var.upper) / 2))
-            new_val = current + rng.integers(-2, 3)
-            params[var.name] = int(np.clip(new_val, var.lower, var.upper))
-        elif var.variable_type == VariableType.BOOLEAN:
-            if rng.random() < 0.3:  # flip with 30% probability
-                params[var.name] = not params.get(var.name, False)
-        elif var.variable_type == VariableType.CATEGORICAL and var.choices:
-            if rng.random() < 0.3:
-                params[var.name] = rng.choice(var.choices)
+        _perturb_variable(params, var, rng, continuous_scale=_EXPLOITATION_SCALE)
 
     return params
 
@@ -438,23 +442,25 @@ def _suggest_surrogate(
     designer = FactorialDesigner(search_space)
 
     if causal_graph is not None and best_params:
-        # Causal mode: 50 LHS + 50 targeted intervention candidates
-        candidates = designer.latin_hypercube(n_samples=50, seed=seed)
+        # Causal mode: split budget between LHS and targeted intervention candidates
+        candidates = designer.latin_hypercube(n_samples=_CAUSAL_LHS_CANDIDATES, seed=seed)
         targeted = _generate_targeted_candidates(
             search_space,
             best_params,
             causal_graph,
             objective_name,
             focus_var_names=focus_var_names,
-            n_candidates=50,
+            n_candidates=_CAUSAL_TARGETED_CANDIDATES,
             seed=seed,
         )
         candidates.extend(targeted)
     else:
-        # Surrogate-only mode: 100 LHS candidates (original behavior)
-        candidates = designer.latin_hypercube(n_samples=100, seed=seed)
+        # Surrogate-only mode: pure LHS candidates (original behavior)
+        candidates = designer.latin_hypercube(n_samples=_SURROGATE_ONLY_CANDIDATES, seed=seed)
 
-    # For each candidate, hold non-focus variables at best-known values
+    # For each candidate, hold non-focus variables at best-known values.
+    # Invariant: _generate_targeted_candidates only perturbs parents that are
+    # in focus_var_names, so this pinning never reverts targeted perturbations.
     non_focus_vars = set(all_var_names) - set(focus_var_names)
     if non_focus_vars and best_params:
         for candidate in candidates:
@@ -497,7 +503,7 @@ def _generate_targeted_candidates(
 
     Falls back to random samples if no eligible parents remain.
     """
-    rng = np.random.default_rng(seed if seed is None else seed + 7919)
+    rng = np.random.default_rng(seed if seed is None else seed + _TARGETED_SEED_OFFSET)
 
     parents = causal_graph.parents(objective_name)
     # Filter to parents that are in both the search space and focus variables
@@ -506,16 +512,16 @@ def _generate_targeted_candidates(
     eligible_parents = sorted(name for name in parents if name in var_map and name in focus_set)
 
     if not eligible_parents:
-        # No usable parents — fall back to random samples
-        from causal_optimizer.designer.factorial import FactorialDesigner
+        # No usable parents — fall back to LHS samples.
+        # Import kept inline to match the lazy-import pattern in _suggest_surrogate.
+        from causal_optimizer.designer.factorial import FactorialDesigner  # noqa: F811
 
-        designer = FactorialDesigner(search_space)
-        return designer.latin_hypercube(n_samples=n_candidates, seed=seed)
+        return FactorialDesigner(search_space).latin_hypercube(n_samples=n_candidates, seed=seed)
 
     candidates: list[dict[str, Any]] = []
     for _ in range(n_candidates):
         candidate = dict(best_params)
-        n_perturb = rng.integers(1, min(3, len(eligible_parents)) + 1)
+        n_perturb = rng.integers(1, min(2, len(eligible_parents)) + 1)
         chosen_parents = rng.choice(eligible_parents, size=n_perturb, replace=False)
 
         for parent_name in chosen_parents:
@@ -530,30 +536,37 @@ def _perturb_variable(
     params: dict[str, Any],
     var: Variable,
     rng: np.random.Generator,
+    continuous_scale: float | tuple[float, float] = _TARGETED_SCALE_RANGE,
 ) -> None:
     """Perturb a single variable in-place.
 
-    Similar to exploitation perturbation but with a wider continuous range
-    (10-30% of range vs exploitation's fixed 10%) to ensure diversity among
-    the 50 targeted candidates.  Integer: +/-1-2.  Boolean: flip with 30%
-    probability.  Categorical: random choice with 30%.
+    Used by both exploitation (fixed scale) and targeted candidate generation
+    (random scale range) to keep perturbation logic in one place.
+
+    Args:
+        continuous_scale: Fraction of the variable range used as the std-dev
+            for Gaussian perturbation.  A single float gives a fixed scale
+            (e.g. 0.1 = 10%).  A (lo, hi) tuple draws a uniform random
+            scale per call to increase diversity among candidates.
+            Integer: +/-1-2.  Boolean: flip with 30%.  Categorical: random 30%.
     """
     is_continuous = var.variable_type == VariableType.CONTINUOUS
     is_integer = var.variable_type == VariableType.INTEGER
-    has_bounds = var.lower is not None and var.upper is not None
-    if is_continuous and has_bounds:
-        assert var.lower is not None and var.upper is not None
+    if is_continuous and var.lower is not None and var.upper is not None:
         current = params.get(var.name, (var.lower + var.upper) / 2)
-        # 10-30% of range perturbation
-        pct = rng.uniform(0.1, 0.3)
+        if isinstance(continuous_scale, tuple):
+            pct = float(rng.uniform(continuous_scale[0], continuous_scale[1]))
+        else:
+            pct = continuous_scale
         scale = (var.upper - var.lower) * pct
         new_val = current + rng.normal(0, scale)
         params[var.name] = float(np.clip(new_val, var.lower, var.upper))
-    elif is_integer and has_bounds:
-        assert var.lower is not None and var.upper is not None
-        current = params.get(var.name, int((var.lower + var.upper) / 2))
+    elif is_integer and var.lower is not None and var.upper is not None:
+        lower_i = int(var.lower)
+        upper_i = int(var.upper)
+        current = params.get(var.name, (lower_i + upper_i) // 2)
         new_val = current + rng.integers(-2, 3)
-        params[var.name] = int(np.clip(new_val, var.lower, var.upper))
+        params[var.name] = int(np.clip(new_val, lower_i, upper_i))
     elif var.variable_type == VariableType.BOOLEAN:
         if rng.random() < 0.3:
             params[var.name] = not params.get(var.name, False)

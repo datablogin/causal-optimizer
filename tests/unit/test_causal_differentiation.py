@@ -281,3 +281,140 @@ def test_exploitation_prefers_parents_when_causal_graph_provided() -> None:
         f"xy changed {xy_changed_count} times vs z changed {z_changed_count} times. "
         "Expected parents to be perturbed more frequently."
     )
+
+
+# --- Direct tests for _generate_targeted_candidates ---
+
+
+def test_generate_targeted_candidates_structure() -> None:
+    """Each targeted candidate should perturb only 1-2 parents from best_params."""
+    from causal_optimizer.optimizer.suggest import _generate_targeted_candidates
+
+    ss = _make_search_space()
+    graph = _make_star_graph()
+    log = _make_experiment_log(n=15)
+    best = log.best_result("objective", minimize=True)
+    assert best is not None
+
+    candidates = _generate_targeted_candidates(
+        ss,
+        dict(best.parameters),
+        graph,
+        "objective",
+        focus_var_names=["x", "y", "z"],
+        n_candidates=20,
+        seed=42,
+    )
+
+    assert len(candidates) == 20
+    for candidate in candidates:
+        # Count variables that differ from best
+        n_changed = sum(
+            1
+            for var_name in ["x", "y", "z"]
+            if abs(candidate[var_name] - best.parameters[var_name]) > 1e-10
+        )
+        # Each candidate should perturb only 1 or 2 variables (parents)
+        assert 1 <= n_changed <= 2, f"Expected 1-2 changed variables, got {n_changed}"
+
+
+def test_generate_targeted_candidates_no_parents_fallback() -> None:
+    """When objective has no parents in the search space, fall back to LHS."""
+    from causal_optimizer.optimizer.suggest import _generate_targeted_candidates
+
+    ss = _make_search_space()
+    # Graph where objective has no parents (it's a root node)
+    graph = CausalGraph(edges=[("objective", "downstream")])
+    log = _make_experiment_log(n=15)
+    best = log.best_result("objective", minimize=True)
+    assert best is not None
+
+    candidates = _generate_targeted_candidates(
+        ss,
+        dict(best.parameters),
+        graph,
+        "objective",
+        n_candidates=10,
+        seed=42,
+    )
+
+    # Should still return 10 candidates (via LHS fallback)
+    assert len(candidates) == 10
+
+
+def test_exploitation_all_parents_uniform_weights() -> None:
+    """When all eligible variables are parents, exploitation uses uniform weights."""
+    from causal_optimizer.optimizer.suggest import _suggest_exploitation
+
+    # All 3 vars are parents of objective
+    graph = _make_star_graph()
+    ss = _make_search_space()
+    log = _make_experiment_log(n=15)
+    best = log.best_result("objective", minimize=True)
+    assert best is not None
+
+    # Run many trials; all variables should be perturbed roughly equally
+    change_counts = {"x": 0, "y": 0, "z": 0}
+    n_trials = 200
+    for trial in range(n_trials):
+        seed = 500 + trial
+        result = _suggest_exploitation(
+            ss,
+            log,
+            minimize=True,
+            objective_name="objective",
+            focus_variables=["x", "y", "z"],
+            causal_graph=graph,
+            seed=seed,
+        )
+        for var_name in ["x", "y", "z"]:
+            if abs(result[var_name] - best.parameters[var_name]) > 1e-10:
+                change_counts[var_name] += 1
+
+    # With uniform weights, each variable should be perturbed at least 20% of trials
+    for var_name, count in change_counts.items():
+        assert count > n_trials * 0.15, (
+            f"Variable {var_name} was only perturbed {count}/{n_trials} times. "
+            "Expected roughly uniform perturbation when all variables are parents."
+        )
+
+
+def test_perturb_variable_mixed_types() -> None:
+    """_perturb_variable handles integer, boolean, and categorical variables."""
+    from causal_optimizer.optimizer.suggest import _perturb_variable
+
+    rng = np.random.default_rng(42)
+
+    # Integer variable
+    int_var = Variable(name="n", variable_type=VariableType.INTEGER, lower=1, upper=10)
+    params: dict[str, object] = {"n": 5}
+    _perturb_variable(params, int_var, rng)
+    assert isinstance(params["n"], int)
+    assert 1 <= params["n"] <= 10
+
+    # Boolean variable
+    bool_var = Variable(name="flag", variable_type=VariableType.BOOLEAN)
+    params = {"flag": True}
+    # Run multiple times; eventually should flip
+    flipped = False
+    for _ in range(50):
+        params_copy = {"flag": True}
+        _perturb_variable(params_copy, bool_var, rng)
+        if params_copy["flag"] is False:
+            flipped = True
+            break
+    assert flipped, "Boolean perturbation should flip value with 30% probability"
+
+    # Categorical variable
+    cat_var = Variable(
+        name="model", variable_type=VariableType.CATEGORICAL, choices=["a", "b", "c"]
+    )
+    params = {"model": "a"}
+    changed = False
+    for _ in range(50):
+        params_copy = {"model": "a"}
+        _perturb_variable(params_copy, cat_var, rng)
+        if params_copy["model"] != "a":
+            changed = True
+            break
+    assert changed, "Categorical perturbation should change value with 30% probability"
