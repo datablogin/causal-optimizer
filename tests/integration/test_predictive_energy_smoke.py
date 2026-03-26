@@ -17,18 +17,37 @@ All tests are marked ``@pytest.mark.slow`` because engine-based strategies
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING
+import sys
+from pathlib import Path
 
+import pandas as pd
 import pytest
+
+from causal_optimizer.benchmarks.predictive_energy import (
+    PredictiveBenchmarkResult,
+    split_time_frame,
+)
+
+# The benchmark script lives in scripts/, not in a package.  Add it to
+# sys.path so we can import ``run_strategy`` directly.
+_SCRIPTS_DIR = str(Path(__file__).resolve().parent.parent.parent / "scripts")
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+
 from energy_predictive_benchmark import run_strategy  # noqa: E402
 
-from causal_optimizer.benchmarks.predictive_energy import PredictiveBenchmarkResult
-
-if TYPE_CHECKING:
-    import pandas as pd
+FIXTURE_PATH = Path(__file__).resolve().parent.parent / "fixtures" / "energy_load_fixture.csv"
 
 _BUDGET = 3
 _SEED = 0
+_SPLIT_FRACS = (0.5, 0.25)  # train_frac, val_frac — relaxed for 200-row fixture
+
+
+@pytest.fixture(scope="module")
+def split_frames() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Load fixture CSV and split into train/val/test with relaxed fractions."""
+    df = pd.read_csv(FIXTURE_PATH)
+    return split_time_frame(df, train_frac=_SPLIT_FRACS[0], val_frac=_SPLIT_FRACS[1])
 
 
 def _assert_valid_result(
