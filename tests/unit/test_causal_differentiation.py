@@ -450,3 +450,51 @@ def test_targeted_candidates_respect_focus_var_filter() -> None:
         assert candidate["z"] == best.parameters["z"], (
             "Parent 'z' was perturbed despite being excluded from focus_var_names"
         )
+
+
+def test_no_parent_fallback_produces_unique_candidates() -> None:
+    """No-parent fallback must produce 100 unique candidates in causal mode.
+
+    Regression test: previously the no-parent fallback in _generate_targeted_candidates
+    used the same seed as the first LHS batch in _suggest_surrogate, producing
+    50 duplicate candidates instead of 50 fresh ones.
+    """
+    ss = _make_search_space()
+    # Graph where objective has no parents in the search space
+    graph = CausalGraph(edges=[("objective", "downstream")])
+    log = _make_experiment_log(n=15)
+
+    # Patch _suggest_surrogate internals to capture the raw candidate list
+    # before RF scoring.  We do this by calling the two generation steps directly.
+    from causal_optimizer.designer.factorial import FactorialDesigner
+    from causal_optimizer.optimizer.suggest import (
+        _CAUSAL_LHS_CANDIDATES,
+        _CAUSAL_TARGETED_CANDIDATES,
+        _generate_targeted_candidates,
+    )
+
+    seed = 42
+    best = log.best_result("objective", minimize=True)
+    assert best is not None
+
+    designer = FactorialDesigner(ss)
+    lhs_candidates = designer.latin_hypercube(n_samples=_CAUSAL_LHS_CANDIDATES, seed=seed)
+    targeted_candidates = _generate_targeted_candidates(
+        ss,
+        dict(best.parameters),
+        graph,
+        "objective",
+        focus_var_names=list(ss.variable_names),
+        n_candidates=_CAUSAL_TARGETED_CANDIDATES,
+        seed=seed,
+    )
+
+    all_candidates = lhs_candidates + targeted_candidates
+    assert len(all_candidates) == _CAUSAL_LHS_CANDIDATES + _CAUSAL_TARGETED_CANDIDATES
+
+    # Convert each candidate dict to a hashable tuple for uniqueness check
+    unique = {tuple(sorted(c.items())) for c in all_candidates}
+    assert len(unique) == len(all_candidates), (
+        f"Expected {len(all_candidates)} unique candidates but got {len(unique)}. "
+        "The no-parent fallback is producing duplicate LHS candidates."
+    )

@@ -512,11 +512,15 @@ def _generate_targeted_candidates(
     eligible_parents = sorted(name for name in parents if name in var_map and name in focus_set)
 
     if not eligible_parents:
-        # No usable parents — fall back to LHS samples.
-        # Import kept inline to match the lazy-import pattern in _suggest_surrogate.
+        # No usable parents — fall back to LHS samples with offset seed so
+        # these candidates are distinct from the first LHS batch generated
+        # by _suggest_surrogate (which uses the raw seed).
         from causal_optimizer.designer.factorial import FactorialDesigner  # noqa: F811
 
-        return FactorialDesigner(search_space).latin_hypercube(n_samples=n_candidates, seed=seed)
+        fallback_seed = (seed + _TARGETED_SEED_OFFSET) if seed is not None else None
+        return FactorialDesigner(search_space).latin_hypercube(
+            n_samples=n_candidates, seed=fallback_seed
+        )
 
     candidates: list[dict[str, Any]] = []
     for _ in range(n_candidates):
