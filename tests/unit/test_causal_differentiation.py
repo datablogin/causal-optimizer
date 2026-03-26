@@ -418,3 +418,35 @@ def test_perturb_variable_mixed_types() -> None:
             changed = True
             break
     assert changed, "Categorical perturbation should change value with 30% probability"
+
+
+def test_targeted_candidates_respect_focus_var_filter() -> None:
+    """Targeted candidates only perturb parents that are in focus_var_names.
+
+    When focus_var_names excludes a parent, that parent should never be
+    perturbed in targeted candidates (the non-focus pinning invariant).
+    """
+    from causal_optimizer.optimizer.suggest import _generate_targeted_candidates
+
+    ss = _make_search_space()
+    graph = _make_star_graph()  # x, y, z all parents of objective
+    log = _make_experiment_log(n=15)
+    best = log.best_result("objective", minimize=True)
+    assert best is not None
+
+    # Only x and y are in focus; z is excluded
+    candidates = _generate_targeted_candidates(
+        ss,
+        dict(best.parameters),
+        graph,
+        "objective",
+        focus_var_names=["x", "y"],
+        n_candidates=30,
+        seed=42,
+    )
+
+    # z should never be perturbed since it's not in focus_var_names
+    for candidate in candidates:
+        assert candidate["z"] == best.parameters["z"], (
+            "Parent 'z' was perturbed despite being excluded from focus_var_names"
+        )
