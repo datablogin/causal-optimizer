@@ -7,7 +7,7 @@
 | Report ID | `20260325-0000-ercot_north_c_dfw_2022_2024` |
 | Benchmark | `predictive_energy` |
 | Date | `2026-03-26` |
-| Commit | `TBD` on branch `main` |
+| Commit | `346c71b210e93a5f8ff46909639a3f1655b6f490` on branch `main` |
 | Dataset ID | `ercot_north_c_dfw_2022_2024` |
 | Dataset | `/Users/robertwelborn/Projects/_local/causal-optimizer/data/ercot_north_c_dfw_2022_2024.parquet` |
 | Dataset Rows | `26,291` |
@@ -215,4 +215,4 @@ uv run python scripts/energy_predictive_benchmark.py \
   --output /Users/robertwelborn/Projects/_local/causal-optimizer/artifacts/ercot_north_c_dfw_2022_2024_results.json
 ```
 
-Commit: `TBD`
+Commit: `346c71b210e93a5f8ff46909639a3f1655b6f490`
