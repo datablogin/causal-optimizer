@@ -32,7 +32,7 @@
 | Raw Coverage | `2022-01-01 07:00:00 UTC` to `2024-12-31 23:00:00 UTC` |
 | Prepared Dataset Path | `/Users/robertwelborn/Projects/_local/causal-optimizer/data/ercot_coast_houston_2022_2024.parquet` |
 | Prepared File Size | `626 KB` |
-| Prepared File SHA256 | `n/a` |
+| Prepared File SHA256 | `bc8d56c6f7e3c3e7a21963d02147ad790994c4f8afcaa309935898d9e6e4a570` |
 
 ### Weather Station Selection
 
@@ -45,7 +45,7 @@ George Bush Intercontinental Airport (IAH), station ID `USW00012960`, was select
 ### Preparation Notes
 
 1. ERCOT timestamps were treated as US/Central market time (CST/CDT), then converted to UTC. The "Hour Ending" convention was preserved: each timestamp represents the end of the hourly interval.
-2. DST fall-back handling: ERCOT marks the repeated hour with a "DST" suffix. The DST-tagged rows were converted using the CDT offset (UTC-5) directly, while the 01:00 AM ambiguous hours on fall-back dates were localized as CDT. Spring-forward nonexistent 02:00 timestamps were shifted forward. All 3 DST transitions per year were handled correctly with zero duplicate UTC timestamps.
+2. DST fall-back handling: ERCOT marks the repeated hour with a "DST" suffix. The DST-tagged rows were converted using the CDT offset (UTC-5) directly, while the 01:00 AM ambiguous hours on fall-back dates were localized as CDT. Spring-forward nonexistent 02:00 timestamps were shifted forward. All 6 DST transitions across the 3-year dataset were handled correctly with zero duplicate UTC timestamps.
 3. The "24:00" ERCOT convention (midnight expressed as hour 24 of the previous day) was converted to 00:00 of the next day (1,096 rows across 3 years).
 4. Load and weather were joined via inner join on exact UTC hour; 7 hours dropped where NOAA coverage started later than ERCOT (first 7 hours of 2022-01-01). No rows were dropped for missing data after the join.
 5. NOAA sub-hourly observations were averaged to hourly means. Temperature was parsed from the ISD TMP field (tenths of Celsius). Humidity was computed from temperature and dewpoint via the Magnus formula.
