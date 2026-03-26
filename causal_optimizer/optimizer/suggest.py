@@ -255,8 +255,8 @@ def _suggest_exploitation(
     If base_parameters is provided (e.g., from MAP-Elites), perturb those
     instead of the overall best.
     When *causal_graph* is provided, perturbation is biased toward direct
-    parents of the objective (selected with 70% probability vs 30% for
-    non-parent focus variables).
+    parents of the objective (parents are weighted 7:3 over non-parents
+    before normalization).
     """
     if base_parameters is not None:
         params = dict(base_parameters)
@@ -495,7 +495,7 @@ def _generate_targeted_candidates(
     parents = causal_graph.parents(objective_name)
     # Filter to parents that are in the search space
     var_map = {v.name: v for v in search_space.variables}
-    eligible_parents = [name for name in parents if name in var_map]
+    eligible_parents = sorted(name for name in parents if name in var_map)
 
     if not eligible_parents:
         # No usable parents — fall back to random samples
@@ -523,10 +523,12 @@ def _perturb_variable(
     var: Variable,
     rng: np.random.Generator,
 ) -> None:
-    """Perturb a single variable in-place using exploitation-style logic.
+    """Perturb a single variable in-place.
 
-    Continuous: +/-10-30% of range.  Integer: +/-1-2.
-    Boolean: flip with 30% probability.  Categorical: random choice with 30%.
+    Similar to exploitation perturbation but with a wider continuous range
+    (10-30% of range vs exploitation's fixed 10%) to ensure diversity among
+    the 50 targeted candidates.  Integer: +/-1-2.  Boolean: flip with 30%
+    probability.  Categorical: random choice with 30%.
     """
     is_continuous = var.variable_type == VariableType.CONTINUOUS
     is_integer = var.variable_type == VariableType.INTEGER
