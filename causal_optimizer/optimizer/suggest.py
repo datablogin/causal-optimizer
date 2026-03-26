@@ -283,7 +283,8 @@ def _suggest_exploitation(
     # Direct parents of the objective get higher weight (70/30 split).
     if causal_graph is not None:
         parent_names = causal_graph.parents(objective_name)
-        parent_focus = {name for name in parent_names if name in (focus_variables or [])}
+        eligible_var_names = {v.name for _, v in eligible_vars}
+        parent_focus = {name for name in parent_names if name in eligible_var_names}
         if parent_focus and len(parent_focus) < len(eligible_vars):
             weights = np.array([0.7 if v.name in parent_focus else 0.3 for _, v in eligible_vars])
             weights = weights / weights.sum()
@@ -444,6 +445,7 @@ def _suggest_surrogate(
             best_params,
             causal_graph,
             objective_name,
+            focus_var_names=focus_var_names,
             n_candidates=50,
             seed=seed,
         )
@@ -478,24 +480,30 @@ def _generate_targeted_candidates(
     best_params: dict[str, Any],
     causal_graph: CausalGraph,
     objective_name: str,
+    focus_var_names: list[str] | None = None,
     n_candidates: int = 50,
     seed: int | None = None,
 ) -> list[dict[str, Any]]:
     """Generate targeted intervention candidates by perturbing direct parents.
 
     Each candidate starts from *best_params*, randomly selects 1 or 2 direct
-    parents of the objective, and perturbs only those variables.  This mirrors
-    the perturbation logic in :func:`_suggest_exploitation`.
+    parents of the objective, and perturbs only those variables.  Uses a wider
+    perturbation range (10-30%) than exploitation (fixed 10%) to ensure
+    diversity among the targeted candidates.
 
-    Falls back to random samples if the graph has no parents of the objective
-    that overlap with the search space.
+    Only parents that are both in the search space *and* in *focus_var_names*
+    are eligible for perturbation, so that non-focus variable pinning
+    (applied downstream) does not silently revert perturbations.
+
+    Falls back to random samples if no eligible parents remain.
     """
     rng = np.random.default_rng(seed if seed is None else seed + 7919)
 
     parents = causal_graph.parents(objective_name)
-    # Filter to parents that are in the search space
+    # Filter to parents that are in both the search space and focus variables
     var_map = {v.name: v for v in search_space.variables}
-    eligible_parents = sorted(name for name in parents if name in var_map)
+    focus_set = set(focus_var_names) if focus_var_names else set(var_map.keys())
+    eligible_parents = sorted(name for name in parents if name in var_map and name in focus_set)
 
     if not eligible_parents:
         # No usable parents — fall back to random samples
