@@ -19,6 +19,7 @@ from causal_optimizer.types import (
     ExperimentLog,
     ObjectiveSpec,
     SearchSpace,
+    Variable,
     VariableType,
 )
 
@@ -113,6 +114,7 @@ def suggest_parameters(
                 surrogate_objective,
                 focus_variables=focus_variables,
                 base_parameters=base_parameters,
+                causal_graph=causal_graph,
                 seed=step_seed,
             )
         else:
@@ -231,6 +233,7 @@ def _suggest_optimization(
             focus_variables,
             minimize,
             objective_name,
+            causal_graph=causal_graph,
             seed=step_seed,
         )
 
@@ -242,6 +245,7 @@ def _suggest_exploitation(
     objective_name: str,
     focus_variables: list[str] | None = None,
     base_parameters: dict[str, Any] | None = None,
+    causal_graph: CausalGraph | None = None,
     seed: int | None = None,
 ) -> dict[str, Any]:
     """Exploitation: perturb the best known configuration or a provided base.
@@ -250,6 +254,9 @@ def _suggest_exploitation(
     that set, keeping others at their best-known values.
     If base_parameters is provided (e.g., from MAP-Elites), perturb those
     instead of the overall best.
+    When *causal_graph* is provided, perturbation is biased toward direct
+    parents of the objective (selected with 70% probability vs 30% for
+    non-parent focus variables).
     """
     if base_parameters is not None:
         params = dict(base_parameters)
@@ -272,9 +279,27 @@ def _suggest_exploitation(
     if not eligible_vars:
         eligible_vars = list(enumerate(search_space.variables))
 
+    # Build weighted selection probabilities when a causal graph is available.
+    # Direct parents of the objective get higher weight (70/30 split).
+    if causal_graph is not None:
+        parent_names = causal_graph.parents(objective_name)
+        parent_focus = {name for name in parent_names if name in (focus_variables or [])}
+        if parent_focus and len(parent_focus) < len(eligible_vars):
+            weights = np.array([0.7 if v.name in parent_focus else 0.3 for _, v in eligible_vars])
+            weights = weights / weights.sum()
+        else:
+            weights = None
+    else:
+        weights = None
+
     # Perturb one or two variables slightly
     n_perturb = rng.integers(1, min(3, len(eligible_vars)) + 1)
-    chosen = rng.choice(len(eligible_vars), size=n_perturb, replace=False)
+    chosen = rng.choice(
+        len(eligible_vars),
+        size=n_perturb,
+        replace=False,
+        p=weights,
+    )
 
     for choice_idx in chosen:
         _idx, var = eligible_vars[choice_idx]
@@ -365,6 +390,7 @@ def _suggest_surrogate(
     focus_variables: list[str],
     minimize: bool,
     objective_name: str,
+    causal_graph: CausalGraph | None = None,
     seed: int | None = None,
 ) -> dict[str, Any]:
     """Surrogate-guided sampling using random forest (fallback when Ax unavailable).
@@ -372,6 +398,11 @@ def _suggest_surrogate(
     If focus_variables is provided and non-empty, trains the RF model only on
     those features and only varies focus variables in candidates. Non-focus
     variables are held at their best-known values.
+
+    When *causal_graph* is provided, half of the candidate budget (50 of 100)
+    is replaced with "targeted intervention" candidates that perturb only 1-2
+    direct parents of the objective, starting from the best-known configuration.
+    This creates behavioral differentiation from surrogate_only mode (100 LHS).
     """
     from sklearn.ensemble import RandomForestRegressor
 
@@ -400,11 +431,26 @@ def _suggest_surrogate(
     rf = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=42)
     rf.fit(features, y)
 
-    # Generate candidates and pick the best predicted
+    # Generate candidates
     from causal_optimizer.designer.factorial import FactorialDesigner
 
     designer = FactorialDesigner(search_space)
-    candidates = designer.latin_hypercube(n_samples=100, seed=seed)
+
+    if causal_graph is not None and best_params:
+        # Causal mode: 50 LHS + 50 targeted intervention candidates
+        candidates = designer.latin_hypercube(n_samples=50, seed=seed)
+        targeted = _generate_targeted_candidates(
+            search_space,
+            best_params,
+            causal_graph,
+            objective_name,
+            n_candidates=50,
+            seed=seed,
+        )
+        candidates.extend(targeted)
+    else:
+        # Surrogate-only mode: 100 LHS candidates (original behavior)
+        candidates = designer.latin_hypercube(n_samples=100, seed=seed)
 
     # For each candidate, hold non-focus variables at best-known values
     non_focus_vars = set(all_var_names) - set(focus_var_names)
@@ -425,6 +471,85 @@ def _suggest_surrogate(
             best_candidate = candidate
 
     return best_candidate or candidates[0]
+
+
+def _generate_targeted_candidates(
+    search_space: SearchSpace,
+    best_params: dict[str, Any],
+    causal_graph: CausalGraph,
+    objective_name: str,
+    n_candidates: int = 50,
+    seed: int | None = None,
+) -> list[dict[str, Any]]:
+    """Generate targeted intervention candidates by perturbing direct parents.
+
+    Each candidate starts from *best_params*, randomly selects 1 or 2 direct
+    parents of the objective, and perturbs only those variables.  This mirrors
+    the perturbation logic in :func:`_suggest_exploitation`.
+
+    Falls back to random samples if the graph has no parents of the objective
+    that overlap with the search space.
+    """
+    rng = np.random.default_rng(seed if seed is None else seed + 7919)
+
+    parents = causal_graph.parents(objective_name)
+    # Filter to parents that are in the search space
+    var_map = {v.name: v for v in search_space.variables}
+    eligible_parents = [name for name in parents if name in var_map]
+
+    if not eligible_parents:
+        # No usable parents — fall back to random samples
+        from causal_optimizer.designer.factorial import FactorialDesigner
+
+        designer = FactorialDesigner(search_space)
+        return designer.latin_hypercube(n_samples=n_candidates, seed=seed)
+
+    candidates: list[dict[str, Any]] = []
+    for _ in range(n_candidates):
+        candidate = dict(best_params)
+        n_perturb = rng.integers(1, min(3, len(eligible_parents)) + 1)
+        chosen_parents = rng.choice(eligible_parents, size=n_perturb, replace=False)
+
+        for parent_name in chosen_parents:
+            var = var_map[parent_name]
+            _perturb_variable(candidate, var, rng)
+
+        candidates.append(candidate)
+    return candidates
+
+
+def _perturb_variable(
+    params: dict[str, Any],
+    var: Variable,
+    rng: np.random.Generator,
+) -> None:
+    """Perturb a single variable in-place using exploitation-style logic.
+
+    Continuous: +/-10-30% of range.  Integer: +/-1-2.
+    Boolean: flip with 30% probability.  Categorical: random choice with 30%.
+    """
+    is_continuous = var.variable_type == VariableType.CONTINUOUS
+    is_integer = var.variable_type == VariableType.INTEGER
+    has_bounds = var.lower is not None and var.upper is not None
+    if is_continuous and has_bounds:
+        assert var.lower is not None and var.upper is not None
+        current = params.get(var.name, (var.lower + var.upper) / 2)
+        # 10-30% of range perturbation
+        pct = rng.uniform(0.1, 0.3)
+        scale = (var.upper - var.lower) * pct
+        new_val = current + rng.normal(0, scale)
+        params[var.name] = float(np.clip(new_val, var.lower, var.upper))
+    elif is_integer and has_bounds:
+        assert var.lower is not None and var.upper is not None
+        current = params.get(var.name, int((var.lower + var.upper) / 2))
+        new_val = current + rng.integers(-2, 3)
+        params[var.name] = int(np.clip(new_val, var.lower, var.upper))
+    elif var.variable_type == VariableType.BOOLEAN:
+        if rng.random() < 0.3:
+            params[var.name] = not params.get(var.name, False)
+    elif var.variable_type == VariableType.CATEGORICAL and var.choices:
+        if rng.random() < 0.3:
+            params[var.name] = rng.choice(var.choices)
 
 
 def _get_focus_variables(
