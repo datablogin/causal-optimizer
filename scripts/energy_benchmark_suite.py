@@ -306,7 +306,11 @@ def check_coverage(
                     f"{dataset_id}: strategy={strategy} budget={budget} seed={seed} ({count} rows)"
                 )
 
-    complete = all(count >= expected_count for count in actual.values()) and len(actual) > 0
+    complete = (
+        all(count >= expected_count for count in actual.values())
+        and len(actual) > 0
+        and len(duplicates) == 0
+    )
     return CoverageResult(
         complete=complete,
         expected_per_dataset=expected_count,

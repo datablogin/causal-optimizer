@@ -342,3 +342,25 @@ class TestIncompleteCoverage:
         assert summary["acceptance"]["overall"] == "FAIL"
         assert summary["coverage"]["complete"] is False
         assert len(summary["coverage"]["duplicates"]) == 2
+
+    def test_all_combos_present_but_duplicated_still_fails(self) -> None:
+        """All expected unique combos present + a duplicate must FAIL."""
+        # All 6 expected combos present, plus one extra duplicate
+        results = [
+            self._make_result(s, 20, seed)
+            for s in ["random", "surrogate_only", "causal"]
+            for seed in [0, 1]
+        ]
+        results.append(self._make_result("causal", 20, 0))  # duplicate
+
+        coverage = check_coverage(
+            {"bench_a": results},
+            strategies=["random", "surrogate_only", "causal"],
+            budgets=[20],
+            seeds=[0, 1],
+        )
+
+        assert coverage.complete is False
+        assert len(coverage.missing) == 0
+        assert len(coverage.duplicates) == 1
+        assert "causal" in coverage.duplicates[0]
