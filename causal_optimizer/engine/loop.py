@@ -154,6 +154,9 @@ class ExperimentEngine:
                 uses the experimental CBO surrogate with separate GPs per
                 causal mechanism.  Requires a causal graph; falls back to
                 ``"bayesian"`` if no graph is provided.
+            audit_skip_rate: Fraction of would-be-skipped candidates to
+                force-evaluate for calibration (default 0.0, disabled).
+                Must be in ``[0.0, 1.0]``.
         """
         if not 0.0 <= audit_skip_rate <= 1.0:
             raise ValueError(f"audit_skip_rate must be in [0.0, 1.0], got {audit_skip_rate!r}")
@@ -674,10 +677,12 @@ class ExperimentEngine:
             uncertainty = float(prediction.uncertainty)
         except (TypeError, ValueError, AttributeError):
             return None
-        # Use max(|expected|, uncertainty, 1e-10) as denominator to avoid
-        # degeneracy when expected is near zero but uncertainty is meaningful.
-        denom = max(abs(expected), uncertainty, 1e-10)
-        return max(0.0, min(1.0, 1.0 - uncertainty / denom))
+        # Signal-to-noise ratio: |expected| / uncertainty.
+        # Map to [0, 1] via snr / (1 + snr) — monotone, well-behaved near zero.
+        if uncertainty <= 0:
+            return 1.0
+        snr = abs(expected) / uncertainty
+        return snr / (1.0 + snr)
 
     def _audit_skipped_candidate(
         self,
@@ -704,16 +709,13 @@ class ExperimentEngine:
             logger.debug("Audit run crashed for parameters %s; skipping audit.", parameters)
             return
 
-        # Determine if skip was correct: actual outcome is worse than current best
+        # Determine if skip was correct: actual outcome is strictly worse than best
         best = self.log.best_result(self.objective_name, self.minimize)
         if best is not None:
             best_val = best.metrics.get(
                 self.objective_name, float("inf") if self.minimize else float("-inf")
             )
-            if self.minimize:
-                was_correct = actual_outcome >= best_val
-            else:
-                was_correct = actual_outcome <= best_val
+            was_correct = actual_outcome > best_val if self.minimize else actual_outcome < best_val
         else:
             # No results yet — can't evaluate correctness, assume incorrect
             was_correct = False

@@ -299,3 +299,20 @@ class TestRandomStrategyZeroSkips:
         assert diag.candidates_skipped == 0
         assert diag.skip_ratio == 0.0
         assert diag.skip_confidences == []
+
+
+# ── 6. Validation ────────────────────────────────────────────────────
+
+
+class TestAuditSkipRateValidation:
+    """audit_skip_rate must be in [0.0, 1.0]."""
+
+    @pytest.mark.parametrize("rate", [-0.1, 1.5, 2.0])
+    def test_invalid_audit_skip_rate_raises(self, rate: float) -> None:
+        with pytest.raises(ValueError, match="audit_skip_rate"):
+            ExperimentEngine(
+                search_space=_make_search_space(),
+                runner=_QuadraticRunner(),
+                seed=0,
+                audit_skip_rate=rate,
+            )
