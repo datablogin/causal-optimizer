@@ -155,6 +155,8 @@ class ExperimentEngine:
                 causal mechanism.  Requires a causal graph; falls back to
                 ``"bayesian"`` if no graph is provided.
         """
+        if not 0.0 <= audit_skip_rate <= 1.0:
+            raise ValueError(f"audit_skip_rate must be in [0.0, 1.0], got {audit_skip_rate!r}")
         if discovery_method is not None and discovery_method not in self._VALID_DISCOVERY_METHODS:
             raise ValueError(
                 f"discovery_method={discovery_method!r} is not valid; "
@@ -409,6 +411,8 @@ class ExperimentEngine:
             An :class:`AnytimeMetrics` with best objective, evaluated count,
             and skipped count at each checkpoint.
         """
+        checkpoints = sorted(checkpoints)
+
         best_at: list[float] = []
         evaluated_at: list[int] = []
         skipped_at: list[int] = []
@@ -670,7 +674,9 @@ class ExperimentEngine:
             uncertainty = float(prediction.uncertainty)
         except (TypeError, ValueError, AttributeError):
             return None
-        denom = max(abs(expected), 1e-10)
+        # Use max(|expected|, uncertainty, 1e-10) as denominator to avoid
+        # degeneracy when expected is near zero but uncertainty is meaningful.
+        denom = max(abs(expected), uncertainty, 1e-10)
         return max(0.0, min(1.0, 1.0 - uncertainty / denom))
 
     def _audit_skipped_candidate(
@@ -690,7 +696,10 @@ class ExperimentEngine:
         predicted_outcome = prediction.expected_value if prediction is not None else 0.0
         try:
             metrics = self.runner.run(parameters)
-            actual_outcome = metrics.get(self.objective_name, float("inf"))
+            if self.objective_name not in metrics:
+                logger.debug("Audit run missing objective %r; skipping audit.", self.objective_name)
+                return
+            actual_outcome = metrics[self.objective_name]
         except Exception:
             logger.debug("Audit run crashed for parameters %s; skipping audit.", parameters)
             return
