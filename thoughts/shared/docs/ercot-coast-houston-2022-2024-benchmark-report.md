@@ -7,7 +7,7 @@
 | Report ID | `20260326-ercot_coast_houston_2022_2024` |
 | Benchmark | `predictive_energy` |
 | Date | `2026-03-26` |
-| Commit | `e6112d30c6f5a62944a8e35593cc7da24ea49643` on branch `main` |
+| Commit | `a6db2b3` on branch `sprint-16/ercot-coast-benchmark` |
 | Dataset ID | `ercot_coast_houston_2022_2024` |
 | Dataset | `/Users/robertwelborn/Projects/_local/causal-optimizer/data/ercot_coast_houston_2022_2024.parquet` |
 | Dataset Rows | `26,297` |
@@ -239,4 +239,4 @@ uv run python scripts/energy_predictive_benchmark.py \
   --output /Users/robertwelborn/Projects/_local/causal-optimizer/artifacts/ercot_coast_houston_2022_2024_results.json
 ```
 
-Commit: `e6112d30c6f5a62944a8e35593cc7da24ea49643`
+Commit: `a6db2b3` on branch `sprint-16/ercot-coast-benchmark`
