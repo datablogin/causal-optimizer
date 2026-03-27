@@ -149,6 +149,26 @@ class TestAcceptanceRulesFailRegression:
         assert result.overall == "FAIL"
 
 
+class TestAcceptanceRulesFailInstability:
+    """High variance across seeds → FAIL."""
+
+    def test_unstable_detected(self) -> None:
+        summary = _make_summary(
+            "bench_a",
+            {
+                "random": _make_stats(mean=100.0, std=2.0),
+                "surrogate_only": _make_stats(mean=105.0, std=2.0),
+                # CV = 8/99 ≈ 8.1% > 5% threshold
+                "causal": _make_stats(mean=99.0, std=8.0),
+            },
+        )
+        result = check_acceptance([summary], baseline="random")
+
+        assert result.stable is False
+        assert result.overall == "FAIL"
+        assert any("unstable" in r for r in result.reasons)
+
+
 class TestAcceptanceRulesConditional:
     """Strategies produce identical results → CONDITIONAL."""
 

@@ -332,6 +332,12 @@ def check_acceptance(
 ) -> AcceptanceResult:
     """Evaluate acceptance rules across benchmark summaries.
 
+    The ``improved`` rule checks whether ``"causal"`` beats *baseline* on at
+    least one benchmark.  The ``differentiated`` rule checks whether
+    ``"causal"`` and ``"surrogate_only"`` produce different results.  Both
+    strategy names are hardcoded to match the standard three-strategy
+    benchmark configuration.
+
     Args:
         summaries: List of per-benchmark summaries.
         baseline: Strategy name to use as baseline for comparison.
@@ -746,10 +752,12 @@ def generate_suite_report(
                     if test_maes:
                         t_arr = np.array(test_maes)
                         v_arr = np.array(val_maes) if val_maes else np.array([float("nan")])
+                        t_std = float(t_arr.std(ddof=1)) if len(t_arr) > 1 else 0.0
+                        v_std = float(v_arr.std(ddof=1)) if len(v_arr) > 1 else 0.0
                         lines.append(
                             f"| {strategy} | {budget} "
-                            f"| {_fmt(float(t_arr.mean()))} +/- {_fmt(float(t_arr.std()))} "
-                            f"| {_fmt(float(v_arr.mean()))} +/- {_fmt(float(v_arr.std()))} "
+                            f"| {_fmt(float(t_arr.mean()))} +/- {_fmt(t_std)} "
+                            f"| {_fmt(float(v_arr.mean()))} +/- {_fmt(v_std)} "
                             f"| {len(test_maes)} |"
                         )
         lines.append("")
@@ -854,10 +862,12 @@ def _print_combined_table(
                     if test_maes:
                         t = np.array(test_maes)
                         v = np.array(val_maes) if val_maes else np.array([float("nan")])
+                        t_std = float(t.std(ddof=1)) if len(t) > 1 else 0.0
+                        v_std = float(v.std(ddof=1)) if len(v) > 1 else 0.0
                         print(
                             f"{strategy:<16} {budget:>6}  "
-                            f"{t.mean():.4f} +/- {t.std():.4f}  "
-                            f"{v.mean():.4f} +/- {v.std():.4f}  "
+                            f"{t.mean():.4f} +/- {t_std:.4f}  "
+                            f"{v.mean():.4f} +/- {v_std:.4f}  "
                             f"{len(test_maes):>5}"
                         )
     print()
