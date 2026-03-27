@@ -180,7 +180,7 @@ class TestAcceptanceRulesConditionalNotImproved:
             {
                 "random": _make_stats(mean=500.0, std=10.0),
                 "surrogate_only": _make_stats(mean=505.0, std=10.0),
-                "causal": _make_stats(mean=502.0, std=10.0),  # >0.1% diff from surr, worse than random
+                "causal": _make_stats(mean=502.0, std=10.0),  # >0.1% diff from surr
             },
         )
         result = check_acceptance([summary], baseline="random")
