@@ -93,8 +93,9 @@ class AcceptanceResult:
         no_regression: No material regression (>2% relative) on any benchmark.
         stable: Std across seeds < 5% of mean for all strategies/benchmarks.
         differentiated: Causal and surrogate_only produce different results.
-        overall: ``"PASS"`` if all four pass; ``"CONDITIONAL"`` if only
-            differentiated fails; ``"FAIL"`` otherwise.
+        overall: ``"PASS"`` if all four pass; ``"CONDITIONAL"`` if
+            ``no_regression`` and ``stable`` pass but ``improved`` or
+            ``differentiated`` fails; ``"FAIL"`` otherwise.
         reasons: Human-readable list of reasons for the verdict.
     """
 

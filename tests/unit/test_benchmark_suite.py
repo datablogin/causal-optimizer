@@ -171,6 +171,26 @@ class TestAcceptanceRulesConditional:
         assert result.overall == "CONDITIONAL"
 
 
+class TestAcceptanceRulesConditionalNotImproved:
+    """No regression/instability but causal never beats baseline -> CONDITIONAL."""
+
+    def test_not_improved_but_differentiated(self) -> None:
+        summary = _make_summary(
+            "bench_a",
+            {
+                "random": _make_stats(mean=500.0, std=10.0),
+                "surrogate_only": _make_stats(mean=505.0, std=10.0),
+                "causal": _make_stats(mean=502.0, std=10.0),  # >0.1% diff from surr, worse than random
+            },
+        )
+        result = check_acceptance([summary], baseline="random")
+
+        assert result.improved is False
+        assert result.differentiated is True
+        assert result.no_regression is True
+        assert result.overall == "CONDITIONAL"
+
+
 class TestSuiteSummarySchema:
     """Verify the AcceptanceResult contains all required fields."""
 
