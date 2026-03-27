@@ -29,10 +29,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from energy_predictive_benchmark import (
-    _sanitize_for_json,
-    run_strategy,
-)
+from energy_predictive_benchmark import run_strategy
 
 from causal_optimizer.benchmarks.predictive_energy import (
     PredictiveBenchmarkResult,
@@ -41,6 +38,30 @@ from causal_optimizer.benchmarks.predictive_energy import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# ── JSON helpers ─────────────────────────────────────────────────────
+
+
+def _sanitize_for_json(obj: Any) -> Any:
+    """Convert nested dicts/lists to JSON-safe Python types.
+
+    Replaces inf/nan with None, converts numpy scalars to Python types.
+    """
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize_for_json(v) for v in obj]
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, np.floating):
+        val = float(obj)
+        return None if (math.isnan(val) or math.isinf(val)) else val
+    if isinstance(obj, np.bool_):
+        return bool(obj)
+    if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+        return None
+    return obj
 
 
 # ── Data models ───────────────────────────────────────────────────────
@@ -181,9 +202,9 @@ def _compute_strategy_stats(
         strategy=strategy,
         budget=budget,
         test_mae_mean=float(arr_test.mean()),
-        test_mae_std=float(arr_test.std()),
+        test_mae_std=float(arr_test.std(ddof=1)) if len(arr_test) > 1 else 0.0,
         val_mae_mean=float(arr_val.mean()),
-        val_mae_std=float(arr_val.std()),
+        val_mae_std=float(arr_val.std(ddof=1)) if len(arr_val) > 1 else 0.0,
         n_seeds=len(test_maes),
     )
 
@@ -418,8 +439,8 @@ def _write_summary_csv(
             arr_v = np.array(val_maes) if val_maes else np.array([float("nan")])
             lines.append(
                 f"{strategy},{budget},"
-                f"{arr_t.mean():.4f},{arr_t.std():.4f},"
-                f"{arr_v.mean():.4f},{arr_v.std():.4f},"
+                f"{arr_t.mean():.4f},{arr_t.std(ddof=1) if len(arr_t) > 1 else 0.0:.4f},"
+                f"{arr_v.mean():.4f},{arr_v.std(ddof=1) if len(arr_v) > 1 else 0.0:.4f},"
                 f"{len(test_maes)}"
             )
     with open(path, "w", encoding="utf-8") as f:
