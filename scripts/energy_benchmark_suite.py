@@ -657,11 +657,11 @@ def _append_skip_calibration_section(
                 skip_data.setdefault(r.strategy, []).append(r)
 
     lines.append(
-        "| Strategy | Skip Ratio (mean) | Mean Skip Confidence "
-        "| Audit False-Skip Rate | Seeds |"
+        "| Strategy | Skip Ratio (mean) | Mean Skip Confidence | Audit False-Skip Rate | Seeds |"
     )
-    lines.append("|----------|-------------------|----------------------|"
-                 "-----------------------|-------|")
+    lines.append(
+        "|----------|-------------------|----------------------|-----------------------|-------|"
+    )
 
     for strategy in strategies:
         group = skip_data.get(strategy, [])
@@ -687,14 +687,10 @@ def _append_skip_calibration_section(
 
         mean_ratio = sum(ratios) / len(ratios) if ratios else 0.0
         mean_conf = sum(confidences) / len(confidences) if confidences else 0.0
-        if audit_total > 0:
-            false_rate = f"{false_skip_count / audit_total:.1%}"
-        else:
-            false_rate = "N/A"
+        false_rate = f"{false_skip_count / audit_total:.1%}" if audit_total > 0 else "N/A"
 
         lines.append(
-            f"| {strategy} | {mean_ratio:.1%} | {mean_conf:.3f} "
-            f"| {false_rate} | {len(group)} |"
+            f"| {strategy} | {mean_ratio:.1%} | {mean_conf:.3f} | {false_rate} | {len(group)} |"
         )
 
     lines.append("")

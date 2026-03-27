@@ -42,6 +42,7 @@ from causal_optimizer.engine.loop import ExperimentEngine
 logger = logging.getLogger(__name__)
 
 _VALID_STRATEGIES: frozenset[str] = frozenset({"random", "surrogate_only", "causal"})
+_DEFAULT_CHECKPOINTS: list[int] = [5, 10, 20, 40, 80]
 
 
 def _sanitize_for_json(obj: Any) -> Any:
@@ -200,7 +201,6 @@ def run_strategy(
 
         # Collect skip diagnostics and anytime metrics from the engine
         skip_diag = engine.skip_diagnostics
-        _DEFAULT_CHECKPOINTS = [5, 10, 20, 40, 80]
         checkpoints = [c for c in _DEFAULT_CHECKPOINTS if c <= budget] or [budget]
         if budget not in checkpoints:
             checkpoints.append(budget)

@@ -429,14 +429,12 @@ class ExperimentEngine:
             skipped_at.append(n_skip)
 
             # Best objective at this checkpoint
+            sentinel = float("inf") if self.minimize else float("-inf")
             if n_eval == 0:
-                best_at.append(float("inf") if self.minimize else float("-inf"))
+                best_at.append(sentinel)
             else:
                 subset = self.log.results[:n_eval]
-                obj_values = [
-                    r.metrics.get(self.objective_name, float("inf") if self.minimize else float("-inf"))
-                    for r in subset
-                ]
+                obj_values = [r.metrics.get(self.objective_name, sentinel) for r in subset]
                 best_at.append(min(obj_values) if self.minimize else max(obj_values))
 
         return AnytimeMetrics(
@@ -599,10 +597,7 @@ class ExperimentEngine:
                 self._skip_log.append(skip_entry)
 
                 # Audit mode: force-evaluate a fraction of skipped candidates
-                if (
-                    self._audit_skip_rate > 0.0
-                    and self._audit_rng.random() < self._audit_skip_rate
-                ):
+                if self._audit_skip_rate > 0.0 and self._audit_rng.random() < self._audit_skip_rate:
                     self._audit_skipped_candidate(parameters, prediction)
 
                 if prediction is not None:

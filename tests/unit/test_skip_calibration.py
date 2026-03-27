@@ -23,7 +23,6 @@ from causal_optimizer.types import (
     VariableType,
 )
 
-
 # ── Helpers ──────────────────────────────────────────────────────────
 
 
