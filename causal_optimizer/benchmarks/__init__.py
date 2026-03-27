@@ -5,6 +5,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Protocol
 
 from causal_optimizer.benchmarks.complete_graph import CompleteGraphBenchmark
+from causal_optimizer.benchmarks.counterfactual_energy import (
+    CounterfactualBenchmarkResult,
+    DemandResponseScenario,
+)
 from causal_optimizer.benchmarks.high_dimensional import HighDimensionalSparseBenchmark
 from causal_optimizer.benchmarks.interaction import InteractionBenchmark
 from causal_optimizer.benchmarks.interaction_scm import InteractionSCM
@@ -52,6 +56,8 @@ __all__ = [
     "BenchmarkRunner",
     "BenchmarkSCM",
     "CompleteGraphBenchmark",
+    "CounterfactualBenchmarkResult",
+    "DemandResponseScenario",
     "HighDimensionalSparseBenchmark",
     "InteractionBenchmark",
     "InteractionSCM",
