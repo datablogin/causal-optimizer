@@ -19,8 +19,14 @@ if _SCRIPTS_DIR not in sys.path:
 from energy_benchmark_suite import (  # noqa: E402, I001
     BenchmarkSummary,
     StrategyStats,
+    build_suite_summary,
     check_acceptance,
+    check_coverage,
     parse_suite_args,
+)
+
+from causal_optimizer.benchmarks.predictive_energy import (  # noqa: E402
+    PredictiveBenchmarkResult,
 )
 
 
@@ -216,3 +222,74 @@ class TestSuiteSummarySchema:
         # Reasons list
         assert isinstance(result.reasons, list)
         assert all(isinstance(r, str) for r in result.reasons)
+
+
+class TestIncompleteCoverage:
+    """Incomplete suite coverage must produce FAIL, not CONDITIONAL."""
+
+    def _make_result(self, strategy: str, budget: int, seed: int) -> PredictiveBenchmarkResult:
+        """Build a minimal PredictiveBenchmarkResult stub."""
+        return PredictiveBenchmarkResult(
+            strategy=strategy,
+            budget=budget,
+            seed=seed,
+            best_validation_mae=90.0,
+            test_mae=105.0,
+            selected_parameters={"model_type": "ridge"},
+            runtime_seconds=1.0,
+        )
+
+    def test_incomplete_coverage_fails(self) -> None:
+        """Suite with missing strategies/seeds must be FAIL."""
+        # Only one random result, no causal or surrogate_only
+        results = [self._make_result("random", 20, 0)]
+        all_results = {"bench_a": results}
+
+        coverage = check_coverage(
+            all_results,
+            strategies=["random", "surrogate_only", "causal"],
+            budgets=[20],
+            seeds=[0, 1],
+        )
+
+        assert coverage.complete is False
+        assert coverage.expected_per_dataset == 6  # 3 strategies * 1 budget * 2 seeds
+        assert coverage.actual_per_dataset["bench_a"] == 1
+        assert len(coverage.missing) == 5  # 6 expected - 1 actual
+
+    def test_incomplete_coverage_overrides_acceptance(self) -> None:
+        """build_suite_summary must override to FAIL on incomplete coverage."""
+        results = [self._make_result("random", 20, 0)]
+        all_results = {"bench_a": results}
+
+        summary = build_suite_summary(
+            all_results,
+            strategies=["random", "surrogate_only", "causal"],
+            budgets=[20],
+            seeds=[0, 1],
+        )
+
+        assert summary["acceptance"]["overall"] == "FAIL"
+        assert any("incomplete coverage" in r for r in summary["acceptance"]["reasons"])
+        assert summary["coverage"]["complete"] is False
+
+    def test_complete_coverage_does_not_override(self) -> None:
+        """Full coverage should not inject a coverage failure."""
+        results = [
+            self._make_result(s, 20, seed)
+            for s in ["random", "surrogate_only", "causal"]
+            for seed in [0, 1]
+        ]
+        all_results = {"bench_a": results}
+
+        summary = build_suite_summary(
+            all_results,
+            strategies=["random", "surrogate_only", "causal"],
+            budgets=[20],
+            seeds=[0, 1],
+        )
+
+        assert summary["coverage"]["complete"] is True
+        assert summary["acceptance"]["overall"] != "FAIL" or not any(
+            "incomplete coverage" in r for r in summary["acceptance"]["reasons"]
+        )

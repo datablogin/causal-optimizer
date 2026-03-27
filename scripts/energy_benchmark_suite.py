@@ -106,6 +106,23 @@ class BenchmarkSummary:
 
 
 @dataclass
+class CoverageResult:
+    """Result of coverage validation for the suite.
+
+    Attributes:
+        complete: True if every dataset has the expected number of results.
+        expected_per_dataset: Expected results per dataset.
+        actual_per_dataset: Actual results per dataset.
+        missing: Human-readable descriptions of missing combinations.
+    """
+
+    complete: bool
+    expected_per_dataset: int
+    actual_per_dataset: dict[str, int]
+    missing: list[str]
+
+
+@dataclass
 class AcceptanceResult:
     """Result of acceptance rule evaluation across benchmarks.
 
@@ -234,6 +251,52 @@ def build_benchmark_summary(
         if s is not None:
             stats[strategy] = s
     return BenchmarkSummary(dataset_id=dataset_id, strategy_stats=stats)
+
+
+# ── Coverage validation ───────────────────────────────────────────────
+
+
+def check_coverage(
+    all_results: dict[str, list[PredictiveBenchmarkResult]],
+    strategies: list[str],
+    budgets: list[int],
+    seeds: list[int],
+) -> CoverageResult:
+    """Validate that every dataset has the expected number of results.
+
+    Args:
+        all_results: Mapping from dataset_id to its raw results.
+        strategies: Expected strategy names.
+        budgets: Expected budget levels.
+        seeds: Expected seed values.
+
+    Returns:
+        A :class:`CoverageResult` indicating whether coverage is complete.
+    """
+    expected = len(strategies) * len(budgets) * len(seeds)
+    actual: dict[str, int] = {}
+    missing: list[str] = []
+
+    for dataset_id, results in all_results.items():
+        actual[dataset_id] = len(results)
+        if len(results) < expected:
+            # Find which (strategy, budget, seed) combos are missing
+            present = {(r.strategy, r.budget, r.seed) for r in results}
+            for strategy in strategies:
+                for budget in budgets:
+                    for seed in seeds:
+                        if (strategy, budget, seed) not in present:
+                            missing.append(
+                                f"{dataset_id}: strategy={strategy} budget={budget} seed={seed}"
+                            )
+
+    complete = all(count >= expected for count in actual.values()) and len(actual) > 0
+    return CoverageResult(
+        complete=complete,
+        expected_per_dataset=expected,
+        actual_per_dataset=actual,
+        missing=missing,
+    )
 
 
 # ── Acceptance rules ──────────────────────────────────────────────────
@@ -455,6 +518,7 @@ def build_suite_summary(
     all_results: dict[str, list[PredictiveBenchmarkResult]],
     strategies: list[str],
     budgets: list[int],
+    seeds: list[int] | None = None,
     baseline: str = "random",
 ) -> dict[str, Any]:
     """Build the full suite summary dict.
@@ -463,10 +527,13 @@ def build_suite_summary(
         all_results: Mapping from dataset_id to its raw results.
         strategies: List of strategy names.
         budgets: List of budget levels.
+        seeds: List of seed values. When provided, coverage is validated
+            and incomplete suites are marked FAIL.
         baseline: Baseline strategy name.
 
     Returns:
-        Dict with ``per_benchmark``, ``aggregate``, and ``acceptance`` keys.
+        Dict with ``per_benchmark``, ``aggregate``, ``acceptance``,
+        and ``coverage`` keys.
     """
     summaries: list[BenchmarkSummary] = []
     per_benchmark: list[dict[str, Any]] = []
@@ -493,9 +560,31 @@ def build_suite_summary(
         )
         rankings[s.dataset_id] = [name for name, _ in ranked]
 
+    # Coverage validation
+    coverage: CoverageResult | None = None
+    if seeds is not None:
+        coverage = check_coverage(all_results, strategies, budgets, seeds)
+
     acceptance = check_acceptance(summaries, baseline=baseline)
 
-    return {
+    # Override acceptance to FAIL if coverage is incomplete
+    if coverage is not None and not coverage.complete:
+        acceptance = AcceptanceResult(
+            improved=acceptance.improved,
+            no_regression=acceptance.no_regression,
+            stable=acceptance.stable,
+            differentiated=acceptance.differentiated,
+            overall="FAIL",
+            reasons=[
+                f"incomplete coverage: expected {coverage.expected_per_dataset} "
+                f"results per dataset, got {coverage.actual_per_dataset}",
+                *(f"missing: {m}" for m in coverage.missing[:20]),
+                *acceptance.reasons,
+                "overall: FAIL (incomplete coverage overrides other rules)",
+            ],
+        )
+
+    result: dict[str, Any] = {
         "timestamp": datetime.now(tz=timezone.utc).isoformat(),
         "per_benchmark": per_benchmark,
         "aggregate": {
@@ -507,6 +596,9 @@ def build_suite_summary(
         },
         "acceptance": dataclasses.asdict(acceptance),
     }
+    if coverage is not None:
+        result["coverage"] = dataclasses.asdict(coverage)
+    return result
 
 
 # ── Report generation ─────────────────────────────────────────────────
@@ -548,6 +640,27 @@ def generate_suite_report(
     lines.append(f"- **Baseline**: {suite_summary['aggregate']['baseline']}")
     lines.append(f"- **Overall verdict**: **{acceptance['overall']}**")
     lines.append("")
+
+    # Coverage section
+    coverage = suite_summary.get("coverage")
+    if coverage is not None:
+        cov_status = "COMPLETE" if coverage["complete"] else "INCOMPLETE"
+        lines.append("## Coverage")
+        lines.append("")
+        lines.append(f"- **Status**: {cov_status}")
+        lines.append(f"- **Expected per dataset**: {coverage['expected_per_dataset']}")
+        for ds_id, count in coverage["actual_per_dataset"].items():
+            marker = "" if count >= coverage["expected_per_dataset"] else " **MISSING**"
+            lines.append(f"- **{ds_id}**: {count}{marker}")
+        if coverage["missing"]:
+            lines.append("")
+            lines.append("Missing combinations:")
+            lines.append("")
+            for m in coverage["missing"][:20]:
+                lines.append(f"- {m}")
+            if len(coverage["missing"]) > 20:
+                lines.append(f"- ... and {len(coverage['missing']) - 20} more")
+        lines.append("")
 
     # Per-benchmark comparison tables
     lines.append("## Per-Benchmark Results (Largest Budget)")
@@ -617,6 +730,8 @@ def generate_suite_report(
     lines.append("")
     lines.append("| Rule | Result |")
     lines.append("|------|--------|")
+    if coverage is not None:
+        lines.append(f"| coverage | {'PASS' if coverage['complete'] else 'FAIL'} |")
     lines.append(f"| improved | {'PASS' if acceptance['improved'] else 'FAIL'} |")
     lines.append(f"| no_regression | {'PASS' if acceptance['no_regression'] else 'FAIL'} |")
     lines.append(f"| stable | {'PASS' if acceptance['stable'] else 'FAIL'} |")
@@ -794,7 +909,7 @@ def main() -> None:
     logger.info("Suite completed in %.1f seconds", suite_runtime)
 
     # Build and write suite summary
-    suite_summary = build_suite_summary(all_results, strategies, budgets)
+    suite_summary = build_suite_summary(all_results, strategies, budgets, seeds=seeds)
     suite_summary["suite_runtime_seconds"] = suite_runtime
 
     summary_path = output_dir / "suite_summary.json"
