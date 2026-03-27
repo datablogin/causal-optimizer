@@ -257,7 +257,7 @@ class TestBenchmarkSmoke:
         assert math.isfinite(result.policy_value)
         assert math.isfinite(result.oracle_value)
         assert math.isfinite(result.regret)
-        assert math.isfinite(result.treatment_effect_mae)
+        assert math.isfinite(result.decision_error_rate)
         assert math.isfinite(result.runtime_seconds)
         assert result.runtime_seconds > 0
 

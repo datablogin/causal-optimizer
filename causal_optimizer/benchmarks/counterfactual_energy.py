@@ -45,7 +45,8 @@ class CounterfactualBenchmarkResult:
             (higher is better; measured as load reduction minus cost).
         oracle_value: Average net benefit under the oracle policy.
         regret: oracle_value - policy_value (non-negative by construction).
-        treatment_effect_mae: MAE of estimated vs true effects.
+        decision_error_rate: Fraction of treat/no-treat decisions that
+            disagree with the oracle's optimal decision.
         runtime_seconds: Wall-clock time for the full run.
     """
 
@@ -55,7 +56,7 @@ class CounterfactualBenchmarkResult:
     policy_value: float
     oracle_value: float
     regret: float
-    treatment_effect_mae: float
+    decision_error_rate: float
     runtime_seconds: float
 
 
@@ -184,7 +185,7 @@ def evaluate_policy(
         treatment_cost: Cost per treatment event.
 
     Returns:
-        Tuple of (policy_value, treatment_effect_mae).
+        Tuple of (policy_value, decision_error_rate).
         policy_value is the average net benefit (higher is better).
     """
     temp_thresh = float(params.get("treat_temp_threshold", 80.0))
@@ -217,15 +218,12 @@ def evaluate_policy(
     # Policy value = average net benefit relative to never-treat
     policy_value = _net_benefit(y0, y1, treat_arr, treatment_cost)
 
-    # Treatment effect MAE: how well does the policy's decision boundary
-    # approximate the true effect?  For untreated units, the policy
-    # implicitly estimates effect < cost (we assign 0); for treated,
-    # it estimates effect >= cost (we assign true effect).
+    # Decision error rate: fraction of decisions that disagree with oracle
     true_effect = data["true_treatment_effect"].values
-    estimated_effect = np.where(treat_arr, true_effect, 0.0)
-    mae = float(np.mean(np.abs(estimated_effect - true_effect)))
+    oracle_treat = true_effect > treatment_cost
+    decision_error = float(np.mean(treat_arr != oracle_treat))
 
-    return policy_value, mae
+    return policy_value, decision_error
 
 
 # ── Benchmark runner for policy evaluation ───────────────────────────
@@ -244,7 +242,7 @@ class _PolicyRunner:
 
     def run(self, parameters: dict[str, Any]) -> dict[str, float]:
         """Evaluate one policy configuration and return metrics."""
-        policy_value, effect_mae = evaluate_policy(
+        policy_value, decision_error = evaluate_policy(
             self._val_data, parameters, self._treatment_cost
         )
         # The optimizer minimizes "objective", so negate the policy value
@@ -252,7 +250,7 @@ class _PolicyRunner:
         return {
             "objective": -policy_value,
             "policy_value": policy_value,
-            "treatment_effect_mae": effect_mae,
+            "decision_error_rate": decision_error,
         }
 
 
@@ -419,8 +417,8 @@ class DemandResponseScenario:
     ) -> CounterfactualBenchmarkResult:
         """Run one strategy on this scenario and return results.
 
-        Generates data, splits into train/val/test by position, runs
-        the optimizer on val, and evaluates the learned policy on test.
+        Generates data, splits into opt/test by position, runs
+        the optimizer on opt, and evaluates the learned policy on test.
 
         Args:
             budget: Number of experiments (policy evaluations).
@@ -429,7 +427,7 @@ class DemandResponseScenario:
 
         Returns:
             :class:`CounterfactualBenchmarkResult` with policy value,
-            oracle value, regret, and treatment effect MAE.
+            oracle value, regret, and decision error rate.
         """
         t_start = time.monotonic()
 
@@ -437,11 +435,10 @@ class DemandResponseScenario:
         data = self.generate()
         n = len(data)
 
-        # Split: 60/20/20 by position (data is already time-ordered)
-        train_end = int(n * 0.6)
-        val_end = train_end + int(n * 0.2)
-        val_data = data.iloc[train_end:val_end].reset_index(drop=True)
-        test_data = data.iloc[val_end:].reset_index(drop=True)
+        # Split: 80/20 opt/test by position (data is already time-ordered)
+        opt_end = int(n * 0.8)
+        val_data = data.iloc[:opt_end].reset_index(drop=True)
+        test_data = data.iloc[opt_end:].reset_index(drop=True)
 
         space = self.search_space()
         runner = _PolicyRunner(val_data, self.treatment_cost)
@@ -473,13 +470,14 @@ class DemandResponseScenario:
 
         # Evaluate on test set
         if best_params is not None:
-            policy_value, effect_mae = evaluate_policy(
+            policy_value, decision_error = evaluate_policy(
                 test_data, best_params, self.treatment_cost
             )
         else:
             # No valid policy found; use never-treat as fallback
             policy_value = 0.0  # never-treat has zero net benefit
-            effect_mae = float(test_data["true_treatment_effect"].mean())
+            oracle_treat = test_data["true_treatment_effect"].values > self.treatment_cost
+            decision_error = float(np.mean(oracle_treat))
 
         oracle_value = self.oracle_policy_value(test_data)
         regret = oracle_value - policy_value
@@ -493,6 +491,6 @@ class DemandResponseScenario:
             policy_value=policy_value,
             oracle_value=oracle_value,
             regret=regret,
-            treatment_effect_mae=effect_mae,
+            decision_error_rate=decision_error,
             runtime_seconds=runtime,
         )

@@ -180,19 +180,19 @@ def _print_summary(results: list[CounterfactualBenchmarkResult]) -> None:
 
     print(
         f"{'Strategy':<16} {'Budget':>6}  "
-        f"{'Policy Value':>20}  {'Regret':>20}  {'Effect MAE':>20}"
+        f"{'Policy Value':>20}  {'Regret':>20}  {'Decision Err':>20}"
     )
     print("-" * 90)
 
     for (strategy, budget), group in sorted(groups.items()):
         pvals = [r.policy_value for r in group if math.isfinite(r.policy_value)]
         regrets = [r.regret for r in group if math.isfinite(r.regret)]
-        maes = [r.treatment_effect_mae for r in group if math.isfinite(r.treatment_effect_mae)]
+        errs = [r.decision_error_rate for r in group if math.isfinite(r.decision_error_rate)]
         print(
             f"{strategy:<16} {budget:>6}  "
             f"{_fmt_mean_std(pvals):>20}  "
             f"{_fmt_mean_std(regrets):>20}  "
-            f"{_fmt_mean_std(maes):>20}"
+            f"{_fmt_mean_std(errs):>20}"
         )
 
 
@@ -302,7 +302,8 @@ def main() -> None:
     if results:
         print()
         _print_summary(results)
-        print(f"\nOracle value (test set): {results[0].oracle_value:.4f}")
+        oracle_values = [r.oracle_value for r in results if math.isfinite(r.oracle_value)]
+        print(f"\nOracle value (test set): {np.mean(oracle_values):.4f}")
         print(f"Suite runtime: {suite_runtime:.1f}s")
 
 
