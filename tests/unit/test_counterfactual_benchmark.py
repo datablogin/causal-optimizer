@@ -18,7 +18,6 @@ from causal_optimizer.benchmarks.counterfactual_energy import (
     DemandResponseScenario,
 )
 
-
 # ── Fixtures ─────────────────────────────────────────────────────────
 
 

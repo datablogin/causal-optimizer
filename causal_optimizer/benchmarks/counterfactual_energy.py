@@ -16,10 +16,12 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
-import pandas as pd
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 from causal_optimizer.benchmarks.runner import sample_random_params
 from causal_optimizer.engine.loop import ExperimentEngine
