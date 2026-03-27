@@ -195,40 +195,44 @@ class TestTreatmentEffectVariesByContext:
 
 
 class TestCausalGraphHasNonParents:
-    """Verify the graph structure: non-parents excluded from load_reduction parents."""
+    """Verify the graph structure: non-parents excluded from objective parents.
 
-    def test_load_reduction_parents_exclude_humidity(self) -> None:
-        graph = DemandResponseScenario.causal_graph()
-        parents = graph.parents("load_reduction")
-        assert "humidity" not in parents
+    Graph nodes use search space variable names so the engine's
+    focus_variables logic correctly identifies ancestors of "objective".
+    """
 
-    def test_load_reduction_parents_exclude_day_of_week(self) -> None:
+    def test_objective_parents_exclude_humidity_threshold(self) -> None:
         graph = DemandResponseScenario.causal_graph()
-        parents = graph.parents("load_reduction")
-        assert "day_of_week" not in parents
+        parents = graph.parents("objective")
+        assert "treat_humidity_threshold" not in parents
 
-    def test_load_reduction_parents_include_temperature(self) -> None:
+    def test_objective_parents_exclude_day_filter(self) -> None:
         graph = DemandResponseScenario.causal_graph()
-        parents = graph.parents("load_reduction")
-        assert "temperature" in parents
+        parents = graph.parents("objective")
+        assert "treat_day_filter" not in parents
 
-    def test_load_reduction_parents_include_demand_response_event(self) -> None:
+    def test_objective_parents_include_temp_threshold(self) -> None:
         graph = DemandResponseScenario.causal_graph()
-        parents = graph.parents("load_reduction")
-        assert "demand_response_event" in parents
+        parents = graph.parents("objective")
+        assert "treat_temp_threshold" in parents
 
-    def test_load_reduction_parents_include_hour_of_day(self) -> None:
+    def test_objective_parents_include_hour_start(self) -> None:
         graph = DemandResponseScenario.causal_graph()
-        parents = graph.parents("load_reduction")
-        assert "hour_of_day" in parents
+        parents = graph.parents("objective")
+        assert "treat_hour_start" in parents
+
+    def test_objective_parents_include_hour_end(self) -> None:
+        graph = DemandResponseScenario.causal_graph()
+        parents = graph.parents("objective")
+        assert "treat_hour_end" in parents
 
     def test_graph_has_non_parent_nodes(self) -> None:
-        """humidity and day_of_week are in the graph but not parents of load_reduction."""
+        """Noise dimensions are in the graph but not parents of objective."""
         graph = DemandResponseScenario.causal_graph()
-        assert "humidity" in graph.nodes
-        assert "day_of_week" in graph.nodes
-        parents = graph.parents("load_reduction")
-        non_parents = {"humidity", "day_of_week"}
+        assert "treat_humidity_threshold" in graph.nodes
+        assert "treat_day_filter" in graph.nodes
+        parents = graph.parents("objective")
+        non_parents = {"treat_humidity_threshold", "treat_day_filter"}
         assert non_parents.isdisjoint(parents)
 
 
@@ -254,6 +258,18 @@ class TestBenchmarkSmoke:
     def test_smoke_regret_is_non_negative(self, scenario: DemandResponseScenario) -> None:
         result = scenario.run_benchmark(budget=3, seed=0, strategy="random")
         assert result.regret >= -1e-9, f"Regret should be non-negative, got {result.regret}"
+
+    def test_smoke_surrogate_only(self, scenario: DemandResponseScenario) -> None:
+        result = scenario.run_benchmark(budget=3, seed=0, strategy="surrogate_only")
+        assert isinstance(result, CounterfactualBenchmarkResult)
+        assert result.strategy == "surrogate_only"
+        assert math.isfinite(result.policy_value)
+
+    def test_smoke_causal(self, scenario: DemandResponseScenario) -> None:
+        result = scenario.run_benchmark(budget=3, seed=0, strategy="causal")
+        assert isinstance(result, CounterfactualBenchmarkResult)
+        assert result.strategy == "causal"
+        assert math.isfinite(result.policy_value)
 
 
 # ── Test 6: Reproducibility ─────────────────────────────────────────

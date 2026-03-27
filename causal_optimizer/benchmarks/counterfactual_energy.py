@@ -330,21 +330,20 @@ class DemandResponseScenario:
     def causal_graph() -> CausalGraph:
         """Return the known causal graph for the demand-response scenario.
 
-        The graph encodes that temperature and hour_of_day are parents
-        of both the treatment and the outcome, while humidity and
-        day_of_week only affect base_load (not load_reduction).
-
-        This gives the optimizer genuine non-parents to deprioritize.
+        Node names match the search space variables so the engine's
+        ``focus_variables`` logic (ancestors of ``"objective"``) selects
+        the correct subset.  ``treat_temp_threshold``, ``treat_hour_start``,
+        and ``treat_hour_end`` are parents of ``objective``; the noise
+        dimensions ``treat_humidity_threshold`` and ``treat_day_filter``
+        are NOT parents — they connect to a separate ``base_load`` node.
         """
         return CausalGraph(
             edges=[
-                ("temperature", "demand_response_event"),
-                ("hour_of_day", "demand_response_event"),
-                ("demand_response_event", "load_reduction"),
-                ("temperature", "load_reduction"),
-                ("hour_of_day", "load_reduction"),
-                ("humidity", "base_load"),
-                ("day_of_week", "base_load"),
+                ("treat_temp_threshold", "objective"),
+                ("treat_hour_start", "objective"),
+                ("treat_hour_end", "objective"),
+                ("treat_humidity_threshold", "base_load"),
+                ("treat_day_filter", "base_load"),
             ],
         )
 
@@ -429,6 +428,11 @@ class DemandResponseScenario:
             :class:`CounterfactualBenchmarkResult` with policy value,
             oracle value, regret, and decision error rate.
         """
+        valid_strategies = {"random", "surrogate_only", "causal"}
+        if strategy not in valid_strategies:
+            msg = f"Unknown strategy {strategy!r}, expected one of {sorted(valid_strategies)}"
+            raise ValueError(msg)
+
         t_start = time.monotonic()
 
         # Generate counterfactual data
