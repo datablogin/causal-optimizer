@@ -23,6 +23,7 @@ import logging
 import math
 import sys
 import time
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -110,16 +111,18 @@ class CoverageResult:
     """Result of coverage validation for the suite.
 
     Attributes:
-        complete: True if every dataset has the expected number of results.
-        expected_per_dataset: Expected results per dataset.
-        actual_per_dataset: Actual results per dataset.
+        complete: True if every dataset has all expected unique combinations.
+        expected_per_dataset: Expected unique combinations per dataset.
+        actual_per_dataset: Actual unique combinations per dataset.
         missing: Human-readable descriptions of missing combinations.
+        duplicates: Human-readable descriptions of duplicate combinations.
     """
 
     complete: bool
     expected_per_dataset: int
     actual_per_dataset: dict[str, int]
     missing: list[str]
+    duplicates: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -262,7 +265,11 @@ def check_coverage(
     budgets: list[int],
     seeds: list[int],
 ) -> CoverageResult:
-    """Validate that every dataset has the expected number of results.
+    """Validate that every dataset has the full set of expected unique combinations.
+
+    Compares the expected set of ``(strategy, budget, seed)`` tuples against
+    the observed unique set — not raw row count — so duplicate rows cannot
+    mask missing combinations.
 
     Args:
         all_results: Mapping from dataset_id to its raw results.
@@ -273,29 +280,39 @@ def check_coverage(
     Returns:
         A :class:`CoverageResult` indicating whether coverage is complete.
     """
-    expected = len(strategies) * len(budgets) * len(seeds)
+    expected_set = {
+        (strategy, budget, seed) for strategy in strategies for budget in budgets for seed in seeds
+    }
+    expected_count = len(expected_set)
     actual: dict[str, int] = {}
     missing: list[str] = []
+    duplicates: list[str] = []
 
     for dataset_id, results in all_results.items():
-        actual[dataset_id] = len(results)
-        if len(results) < expected:
-            # Find which (strategy, budget, seed) combos are missing
-            present = {(r.strategy, r.budget, r.seed) for r in results}
-            for strategy in strategies:
-                for budget in budgets:
-                    for seed in seeds:
-                        if (strategy, budget, seed) not in present:
-                            missing.append(
-                                f"{dataset_id}: strategy={strategy} budget={budget} seed={seed}"
-                            )
+        present = {(r.strategy, r.budget, r.seed) for r in results}
+        actual[dataset_id] = len(present)
 
-    complete = all(count >= expected for count in actual.values()) and len(actual) > 0
+        # Detect missing combinations
+        for combo in sorted(expected_set - present):
+            strategy, budget, seed = combo
+            missing.append(f"{dataset_id}: strategy={strategy} budget={budget} seed={seed}")
+
+        # Detect duplicates
+        combo_counts = Counter((r.strategy, r.budget, r.seed) for r in results)
+        for combo, count in sorted(combo_counts.items()):
+            if count > 1:
+                strategy, budget, seed = combo
+                duplicates.append(
+                    f"{dataset_id}: strategy={strategy} budget={budget} seed={seed} ({count} rows)"
+                )
+
+    complete = all(count >= expected_count for count in actual.values()) and len(actual) > 0
     return CoverageResult(
         complete=complete,
-        expected_per_dataset=expected,
+        expected_per_dataset=expected_count,
         actual_per_dataset=actual,
         missing=missing,
+        duplicates=duplicates,
     )
 
 
@@ -660,6 +677,14 @@ def generate_suite_report(
                 lines.append(f"- {m}")
             if len(coverage["missing"]) > 20:
                 lines.append(f"- ... and {len(coverage['missing']) - 20} more")
+        if coverage.get("duplicates"):
+            lines.append("")
+            lines.append("Duplicate combinations:")
+            lines.append("")
+            for d in coverage["duplicates"][:20]:
+                lines.append(f"- {d}")
+            if len(coverage["duplicates"]) > 20:
+                lines.append(f"- ... and {len(coverage['duplicates']) - 20} more")
         lines.append("")
 
     # Per-benchmark comparison tables

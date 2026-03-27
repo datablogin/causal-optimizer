@@ -293,3 +293,52 @@ class TestIncompleteCoverage:
         assert summary["acceptance"]["overall"] != "FAIL" or not any(
             "incomplete coverage" in r for r in summary["acceptance"]["reasons"]
         )
+
+    def test_duplicates_do_not_mask_missing_combinations(self) -> None:
+        """Row count matching expected but with duplicates must still FAIL."""
+        # 6 rows total (matches 3 strategies * 1 budget * 2 seeds = 6)
+        # but only 2 unique combos, each repeated 3 times
+        results = [
+            self._make_result("random", 20, 0),
+            self._make_result("random", 20, 0),
+            self._make_result("random", 20, 0),
+            self._make_result("random", 20, 1),
+            self._make_result("random", 20, 1),
+            self._make_result("random", 20, 1),
+        ]
+        all_results = {"bench_a": results}
+
+        coverage = check_coverage(
+            all_results,
+            strategies=["random", "surrogate_only", "causal"],
+            budgets=[20],
+            seeds=[0, 1],
+        )
+
+        assert coverage.complete is False
+        assert coverage.actual_per_dataset["bench_a"] == 2  # unique combos
+        assert len(coverage.missing) == 4  # surrogate_only*2 + causal*2
+        assert len(coverage.duplicates) == 2  # random/20/0 and random/20/1
+
+    def test_duplicates_surfaced_in_suite_summary(self) -> None:
+        """build_suite_summary must report FAIL with duplicate details."""
+        results = [
+            self._make_result("random", 20, 0),
+            self._make_result("random", 20, 0),
+            self._make_result("random", 20, 0),
+            self._make_result("random", 20, 1),
+            self._make_result("random", 20, 1),
+            self._make_result("random", 20, 1),
+        ]
+        all_results = {"bench_a": results}
+
+        summary = build_suite_summary(
+            all_results,
+            strategies=["random", "surrogate_only", "causal"],
+            budgets=[20],
+            seeds=[0, 1],
+        )
+
+        assert summary["acceptance"]["overall"] == "FAIL"
+        assert summary["coverage"]["complete"] is False
+        assert len(summary["coverage"]["duplicates"]) == 2
