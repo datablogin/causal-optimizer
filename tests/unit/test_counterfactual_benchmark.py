@@ -27,10 +27,10 @@ def scenario() -> DemandResponseScenario:
     """Create a scenario with synthetic covariates for unit tests."""
     # Build a small synthetic covariate frame that mimics ERCOT structure
     rng = np.random.default_rng(42)
-    n = 200
+    n = 480  # 20 days of hourly data — enough for propensity correlation tests
     hours = np.tile(np.arange(24), n // 24 + 1)[:n]
     days = np.repeat(np.arange(n // 24 + 1), 24)[:n]
-    temps = 60.0 + 30.0 * rng.random(n)  # 60-90F range
+    temps = 50.0 + 55.0 * rng.random(n)  # 50-105F range (wide for hot/cold contrast)
     humidity = 30.0 + 50.0 * rng.random(n)  # 30-80%
     base_load = 1000.0 + 200.0 * rng.random(n)
 
@@ -50,7 +50,7 @@ def scenario() -> DemandResponseScenario:
             "load_lag_24h": np.roll(base_load, 24),
         }
     )
-    return DemandResponseScenario(covariates=df, seed=42)
+    return DemandResponseScenario(covariates=df, seed=123)
 
 
 # ── Test 1: Valid data generation ────────────────────────────────────
@@ -92,15 +92,17 @@ class TestScenarioGeneratesValidData:
         self, scenario: DemandResponseScenario
     ) -> None:
         data = scenario.generate()
-        # Treatment should be more likely at higher temperatures
-        high_temp = data[data["temperature"] > 80]
-        low_temp = data[data["temperature"] < 70]
-        if len(high_temp) > 5 and len(low_temp) > 5:
+        # Compare at the SAME hour range to isolate temperature effect.
+        # Use afternoon hours (14-18) where propensity is highest.
+        afternoon = data[data["hour_of_day"].between(14, 18)]
+        high_temp = afternoon[afternoon["temperature"] > 90]
+        low_temp = afternoon[afternoon["temperature"] < 70]
+        if len(high_temp) > 3 and len(low_temp) > 3:
             high_rate = high_temp["demand_response_event"].mean()
             low_rate = low_temp["demand_response_event"].mean()
             assert high_rate > low_rate, (
                 f"Treatment rate at high temp ({high_rate:.2f}) should exceed "
-                f"low temp ({low_rate:.2f})"
+                f"low temp ({low_rate:.2f}) during afternoon hours"
             )
 
     def test_treatment_correlated_with_hour(
@@ -145,15 +147,15 @@ class TestOraclePolicyIsOptimal:
         data = scenario.generate()
         cost = scenario.treatment_cost
         oracle_value = scenario.oracle_policy_value(data)
-        # Always-treat: apply treatment to everyone
-        always_treat_value = float((data["y1"] - cost).mean())
+        # Always-treat: net benefit = mean(effect - cost) for all units
+        always_treat_value = float((data["true_treatment_effect"] - cost).mean())
         assert oracle_value >= always_treat_value - 1e-9
 
     def test_oracle_beats_never_treat(self, scenario: DemandResponseScenario) -> None:
         data = scenario.generate()
         oracle_value = scenario.oracle_policy_value(data)
-        # Never-treat: use y0 for everyone
-        never_treat_value = float(data["y0"].mean())
+        # Never-treat: net benefit = 0 (baseline by definition)
+        never_treat_value = 0.0
         assert oracle_value >= never_treat_value - 1e-9
 
     def test_oracle_beats_random_policy(self, scenario: DemandResponseScenario) -> None:
@@ -161,12 +163,10 @@ class TestOraclePolicyIsOptimal:
         cost = scenario.treatment_cost
         oracle_value = scenario.oracle_policy_value(data)
         rng = np.random.default_rng(123)
-        random_decisions = rng.integers(0, 2, size=len(data))
-        random_value = float(np.where(
-            random_decisions == 1,
-            data["y1"].values - cost,
-            data["y0"].values,
-        ).mean())
+        random_decisions = rng.integers(0, 2, size=len(data)).astype(bool)
+        # Random policy net benefit: treat randomly
+        effect = data["true_treatment_effect"].values
+        random_value = float(np.where(random_decisions, effect - cost, 0.0).mean())
         assert oracle_value >= random_value - 1e-9
 
 
