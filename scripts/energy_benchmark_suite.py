@@ -194,6 +194,12 @@ def parse_suite_args(argv: list[str] | None = None) -> argparse.Namespace:
         required=True,
         help="Directory to write per-benchmark and suite artifacts.",
     )
+    parser.add_argument(
+        "--audit-skip-rate",
+        type=float,
+        default=0.0,
+        help="Fraction of skipped candidates to force-evaluate for calibration (default: 0.0).",
+    )
     return parser.parse_args(argv)
 
 
@@ -438,6 +444,7 @@ def run_single_benchmark(
     seeds: list[int],
     strategies: list[str],
     output_dir: Path,
+    audit_skip_rate: float = 0.0,
 ) -> list[PredictiveBenchmarkResult]:
     """Run the single-benchmark logic for one dataset.
 
@@ -451,6 +458,7 @@ def run_single_benchmark(
         seeds: List of RNG seeds.
         strategies: List of strategy names.
         output_dir: Directory to write artifacts.
+        audit_skip_rate: Fraction of skipped candidates to force-evaluate.
 
     Returns:
         List of :class:`PredictiveBenchmarkResult` for this dataset.
@@ -484,7 +492,15 @@ def run_single_benchmark(
                     seed,
                 )
                 try:
-                    result = run_strategy(strategy, budget, seed, train_df, val_df, test_df)
+                    result = run_strategy(
+                        strategy,
+                        budget,
+                        seed,
+                        train_df,
+                        val_df,
+                        test_df,
+                        audit_skip_rate=audit_skip_rate,
+                    )
                     if result is not None:
                         results.append(result)
                 except Exception:
@@ -636,6 +652,66 @@ def _fmt(val: float, decimals: int = 2) -> str:
     return f"{val:.{decimals}f}"
 
 
+def _append_skip_calibration_section(
+    lines: list[str],
+    all_results: dict[str, list[PredictiveBenchmarkResult]],
+    strategies: list[str],
+    budgets: list[int],
+) -> None:
+    """Append a Skip Calibration section to the report lines.
+
+    Shows skip ratio by strategy, mean skip confidence, and audit
+    false-skip rate when audit mode was enabled.
+    """
+    max_budget = max(budgets)
+
+    # Aggregate skip diagnostics across datasets
+    skip_data: dict[str, list[PredictiveBenchmarkResult]] = {}
+    for _ds_id, results in all_results.items():
+        for r in results:
+            if r.budget == max_budget:
+                skip_data.setdefault(r.strategy, []).append(r)
+
+    lines.append(
+        "| Strategy | Skip Ratio (mean) | Mean Skip Confidence | Audit False-Skip Rate | Seeds |"
+    )
+    lines.append(
+        "|----------|-------------------|----------------------|-----------------------|-------|"
+    )
+
+    for strategy in strategies:
+        group = skip_data.get(strategy, [])
+        if not group:
+            continue
+
+        ratios: list[float] = []
+        confidences: list[float] = []
+        false_skip_count = 0
+        audit_total = 0
+
+        for r in group:
+            if r.skip_diagnostics is not None:
+                ratios.append(r.skip_diagnostics.skip_ratio)
+                confidences.extend(r.skip_diagnostics.skip_confidences)
+                if r.skip_diagnostics.audit_results:
+                    for ar in r.skip_diagnostics.audit_results:
+                        audit_total += 1
+                        if not ar.was_correct_skip:
+                            false_skip_count += 1
+            else:
+                ratios.append(0.0)
+
+        mean_ratio = sum(ratios) / len(ratios) if ratios else 0.0
+        mean_conf = sum(confidences) / len(confidences) if confidences else 0.0
+        false_rate = f"{false_skip_count / audit_total:.1%}" if audit_total > 0 else "N/A"
+
+        lines.append(
+            f"| {strategy} | {mean_ratio:.1%} | {mean_conf:.3f} | {false_rate} | {len(group)} |"
+        )
+
+    lines.append("")
+
+
 def generate_suite_report(
     suite_summary: dict[str, Any],
     all_results: dict[str, list[PredictiveBenchmarkResult]],
@@ -783,6 +859,11 @@ def generate_suite_report(
         lines.append(f"- {reason}")
     lines.append("")
 
+    # Skip Calibration section
+    lines.append("## Skip Calibration")
+    lines.append("")
+    _append_skip_calibration_section(lines, all_results, strategies, budgets)
+
     # Key questions
     lines.append("## Key Questions")
     lines.append("")
@@ -924,6 +1005,14 @@ def main() -> None:
             )
             sys.exit(1)
 
+    audit_skip_rate = args.audit_skip_rate
+    if not 0.0 <= audit_skip_rate <= 1.0:
+        print(
+            f"ERROR: --audit-skip-rate must be in [0.0, 1.0], got {audit_skip_rate!r}.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     # Fail-fast: ensure output directory exists
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -941,6 +1030,7 @@ def main() -> None:
             seeds=seeds,
             strategies=strategies,
             output_dir=output_dir,
+            audit_skip_rate=audit_skip_rate,
         )
         all_results[dataset_id] = results
 

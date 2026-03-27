@@ -42,6 +42,7 @@ from causal_optimizer.engine.loop import ExperimentEngine
 logger = logging.getLogger(__name__)
 
 _VALID_STRATEGIES: frozenset[str] = frozenset({"random", "surrogate_only", "causal"})
+_DEFAULT_CHECKPOINTS: list[int] = [5, 10, 20, 40, 80]
 
 
 def _sanitize_for_json(obj: Any) -> Any:
@@ -116,6 +117,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="predictive_energy_results.json",
         help="Output JSON artifact path (default: 'predictive_energy_results.json').",
     )
+    parser.add_argument(
+        "--audit-skip-rate",
+        type=float,
+        default=0.0,
+        help="Fraction of skipped candidates to force-evaluate for calibration (default: 0.0).",
+    )
     return parser.parse_args(argv)
 
 
@@ -129,6 +136,7 @@ def run_strategy(
     train_df: pd.DataFrame,
     val_df: pd.DataFrame,
     test_df: pd.DataFrame,
+    audit_skip_rate: float = 0.0,
 ) -> PredictiveBenchmarkResult | None:
     """Run one strategy on the predictive energy benchmark.
 
@@ -139,6 +147,8 @@ def run_strategy(
         train_df: Training partition.
         val_df: Validation partition.
         test_df: Test partition.
+        audit_skip_rate: Fraction of skipped candidates to force-evaluate
+            for calibration (default 0.0, disabled).
 
     Returns:
         A :class:`PredictiveBenchmarkResult` with validation and test metrics,
@@ -158,6 +168,9 @@ def run_strategy(
     adapter = EnergyLoadAdapter(data=pd.concat([train_df, val_df], ignore_index=True), seed=seed)
     space = adapter.get_search_space()
     runner = ValidationEnergyRunner(train_df=train_df, val_df=val_df, seed=seed)
+
+    skip_diag = None
+    anytime = None
 
     if strategy == "random":
         best_mae = float("inf")
@@ -185,6 +198,7 @@ def run_strategy(
             objective_name="mae",
             minimize=True,
             seed=seed,
+            audit_skip_rate=audit_skip_rate,
         )
         engine.run_loop(budget)
         best_result = engine.log.best_result("mae", minimize=True)
@@ -194,6 +208,13 @@ def run_strategy(
         else:
             best_mae = float("inf")
             best_params = None
+
+        # Collect skip diagnostics and anytime metrics from the engine
+        skip_diag = engine.skip_diagnostics
+        checkpoints = [c for c in _DEFAULT_CHECKPOINTS if c <= budget] or [budget]
+        if budget not in checkpoints:
+            checkpoints.append(budget)
+        anytime = engine.anytime_metrics(sorted(checkpoints))
 
     # If no valid result, skip — do not serialize a sentinel row.
     if best_params is None:
@@ -226,6 +247,8 @@ def run_strategy(
         test_mae=test_mae,
         selected_parameters=best_params,
         runtime_seconds=runtime,
+        skip_diagnostics=skip_diag,
+        anytime_metrics=anytime,
     )
 
 
@@ -308,6 +331,14 @@ def main() -> None:
             )
             sys.exit(1)
 
+    audit_skip_rate = args.audit_skip_rate
+    if not 0.0 <= audit_skip_rate <= 1.0:
+        print(
+            f"ERROR: --audit-skip-rate must be in [0.0, 1.0], got {audit_skip_rate!r}.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     # Fail-fast: ensure output directory exists before spending time on computation
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -340,7 +371,15 @@ def main() -> None:
                     seed,
                 )
                 try:
-                    result = run_strategy(strategy, budget, seed, train_df, val_df, test_df)
+                    result = run_strategy(
+                        strategy,
+                        budget,
+                        seed,
+                        train_df,
+                        val_df,
+                        test_df,
+                        audit_skip_rate=audit_skip_rate,
+                    )
                     if result is not None:
                         results.append(result)
                 except Exception:

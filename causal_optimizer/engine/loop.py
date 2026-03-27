@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING, Any, Protocol
 import numpy as np
 
 from causal_optimizer.designer.screening import ScreeningDesigner, ScreeningResult
+from causal_optimizer.diagnostics.anytime import AnytimeMetrics
+from causal_optimizer.diagnostics.skip_calibration import AuditResult, SkipDiagnostics
 from causal_optimizer.estimator.effects import EffectEstimator
 from causal_optimizer.evolution.map_elites import MAPElites
 from causal_optimizer.predictor.off_policy import OffPolicyPredictor
@@ -113,6 +115,7 @@ class ExperimentEngine:
         store: ExperimentStore | None = None,
         experiment_id: str | None = None,
         strategy: str = "bayesian",
+        audit_skip_rate: float = 0.0,
     ) -> None:
         """Initialize the experiment engine.
 
@@ -151,7 +154,12 @@ class ExperimentEngine:
                 uses the experimental CBO surrogate with separate GPs per
                 causal mechanism.  Requires a causal graph; falls back to
                 ``"bayesian"`` if no graph is provided.
+            audit_skip_rate: Fraction of would-be-skipped candidates to
+                force-evaluate for calibration (default 0.0, disabled).
+                Must be in ``[0.0, 1.0]``.
         """
+        if not 0.0 <= audit_skip_rate <= 1.0:
+            raise ValueError(f"audit_skip_rate must be in [0.0, 1.0], got {audit_skip_rate!r}")
         if discovery_method is not None and discovery_method not in self._VALID_DISCOVERY_METHODS:
             raise ValueError(
                 f"discovery_method={discovery_method!r} is not valid; "
@@ -245,6 +253,14 @@ class ExperimentEngine:
         self._experiment_id: str | None = experiment_id
         if store is not None and experiment_id is not None:
             store.create_experiment(experiment_id, search_space)
+
+        # Skip calibration instrumentation
+        self._skip_log: list[dict[str, Any]] = []
+        self._audit_results: list[AuditResult] = []
+        self._audit_skip_rate: float = audit_skip_rate
+        self._audit_rng: np.random.Generator = np.random.default_rng(
+            seed + 300007 if seed is not None else None
+        )
 
     @classmethod
     def resume(
@@ -360,6 +376,88 @@ class ExperimentEngine:
     def experiment_id(self) -> str | None:
         """The experiment ID used for persistence, if configured."""
         return self._experiment_id
+
+    @property
+    def skip_diagnostics(self) -> SkipDiagnostics:
+        """Summarize skip decisions recorded during this run.
+
+        Returns:
+            A :class:`SkipDiagnostics` with counts, ratio, and optional audit results.
+        """
+        n_skipped = len(self._skip_log)
+        n_evaluated = len(self.log.results)
+        n_considered = n_evaluated + n_skipped
+
+        confidences = []
+        for entry in self._skip_log:
+            confidence = entry.get("confidence")
+            if confidence is not None:
+                confidences.append(float(confidence))
+
+        return SkipDiagnostics(
+            candidates_considered=n_considered,
+            candidates_evaluated=n_evaluated,
+            candidates_skipped=n_skipped,
+            skip_ratio=n_skipped / n_considered if n_considered > 0 else 0.0,
+            skip_confidences=confidences,
+            audit_results=self._audit_results if self._audit_results else None,
+        )
+
+    def anytime_metrics(self, checkpoints: list[int]) -> AnytimeMetrics:
+        """Compute learning curve metrics at the given budget checkpoints.
+
+        Args:
+            checkpoints: List of budget values (number of evaluated experiments)
+                at which to sample metrics.
+
+        Returns:
+            An :class:`AnytimeMetrics` with best objective, evaluated count,
+            and skipped count at each checkpoint.
+        """
+        checkpoints = sorted(checkpoints)
+
+        best_at: list[float] = []
+        evaluated_at: list[int] = []
+        skipped_at: list[int] = []
+
+        n_results = len(self.log.results)
+
+        # Build a sorted list of skip step indices for checkpoint counting.
+        # Each skip log entry records the step index at which the skip occurred.
+        skip_steps = sorted(entry.get("step", 0) for entry in self._skip_log)
+
+        for cp in checkpoints:
+            # Clamp to available results
+            n_eval = min(cp, n_results)
+            evaluated_at.append(n_eval)
+
+            # Count skips that occurred before this checkpoint's evaluated count
+            n_skip = sum(1 for s in skip_steps if s < cp)
+            skipped_at.append(n_skip)
+
+            # Best objective at this checkpoint
+            sentinel = float("inf") if self.minimize else float("-inf")
+            if n_eval == 0:
+                best_at.append(sentinel)
+            else:
+                subset = self.log.results[:n_eval]
+                obj_values = [
+                    r.metrics.get(self.objective_name, sentinel)
+                    for r in subset
+                    if r.status == ExperimentStatus.KEEP
+                ]
+                best_at.append(
+                    (min(obj_values) if self.minimize else max(obj_values))
+                    if obj_values
+                    else sentinel
+                )
+
+        return AnytimeMetrics(
+            checkpoints=checkpoints,
+            best_objective_at=best_at,
+            n_evaluated_at=evaluated_at,
+            n_skipped_at=skipped_at,
+        )
 
     def diagnose(self, total_budget: int | None = None) -> DiagnosticReport:
         """Produce a diagnostic report with research recommendations.
@@ -500,6 +598,23 @@ class ExperimentEngine:
                 prediction = self._predictor.last_prediction
                 if prediction is None:
                     prediction = self._predictor.predict(parameters)
+
+                # Record skip decision for diagnostics
+                step_idx = len(self.log.results)
+                skip_entry: dict[str, Any] = {
+                    "parameters": parameters,
+                    "step": step_idx,
+                    "predicted_outcome": (
+                        prediction.expected_value if prediction is not None else None
+                    ),
+                    "confidence": self._compute_skip_confidence(prediction),
+                }
+                self._skip_log.append(skip_entry)
+
+                # Audit mode: force-evaluate a fraction of skipped candidates
+                if self._audit_skip_rate > 0.0 and self._audit_rng.random() < self._audit_skip_rate:
+                    self._audit_skipped_candidate(parameters, prediction)
+
                 if prediction is not None:
                     logger.info(
                         "Observation (predicted): objective=%.4f "
@@ -555,6 +670,72 @@ class ExperimentEngine:
                 f"best={best_val}"
             )
         return self.log
+
+    @staticmethod
+    def _compute_skip_confidence(prediction: Any) -> float | None:
+        """Compute a confidence score from a prediction, or None if unavailable.
+
+        Returns a value in [0, 1] representing how confident the predictor is.
+        Uses ``snr / (1 + snr)`` where ``snr = |expected| / uncertainty``.
+        """
+        if prediction is None:
+            return None
+        try:
+            expected = float(prediction.expected_value)
+            uncertainty = float(prediction.uncertainty)
+        except (TypeError, ValueError, AttributeError):
+            return None
+        # Signal-to-noise ratio: |expected| / uncertainty.
+        # Map to [0, 1] via snr / (1 + snr) — monotone, well-behaved near zero.
+        if uncertainty <= 0:
+            return 1.0
+        snr = abs(expected) / uncertainty
+        return snr / (1.0 + snr)
+
+    def _audit_skipped_candidate(
+        self,
+        parameters: dict[str, Any],
+        prediction: Any,
+    ) -> None:
+        """Force-evaluate a skipped candidate and record an AuditResult.
+
+        This runs the experiment without adding it to the main log,
+        so it doesn't affect the optimization trajectory.
+
+        Args:
+            parameters: The parameters that were skipped.
+            prediction: The prediction from the off-policy predictor (may be None).
+        """
+        predicted_outcome = prediction.expected_value if prediction is not None else float("nan")
+        try:
+            metrics = self.runner.run(parameters)
+            if self.objective_name not in metrics:
+                logger.debug("Audit run missing objective %r; skipping audit.", self.objective_name)
+                return
+            actual_outcome = metrics[self.objective_name]
+        except Exception:
+            logger.debug("Audit run crashed for parameters %s; skipping audit.", parameters)
+            return
+
+        # Determine if skip was correct: actual outcome is strictly worse than best
+        best = self.log.best_result(self.objective_name, self.minimize)
+        if best is not None:
+            best_val = best.metrics.get(
+                self.objective_name, float("inf") if self.minimize else float("-inf")
+            )
+            was_correct = actual_outcome > best_val if self.minimize else actual_outcome < best_val
+        else:
+            # No results yet — can't evaluate correctness, assume incorrect
+            was_correct = False
+
+        self._audit_results.append(
+            AuditResult(
+                parameters=parameters,
+                predicted_outcome=predicted_outcome,
+                actual_outcome=actual_outcome,
+                was_correct_skip=was_correct,
+            )
+        )
 
     def _is_improvement_significant(self, current_objective: float) -> bool | None:
         """Check if the current objective is a statistically significant improvement.
