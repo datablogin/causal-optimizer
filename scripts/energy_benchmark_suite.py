@@ -194,6 +194,12 @@ def parse_suite_args(argv: list[str] | None = None) -> argparse.Namespace:
         required=True,
         help="Directory to write per-benchmark and suite artifacts.",
     )
+    parser.add_argument(
+        "--audit-skip-rate",
+        type=float,
+        default=0.0,
+        help="Fraction of skipped candidates to force-evaluate for calibration (default: 0.0).",
+    )
     return parser.parse_args(argv)
 
 
@@ -438,6 +444,7 @@ def run_single_benchmark(
     seeds: list[int],
     strategies: list[str],
     output_dir: Path,
+    audit_skip_rate: float = 0.0,
 ) -> list[PredictiveBenchmarkResult]:
     """Run the single-benchmark logic for one dataset.
 
@@ -451,6 +458,7 @@ def run_single_benchmark(
         seeds: List of RNG seeds.
         strategies: List of strategy names.
         output_dir: Directory to write artifacts.
+        audit_skip_rate: Fraction of skipped candidates to force-evaluate.
 
     Returns:
         List of :class:`PredictiveBenchmarkResult` for this dataset.
@@ -484,7 +492,15 @@ def run_single_benchmark(
                     seed,
                 )
                 try:
-                    result = run_strategy(strategy, budget, seed, train_df, val_df, test_df)
+                    result = run_strategy(
+                        strategy,
+                        budget,
+                        seed,
+                        train_df,
+                        val_df,
+                        test_df,
+                        audit_skip_rate=audit_skip_rate,
+                    )
                     if result is not None:
                         results.append(result)
                 except Exception:
@@ -989,6 +1005,8 @@ def main() -> None:
             )
             sys.exit(1)
 
+    audit_skip_rate = args.audit_skip_rate
+
     # Fail-fast: ensure output directory exists
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1006,6 +1024,7 @@ def main() -> None:
             seeds=seeds,
             strategies=strategies,
             output_dir=output_dir,
+            audit_skip_rate=audit_skip_rate,
         )
         all_results[dataset_id] = results
 

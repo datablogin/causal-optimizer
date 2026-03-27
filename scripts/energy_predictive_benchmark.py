@@ -117,6 +117,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="predictive_energy_results.json",
         help="Output JSON artifact path (default: 'predictive_energy_results.json').",
     )
+    parser.add_argument(
+        "--audit-skip-rate",
+        type=float,
+        default=0.0,
+        help="Fraction of skipped candidates to force-evaluate for calibration (default: 0.0).",
+    )
     return parser.parse_args(argv)
 
 
@@ -130,6 +136,7 @@ def run_strategy(
     train_df: pd.DataFrame,
     val_df: pd.DataFrame,
     test_df: pd.DataFrame,
+    audit_skip_rate: float = 0.0,
 ) -> PredictiveBenchmarkResult | None:
     """Run one strategy on the predictive energy benchmark.
 
@@ -140,6 +147,8 @@ def run_strategy(
         train_df: Training partition.
         val_df: Validation partition.
         test_df: Test partition.
+        audit_skip_rate: Fraction of skipped candidates to force-evaluate
+            for calibration (default 0.0, disabled).
 
     Returns:
         A :class:`PredictiveBenchmarkResult` with validation and test metrics,
@@ -189,6 +198,7 @@ def run_strategy(
             objective_name="mae",
             minimize=True,
             seed=seed,
+            audit_skip_rate=audit_skip_rate,
         )
         engine.run_loop(budget)
         best_result = engine.log.best_result("mae", minimize=True)
@@ -321,6 +331,8 @@ def main() -> None:
             )
             sys.exit(1)
 
+    audit_skip_rate = args.audit_skip_rate
+
     # Fail-fast: ensure output directory exists before spending time on computation
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -353,7 +365,15 @@ def main() -> None:
                     seed,
                 )
                 try:
-                    result = run_strategy(strategy, budget, seed, train_df, val_df, test_df)
+                    result = run_strategy(
+                        strategy,
+                        budget,
+                        seed,
+                        train_df,
+                        val_df,
+                        test_df,
+                        audit_skip_rate=audit_skip_rate,
+                    )
                     if result is not None:
                         results.append(result)
                 except Exception:
