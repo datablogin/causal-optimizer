@@ -316,3 +316,38 @@ class TestAuditSkipRateValidation:
                 seed=0,
                 audit_skip_rate=rate,
             )
+
+
+# ── 7. CLI validation ────────────────────────────────────────────────
+
+
+class TestCLIAuditSkipRateValidation:
+    """CLI scripts reject out-of-range --audit-skip-rate values."""
+
+    def test_benchmark_rejects_invalid_rate(self) -> None:
+        import subprocess
+
+        result = subprocess.run(
+            [
+                "uv",
+                "run",
+                "python",
+                "scripts/energy_predictive_benchmark.py",
+                "--data-path",
+                "tests/fixtures/energy_load_fixture.csv",
+                "--budgets",
+                "1",
+                "--seeds",
+                "0",
+                "--strategies",
+                "random",
+                "--audit-skip-rate",
+                "2.0",
+                "--output",
+                "/tmp/test_invalid_audit.json",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode != 0
+        assert "audit-skip-rate" in result.stderr.lower()

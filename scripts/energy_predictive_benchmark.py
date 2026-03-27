@@ -332,6 +332,12 @@ def main() -> None:
             sys.exit(1)
 
     audit_skip_rate = args.audit_skip_rate
+    if not 0.0 <= audit_skip_rate <= 1.0:
+        print(
+            f"ERROR: --audit-skip-rate must be in [0.0, 1.0], got {audit_skip_rate!r}.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     # Fail-fast: ensure output directory exists before spending time on computation
     output_path = Path(args.output)
