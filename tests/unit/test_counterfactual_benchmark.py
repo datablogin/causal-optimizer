@@ -271,6 +271,10 @@ class TestBenchmarkSmoke:
         assert result.strategy == "causal"
         assert math.isfinite(result.policy_value)
 
+    def test_invalid_strategy_raises(self, scenario: DemandResponseScenario) -> None:
+        with pytest.raises(ValueError, match="Unknown strategy"):
+            scenario.run_benchmark(budget=3, seed=0, strategy="invalid")
+
 
 # ── Test 6: Reproducibility ─────────────────────────────────────────
 

@@ -8,6 +8,7 @@ from causal_optimizer.benchmarks.complete_graph import CompleteGraphBenchmark
 from causal_optimizer.benchmarks.counterfactual_energy import (
     CounterfactualBenchmarkResult,
     DemandResponseScenario,
+    evaluate_policy,
 )
 from causal_optimizer.benchmarks.high_dimensional import HighDimensionalSparseBenchmark
 from causal_optimizer.benchmarks.interaction import InteractionBenchmark
@@ -65,6 +66,7 @@ __all__ = [
     "ToyGraphBenchmark",
     "ValidationEnergyRunner",
     "evaluate_on_test",
+    "evaluate_policy",
     "load_energy_frame",
     "sample_random_params",
     "split_time_frame",
