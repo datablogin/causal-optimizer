@@ -441,8 +441,16 @@ class ExperimentEngine:
                 best_at.append(sentinel)
             else:
                 subset = self.log.results[:n_eval]
-                obj_values = [r.metrics.get(self.objective_name, sentinel) for r in subset]
-                best_at.append(min(obj_values) if self.minimize else max(obj_values))
+                obj_values = [
+                    r.metrics.get(self.objective_name, sentinel)
+                    for r in subset
+                    if r.status == ExperimentStatus.KEEP
+                ]
+                best_at.append(
+                    (min(obj_values) if self.minimize else max(obj_values))
+                    if obj_values
+                    else sentinel
+                )
 
         return AnytimeMetrics(
             checkpoints=checkpoints,
@@ -668,7 +676,7 @@ class ExperimentEngine:
         """Compute a confidence score from a prediction, or None if unavailable.
 
         Returns a value in [0, 1] representing how confident the predictor is.
-        Uses ``1 - uncertainty / |expected_value|`` clamped to [0, 1].
+        Uses ``snr / (1 + snr)`` where ``snr = |expected| / uncertainty``.
         """
         if prediction is None:
             return None
@@ -698,7 +706,7 @@ class ExperimentEngine:
             parameters: The parameters that were skipped.
             prediction: The prediction from the off-policy predictor (may be None).
         """
-        predicted_outcome = prediction.expected_value if prediction is not None else 0.0
+        predicted_outcome = prediction.expected_value if prediction is not None else float("nan")
         try:
             metrics = self.runner.run(parameters)
             if self.objective_name not in metrics:
