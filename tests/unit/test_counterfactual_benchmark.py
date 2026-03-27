@@ -87,9 +87,7 @@ class TestScenarioGeneratesValidData:
         data = scenario.generate()
         assert set(data["demand_response_event"].unique()).issubset({0, 1})
 
-    def test_treatment_correlated_with_temperature(
-        self, scenario: DemandResponseScenario
-    ) -> None:
+    def test_treatment_correlated_with_temperature(self, scenario: DemandResponseScenario) -> None:
         data = scenario.generate()
         # Compare at the SAME hour range to isolate temperature effect.
         # Use afternoon hours (14-18) where propensity is highest.
@@ -104,9 +102,7 @@ class TestScenarioGeneratesValidData:
                 f"low temp ({low_rate:.2f}) during afternoon hours"
             )
 
-    def test_treatment_correlated_with_hour(
-        self, scenario: DemandResponseScenario
-    ) -> None:
+    def test_treatment_correlated_with_hour(self, scenario: DemandResponseScenario) -> None:
         data = scenario.generate()
         # Treatment should be more likely during afternoon hours (14-18)
         afternoon = data[data["hour_of_day"].between(14, 18)]
@@ -178,13 +174,9 @@ class TestTreatmentEffectVariesByContext:
     def test_hot_afternoon_effect_larger(self, scenario: DemandResponseScenario) -> None:
         data = scenario.generate()
         # Hot afternoons: temp > 85, hour in [14, 18]
-        hot_afternoon = data[
-            (data["temperature"] > 85) & (data["hour_of_day"].between(14, 18))
-        ]
+        hot_afternoon = data[(data["temperature"] > 85) & (data["hour_of_day"].between(14, 18))]
         # Mild nights: temp < 70, hour in [0, 6]
-        mild_night = data[
-            (data["temperature"] < 70) & (data["hour_of_day"].isin(range(7)))
-        ]
+        mild_night = data[(data["temperature"] < 70) & (data["hour_of_day"].isin(range(7)))]
         if len(hot_afternoon) > 0 and len(mild_night) > 0:
             hot_effect = hot_afternoon["true_treatment_effect"].mean()
             mild_effect = mild_night["true_treatment_effect"].mean()
@@ -246,9 +238,7 @@ class TestCausalGraphHasNonParents:
 class TestBenchmarkSmoke:
     """Run with budget=3, seed=0, verify result has expected fields."""
 
-    def test_smoke_result_has_expected_fields(
-        self, scenario: DemandResponseScenario
-    ) -> None:
+    def test_smoke_result_has_expected_fields(self, scenario: DemandResponseScenario) -> None:
         result = scenario.run_benchmark(budget=3, seed=0, strategy="random")
         assert isinstance(result, CounterfactualBenchmarkResult)
         assert result.strategy == "random"
@@ -261,9 +251,7 @@ class TestBenchmarkSmoke:
         assert math.isfinite(result.runtime_seconds)
         assert result.runtime_seconds > 0
 
-    def test_smoke_regret_is_non_negative(
-        self, scenario: DemandResponseScenario
-    ) -> None:
+    def test_smoke_regret_is_non_negative(self, scenario: DemandResponseScenario) -> None:
         result = scenario.run_benchmark(budget=3, seed=0, strategy="random")
         assert result.regret >= -1e-9, f"Regret should be non-negative, got {result.regret}"
 

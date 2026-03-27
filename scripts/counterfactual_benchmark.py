@@ -76,8 +76,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(
         description=(
-            "Run counterfactual demand-response benchmark "
-            "across strategies, budgets, and seeds."
+            "Run counterfactual demand-response benchmark across strategies, budgets, and seeds."
         ),
     )
     parser.add_argument(
@@ -226,8 +225,7 @@ def main() -> None:
     for s in strategies:
         if s not in _VALID_STRATEGIES:
             print(
-                f"ERROR: Unknown strategy {s!r}. "
-                f"Must be one of {sorted(_VALID_STRATEGIES)}.",
+                f"ERROR: Unknown strategy {s!r}. Must be one of {sorted(_VALID_STRATEGIES)}.",
                 file=sys.stderr,
             )
             sys.exit(1)
