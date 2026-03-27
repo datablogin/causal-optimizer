@@ -18,7 +18,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from causal_optimizer.diagnostics.anytime import AnytimeMetrics
+    from causal_optimizer.diagnostics.skip_calibration import SkipDiagnostics
 
 import pandas as pd
 
@@ -281,6 +285,8 @@ class PredictiveBenchmarkResult:
     test_mae: float
     selected_parameters: dict[str, Any]
     runtime_seconds: float
+    skip_diagnostics: SkipDiagnostics | None = None
+    anytime_metrics: AnytimeMetrics | None = None
     validation_test_gap: float = field(init=False)
 
     def __post_init__(self) -> None:

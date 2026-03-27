@@ -159,6 +159,9 @@ def run_strategy(
     space = adapter.get_search_space()
     runner = ValidationEnergyRunner(train_df=train_df, val_df=val_df, seed=seed)
 
+    skip_diag = None
+    anytime = None
+
     if strategy == "random":
         best_mae = float("inf")
         best_params: dict[str, Any] | None = None
@@ -195,6 +198,14 @@ def run_strategy(
             best_mae = float("inf")
             best_params = None
 
+        # Collect skip diagnostics and anytime metrics from the engine
+        skip_diag = engine.skip_diagnostics
+        _DEFAULT_CHECKPOINTS = [5, 10, 20, 40, 80]
+        checkpoints = [c for c in _DEFAULT_CHECKPOINTS if c <= budget] or [budget]
+        if budget not in checkpoints:
+            checkpoints.append(budget)
+        anytime = engine.anytime_metrics(sorted(checkpoints))
+
     # If no valid result, skip — do not serialize a sentinel row.
     if best_params is None:
         logger.warning(
@@ -226,6 +237,8 @@ def run_strategy(
         test_mae=test_mae,
         selected_parameters=best_params,
         runtime_seconds=runtime,
+        skip_diagnostics=skip_diag,
+        anytime_metrics=anytime,
     )
 
 

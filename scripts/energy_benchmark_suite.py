@@ -636,6 +636,70 @@ def _fmt(val: float, decimals: int = 2) -> str:
     return f"{val:.{decimals}f}"
 
 
+def _append_skip_calibration_section(
+    lines: list[str],
+    all_results: dict[str, list[PredictiveBenchmarkResult]],
+    strategies: list[str],
+    budgets: list[int],
+) -> None:
+    """Append a Skip Calibration section to the report lines.
+
+    Shows skip ratio by strategy, mean skip confidence, and audit
+    false-skip rate when audit mode was enabled.
+    """
+    max_budget = max(budgets)
+
+    # Aggregate skip diagnostics across datasets
+    skip_data: dict[str, list[PredictiveBenchmarkResult]] = {}
+    for _ds_id, results in all_results.items():
+        for r in results:
+            if r.budget == max_budget:
+                skip_data.setdefault(r.strategy, []).append(r)
+
+    lines.append(
+        "| Strategy | Skip Ratio (mean) | Mean Skip Confidence "
+        "| Audit False-Skip Rate | Seeds |"
+    )
+    lines.append("|----------|-------------------|----------------------|"
+                 "-----------------------|-------|")
+
+    for strategy in strategies:
+        group = skip_data.get(strategy, [])
+        if not group:
+            continue
+
+        ratios: list[float] = []
+        confidences: list[float] = []
+        false_skip_count = 0
+        audit_total = 0
+
+        for r in group:
+            if r.skip_diagnostics is not None:
+                ratios.append(r.skip_diagnostics.skip_ratio)
+                confidences.extend(r.skip_diagnostics.skip_confidences)
+                if r.skip_diagnostics.audit_results:
+                    for ar in r.skip_diagnostics.audit_results:
+                        audit_total += 1
+                        if not ar.was_correct_skip:
+                            false_skip_count += 1
+            else:
+                ratios.append(0.0)
+
+        mean_ratio = sum(ratios) / len(ratios) if ratios else 0.0
+        mean_conf = sum(confidences) / len(confidences) if confidences else 0.0
+        if audit_total > 0:
+            false_rate = f"{false_skip_count / audit_total:.1%}"
+        else:
+            false_rate = "N/A"
+
+        lines.append(
+            f"| {strategy} | {mean_ratio:.1%} | {mean_conf:.3f} "
+            f"| {false_rate} | {len(group)} |"
+        )
+
+    lines.append("")
+
+
 def generate_suite_report(
     suite_summary: dict[str, Any],
     all_results: dict[str, list[PredictiveBenchmarkResult]],
@@ -782,6 +846,11 @@ def generate_suite_report(
     for reason in acceptance["reasons"]:
         lines.append(f"- {reason}")
     lines.append("")
+
+    # Skip Calibration section
+    lines.append("## Skip Calibration")
+    lines.append("")
+    _append_skip_calibration_section(lines, all_results, strategies, budgets)
 
     # Key questions
     lines.append("## Key Questions")
