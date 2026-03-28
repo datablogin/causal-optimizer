@@ -1,6 +1,6 @@
 # Benchmark State
 
-Updated: 2026-03-26 (Sprint 16 planned)
+Updated: 2026-03-28 (Sprint 17 complete)
 
 ## Purpose
 
@@ -230,17 +230,48 @@ Three steps:
 
 Steps 1 and 2 are parallel. Step 3 depends on both.
 
+## Sprint 17 Scope
+
+Sprint prompt: `thoughts/shared/prompts/sprint-17-skip-calibration-counterfactual-benchmark.md`
+
+Three steps (Steps 1 and 2 parallel, Step 3 depends on both):
+
+1. **Skip Calibration Diagnostics** (PR #77) — `SkipDiagnostics`, `AuditResult`,
+   `AnytimeMetrics` dataclasses. Engine instrumented with `_skip_log`,
+   `skip_diagnostics` property, `anytime_metrics()` method, `audit_skip_rate` param.
+   Benchmark suite report includes skip calibration section.
+
+2. **Semi-Synthetic Counterfactual Benchmark** (PR #76) — `DemandResponseScenario`
+   generates semi-synthetic data from real ERCOT covariates with known treatment
+   effects. Non-trivial causal graph with genuine non-parents (humidity, day_of_week).
+   `CounterfactualBenchmarkResult` with policy value, regret, decision error rate.
+
+3. **Suite Re-Run + Combined Report** (PR #79) — Full suite with skip diagnostics
+   + counterfactual benchmark. Combined report at
+   `thoughts/shared/docs/sprint-17-combined-report.md`.
+
+Sprint 17 results:
+
+- **Promotion verdict: INVESTIGATE**
+- Skip calibration: 33% false-skip rate (too high for production)
+- Counterfactual benchmark: degenerate (treatment cost 50.0 > benefit, oracle = never treat)
+- Causal vs surrogate_only: <0.1% difference at budget=80, below 0.1% threshold
+- Causal is 100x slower than surrogate_only on counterfactual benchmark (screening formula enumeration)
+- Plan 08 fully complete (all 5 agents delivered)
+
 ## Priority Improvements
 
-These are the highest-value next changes suggested by the first real benchmark:
+These are the highest-value next changes suggested by Sprint 17:
 
-1. Make causal guidance active under the RF-surrogate fallback instead of effectively no-op.
-2. Install or support the acquisition path needed for true causal differentiation (`Ax` / `BoTorch`) and verify it changes optimizer behavior.
-3. Add a second real benchmark so optimizer changes are judged across tasks, not just on ERCOT.
-4. Add cross-benchmark acceptance rules before claiming improvement:
-   - better mean test MAE on at least one real benchmark
-   - no material regression on the others
-   - stable behavior across seeds
+1. ~~Make causal guidance active under the RF-surrogate fallback instead of effectively no-op.~~ — done (Sprint 16)
+2. ~~Add a second real benchmark so optimizer changes are judged across tasks, not just on ERCOT.~~ — done (Sprint 16)
+3. ~~Add cross-benchmark acceptance rules.~~ — done (Sprint 16)
+4. ~~Add skip calibration diagnostics.~~ — done (Sprint 17)
+5. ~~Add semi-synthetic counterfactual benchmark.~~ — done (Sprint 17)
+6. Fix counterfactual benchmark: lower treatment cost or strengthen effects so oracle is non-trivial.
+7. Improve skip calibration: higher confidence thresholds, calibrated probabilities, or burn-in.
+8. Address causal differentiation at low budgets: causal == surrogate_only at budget 20/40.
+9. Performance: causal 100x slower than surrogate_only due to screening formula enumeration.
 
 ## Review Workflow That Worked
 
