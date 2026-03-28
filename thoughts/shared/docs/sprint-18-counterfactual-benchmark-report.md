@@ -16,8 +16,10 @@ a meaningful minority of rows and weak strategies have measurable regret.
    instead of `[50, 105] F`.
 2. **Treatment cost adjusted** -- Set `treatment_cost=60.0` to produce an
    oracle treat rate of ~32%, creating a non-trivial decision boundary.
-3. **Performance fix** -- No longer 100x slower for causal; screening
-   formula enumeration bottleneck was resolved in the re-parameterization.
+3. **Performance fix** -- Causal is no longer 100x slower than surrogate_only.
+   The smooth treatment effect function (sigmoid * Gaussian) produces better
+   surrogate fits, reducing wasted iterations. The `max_skips=0` setting
+   also eliminates off-policy skip overhead.
 
 ## Oracle Statistics
 

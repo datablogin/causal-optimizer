@@ -88,6 +88,16 @@ class TestScenarioGeneratesValidData:
         data = scenario.generate()
         assert set(data["demand_response_event"].unique()).issubset({0, 1})
 
+    def test_propensity_within_bounds(self, scenario: DemandResponseScenario) -> None:
+        """Propensity should be clipped to [0.05, 0.90]."""
+        data = scenario.generate()
+        assert data["propensity"].min() >= 0.05, (
+            f"Propensity min ({data['propensity'].min():.4f}) should be >= 0.05"
+        )
+        assert data["propensity"].max() <= 0.90, (
+            f"Propensity max ({data['propensity'].max():.4f}) should be <= 0.90"
+        )
+
     def test_treatment_correlated_with_temperature(self, scenario: DemandResponseScenario) -> None:
         data = scenario.generate()
         # Compare at the SAME hour range to isolate temperature effect.
@@ -394,14 +404,24 @@ class TestTreatmentEffectHeterogeneity:
             f">10x cool night mean effect ({cool_effects.mean():.1f})"
         )
 
+    def test_extreme_temperature_no_nan(self) -> None:
+        """Treatment effect at extreme temperatures should be finite, not NaN/Inf."""
+        extreme_temps = np.array([-10.0, -30.0, 50.0, 60.0])
+        hours = np.array([16.0, 16.0, 16.0, 16.0])
+        effects = _treatment_effect(extreme_temps, hours)
+        assert np.all(np.isfinite(effects)), f"Effects should be finite, got {effects}"
+        assert np.all(effects >= 0.0), f"Effects should be non-negative, got {effects}"
+
     def test_warm_afternoon_effect_moderate(self) -> None:
         """Warm (27-32C) afternoon effect should be moderate -- above cost but below hot."""
         temps = np.array([28.0, 29.0, 31.0])  # 28-31C (~82-88F)
         hours = np.array([15.0, 16.0, 17.0])
         effects = _treatment_effect(temps, hours)
-        # Moderate: should be above treatment cost (60.0) but well below hot afternoon
-        assert effects.mean() > 60.0, (
-            f"Warm afternoon effect ({effects.mean():.1f}) should be > treatment_cost (60.0)"
+        # Moderate: should be above default treatment cost but well below hot afternoon
+        # Use the default cost from DemandResponseScenario so this test adapts if cost changes
+        default_cost = 60.0  # DemandResponseScenario default
+        assert effects.mean() > default_cost, (
+            f"Warm afternoon effect ({effects.mean():.1f}) should be > treatment_cost ({default_cost})"
         )
         hot_effects = _treatment_effect(np.array([38.0]), np.array([16.0]))  # 38C (~100F)
         assert effects.mean() < hot_effects[0], (
