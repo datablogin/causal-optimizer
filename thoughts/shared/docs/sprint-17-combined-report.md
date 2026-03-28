@@ -2,7 +2,7 @@
 
 ## Metadata
 
-- **Date**: 2026-04-08
+- **Date**: 2026-03-28
 - **Sprint**: 17 (suite re-run with skip calibration + counterfactual benchmark)
 - **Datasets**: ercot_north_c, ercot_coast
 - **Strategies**: random, surrogate_only, causal
@@ -248,10 +248,10 @@ The causal strategy is 100x slower than surrogate_only on the counterfactual ben
 due to screening formula enumeration. This needs profiling and optimization before the
 counterfactual benchmark can be run at scale.
 
-## Artifact Paths
+## Artifact Paths (local-only, not committed)
 
-- Suite summary: `/Users/robertwelborn/Projects/_local/causal-optimizer/artifacts/suite_sprint17/suite_summary.json`
-- Suite report: `/Users/robertwelborn/Projects/_local/causal-optimizer/artifacts/suite_sprint17/suite_report.md`
-- ercot_north_c results: `/Users/robertwelborn/Projects/_local/causal-optimizer/artifacts/suite_sprint17/ercot_north_c_results.json`
-- ercot_coast results: `/Users/robertwelborn/Projects/_local/causal-optimizer/artifacts/suite_sprint17/ercot_coast_results.json`
-- Counterfactual results: `/Users/robertwelborn/Projects/_local/causal-optimizer/artifacts/counterfactual_sprint17_results.json`
+- Suite summary: `artifacts/suite_sprint17/suite_summary.json`
+- Suite report: `artifacts/suite_sprint17/suite_report.md`
+- ercot_north_c results: `artifacts/suite_sprint17/ercot_north_c_results.json`
+- ercot_coast results: `artifacts/suite_sprint17/ercot_coast_results.json`
+- Counterfactual results: `artifacts/counterfactual_sprint17_results.json`
