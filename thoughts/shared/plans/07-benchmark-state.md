@@ -1,6 +1,6 @@
 # Benchmark State
 
-Updated: 2026-03-26 (Sprint 16 planned)
+Updated: 2026-03-25
 
 ## Purpose
 
@@ -14,17 +14,16 @@ Use it when:
 
 ## Current Goal
 
-Use the first real predictive benchmark to answer:
+Build the first real predictive-model benchmark that answers:
 
 1. Can `causal-optimizer` improve a real predictive model on unseen data under a fixed experiment budget?
 
-The current benchmark target is:
+The benchmark target is:
 
 1. day-ahead energy load forecasting
 2. local CSV or Parquet data
 3. locked chronological `train` / `validation` / `test` split
 4. strategy comparison across `random`, `surrogate_only`, and `causal`
-5. one real benchmark report that is strong enough to guide the next optimizer iteration
 
 ## Canonical Planning Docs
 
@@ -33,10 +32,6 @@ Primary references:
 1. `thoughts/shared/plans/05-real-predictive-model-benchmark.md`
 2. `thoughts/shared/plans/06-energy-predictive-benchmark-handoff.md`
 3. `thoughts/shared/prompts/sprint-14-energy-benchmark.md`
-4. `thoughts/shared/prompts/sprint-15-real-energy-benchmark-run.md`
-5. `thoughts/shared/docs/ercot-north-c-dfw-2022-2024-benchmark-report.md`
-6. `thoughts/shared/plans/08-optimizer-improvement-briefs.md`
-7. `thoughts/shared/prompts/sprint-16-causal-differentiation-suite.md`
 
 PR 63 review handoff reference:
 
@@ -53,45 +48,6 @@ These are the important design decisions that should not drift:
 5. After feature generation and any row dropping, the effective training window must remain strictly earlier than the effective validation/test window
 6. If preprocessing makes that impossible, the run must fail rather than leak held-out rows into training
 7. The first pass is single-series and local-data only
-
-## Benchmark Outcome
-
-### First Real Benchmark Run
-
-Dataset:
-
-1. `ERCOT NCENT/NORTH_C` hourly load
-2. NOAA station `USW00003927`
-3. saved as UTC single-series Parquet at:
-   `/Users/robertwelborn/Projects/_local/causal-optimizer/data/ercot_north_c_dfw_2022_2024.parquet`
-
-Key verified dataset properties:
-
-1. `26,291` rows
-2. no duplicate timestamps
-3. no missing `target_load`
-4. no missing `temperature`
-5. calendar features now derived from ERCOT local market time before UTC storage
-
-Locked split boundaries:
-
-1. train: `2022-01-01 06:00:00 UTC` to `2023-10-20 11:00:00 UTC`
-2. validation: `2023-10-20 12:00:00 UTC` to `2024-05-26 13:00:00 UTC`
-3. test: `2024-05-26 14:00:00 UTC` to `2024-12-31 23:00:00 UTC`
-
-Benchmark result:
-
-1. outcome: **inconclusive / negative for causal advantage**
-2. `random` was marginally better on test MAE at all budgets
-3. `causal` and `surrogate_only` were effectively identical
-4. all strategies converged to `ridge`
-5. benchmark behavior was highly stable across seeds
-
-Interpretation:
-
-1. The benchmark harness is functioning correctly.
-2. The current causal path is not meaningfully differentiated under the RF-surrogate fallback.
-3. The benchmark currently provides stronger evidence about optimizer limitations than about causal benefit.
 
 ## Issue / PR State
 
@@ -113,8 +69,8 @@ Key implementation details:
 
 Review state:
 
-1. merged
-2. no outstanding benchmark-contract blockers from review
+1. last review outcome: no blocking findings after the degenerate split fix
+2. recommended next step: merge if not already merged
 
 Important contract note:
 
@@ -151,8 +107,8 @@ Verification rerun on `d075662`:
 
 Review state:
 
-1. merged
-2. no outstanding runner blockers from review
+1. last review outcome: no blocking findings
+2. recommended next step: merge if branch state still matches `d075662` or later equivalent
 
 Non-blocking follow-up idea:
 
@@ -166,81 +122,16 @@ Scope:
 2. reproducibility regression test
 3. benchmark documentation
 
-Review state:
+Recommended start condition:
 
-1. shipped via PR `#64`
-2. smoke tests, reproducibility test, and benchmark docs are in place
-
-### Issue / PR #65
-
-Scope:
-
-1. first real energy benchmark run
-2. dataset preparation
-3. benchmark artifact generation
-4. benchmark report
-
-Branch / review context:
-
-1. branch: `sprint-15/energy-benchmark-report`
-2. latest reviewed commit: `8ddf271`
-3. report path: `thoughts/shared/docs/ercot-north-c-dfw-2022-2024-benchmark-report.md`
-
-Important review outcome:
-
-1. local-time calendar feature bug was found and fixed
-2. split boundary reporting was corrected to actual timestamps
-3. the benchmark report is now review-ready
-4. the substantive result remains: `causal` is not outperforming `random` on this benchmark
-
-Local artifact paths:
-
-1. dataset: `/Users/robertwelborn/Projects/_local/causal-optimizer/data/ercot_north_c_dfw_2022_2024.parquet`
-2. smoke: `/Users/robertwelborn/Projects/_local/causal-optimizer/artifacts/ercot_north_c_dfw_2022_2024_smoke.json`
-3. full results: `/Users/robertwelborn/Projects/_local/causal-optimizer/artifacts/ercot_north_c_dfw_2022_2024_results.json`
-4. summary CSV: `/Users/robertwelborn/Projects/_local/causal-optimizer/artifacts/ercot_north_c_dfw_2022_2024_summary.csv`
+1. begin only after `#59` and `#60` are merged to `main`
 
 ## Recommended Next Steps
 
-1. ~~merge PR `#65` if branch state still matches the reviewed benchmark-report state~~ — done (PR #67 merged)
-2. treat the first real benchmark result as a system-learning milestone, not a product win
-3. ~~prioritize optimizer improvements that differentiate `causal` from `surrogate_only` in a domain-general way~~ — Sprint 16 Step 1
-4. ~~re-run the benchmark only after one general optimizer improvement lands~~ — Sprint 16 Step 3
-5. ~~add at least one more real benchmark before making stronger predictive-model claims~~ — Sprint 16 Step 2
-
-## Sprint 16 Scope
-
-Sprint prompt: `thoughts/shared/prompts/sprint-16-causal-differentiation-suite.md`
-
-Three steps:
-
-1. **Causal Fallback Differentiation** — inject causal graph structure into
-   `_suggest_surrogate()` via targeted intervention candidates (50 LHS + 50
-   causal-targeted). Root cause: star graph makes `ancestors()` == all vars.
-   Fix: pass `causal_graph` to surrogate, generate candidates that perturb
-   only 1-2 direct parents of the objective.
-
-2. **Second Real Benchmark** — ERCOT COAST + Houston-area NOAA weather.
-   Same harness, same contract, different load/weather regime. Parquet at
-   `/Users/robertwelborn/Projects/_local/causal-optimizer/data/ercot_coast_houston_2022_2024.parquet`
-
-3. **Multi-Benchmark Suite** — suite runner across both datasets, combined
-   report with acceptance rules (improve >= 1, no regression, stable, differentiated).
-   Re-runs both benchmarks after the differentiation change lands.
-
-Steps 1 and 2 are parallel. Step 3 depends on both.
-
-## Priority Improvements
-
-These are the highest-value next changes suggested by the first real benchmark:
-
-1. Make causal guidance active under the RF-surrogate fallback instead of effectively no-op.
-2. Install or support the acquisition path needed for true causal differentiation (`Ax` / `BoTorch`) and verify it changes optimizer behavior.
-3. Add a second real benchmark so optimizer changes are judged across tasks, not just on ERCOT.
-4. Add cross-benchmark acceptance rules before claiming improvement:
-   - better mean test MAE on at least one real benchmark
-   - no material regression on the others
-   - stable behavior across seeds
+1. merge PR `#62` if it is not already merged
+2. merge PR `#63` if it is not already merged
+3. start `#61` on top of merged `main`
+4. keep the benchmark docs and prompts aligned to the shipped implementation, not the older scaffold
 
 ## Review Workflow That Worked
 
@@ -263,10 +154,6 @@ The most effective review loop was:
 
 ## Local Workspace Note
 
-The real benchmark artifacts and prep script live outside the repo under:
+Several planning and prompt files under `thoughts/shared/` are currently present locally but untracked in git.
 
-1. `/Users/robertwelborn/Projects/_local/causal-optimizer/`
-
-That keeps large files out of git, but long-term reproducibility depends on
-preserving those local files or moving the prep logic into a durable tracked
-location.
+If this state file is meant to be durable team documentation, it should be committed along with the related planning docs.
