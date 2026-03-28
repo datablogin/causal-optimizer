@@ -342,9 +342,7 @@ class TestOracleTreatsMeaningfulMinority:
         effect = data["true_treatment_effect"].values
         oracle_treat = effect > cost
         treat_rate = float(oracle_treat.mean())
-        assert 0.10 <= treat_rate <= 0.40, (
-            f"Oracle treat rate {treat_rate:.3f} not in [0.10, 0.40]"
-        )
+        assert 0.10 <= treat_rate <= 0.40, f"Oracle treat rate {treat_rate:.3f} not in [0.10, 0.40]"
 
     def test_oracle_value_positive(self, scenario: DemandResponseScenario) -> None:
         """Oracle policy value must be strictly positive (not zero)."""
@@ -358,9 +356,7 @@ class TestOracleTreatsMeaningfulMinority:
         oracle_value = scenario.oracle_policy_value(data)
         never_treat_value = 0.0  # by definition
         regret = oracle_value - never_treat_value
-        assert regret > 1.0, (
-            f"Never-treat regret should be > 1.0, got {regret:.4f}"
-        )
+        assert regret > 1.0, f"Never-treat regret should be > 1.0, got {regret:.4f}"
 
     def test_always_treat_has_regret(self, scenario: DemandResponseScenario) -> None:
         """'Always treat' should have measurable regret vs oracle.
@@ -374,9 +370,7 @@ class TestOracleTreatsMeaningfulMinority:
         # Always-treat: net benefit = mean(effect - cost) for all rows
         always_treat_value = float((data["true_treatment_effect"] - cost).mean())
         regret = oracle_value - always_treat_value
-        assert regret > 0.5, (
-            f"Always-treat regret should be > 0.5, got {regret:.4f}"
-        )
+        assert regret > 0.5, f"Always-treat regret should be > 0.5, got {regret:.4f}"
 
 
 # ── Test 8: Treatment effect heterogeneity (quantitative) ────────
@@ -406,9 +400,7 @@ class TestTreatmentEffectHeterogeneity:
         hours = np.array([15.0, 16.0, 17.0])
         effects = _treatment_effect(temps, hours)
         # Moderate: should be clearly above zero but well below hot afternoon
-        assert effects.mean() > 20.0, (
-            f"Warm afternoon effect ({effects.mean():.1f}) should be > 20"
-        )
+        assert effects.mean() > 20.0, f"Warm afternoon effect ({effects.mean():.1f}) should be > 20"
         hot_effects = _treatment_effect(np.array([38.0]), np.array([16.0]))  # 38C (~100F)
         assert effects.mean() < hot_effects[0], (
             f"Warm afternoon effect ({effects.mean():.1f}) should be < "
@@ -429,9 +421,7 @@ class TestSmokeBenchmarkNonDegenerate:
             f"Oracle value should be > 0, got {result.oracle_value:.4f}"
         )
 
-    def test_smoke_nonzero_regret_for_random(
-        self, scenario: DemandResponseScenario
-    ) -> None:
+    def test_smoke_nonzero_regret_for_random(self, scenario: DemandResponseScenario) -> None:
         """Random strategy with budget=3 should have measurable regret."""
         # With only 3 random policies, it is extremely unlikely to match oracle
         result = scenario.run_benchmark(budget=3, seed=0, strategy="random")
@@ -452,13 +442,9 @@ class TestBenchmarkReproducibility:
         assert r1.policy_value == pytest.approx(r2.policy_value, abs=1e-9)
         assert r1.oracle_value == pytest.approx(r2.oracle_value, abs=1e-9)
         assert r1.regret == pytest.approx(r2.regret, abs=1e-9)
-        assert r1.decision_error_rate == pytest.approx(
-            r2.decision_error_rate, abs=1e-9
-        )
+        assert r1.decision_error_rate == pytest.approx(r2.decision_error_rate, abs=1e-9)
 
-    def test_different_seed_different_result(
-        self, scenario: DemandResponseScenario
-    ) -> None:
+    def test_different_seed_different_result(self, scenario: DemandResponseScenario) -> None:
         """Different seeds should generally produce different policies."""
         r1 = scenario.run_benchmark(budget=5, seed=0, strategy="random")
         r2 = scenario.run_benchmark(budget=5, seed=99, strategy="random")
