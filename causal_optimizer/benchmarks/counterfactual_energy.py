@@ -66,9 +66,17 @@ class CounterfactualBenchmarkResult:
 def _treatment_effect(temperature: np.ndarray, hour_of_day: np.ndarray) -> np.ndarray:
     """Compute the deterministic treatment effect (load reduction in MW).
 
-    The effect is large on hot afternoons, near-zero on mild nights,
-    and moderate otherwise.  No stochastic noise -- counterfactual
-    truth is exact.
+    Uses a smooth, continuous function of temperature and hour so the
+    effect distribution has no large point-mass clusters.  The effect
+    is large on hot afternoons (~300 MW), moderate on warm afternoons
+    (~100-200 MW), and near-zero on cool nights (<5 MW).
+
+    Temperature component: sigmoid centered at 75 F (steep transition
+    zone 65-85 F).  Hour component: Gaussian peak at 16:00 with
+    sigma 3.5 h.  The product is scaled so the theoretical maximum
+    is 350 MW (temp >> 100 F, hour = 16).
+
+    No stochastic noise -- counterfactual truth is exact.
 
     Args:
         temperature: Array of temperatures (Fahrenheit).
@@ -80,22 +88,14 @@ def _treatment_effect(temperature: np.ndarray, hour_of_day: np.ndarray) -> np.nd
     temp = np.asarray(temperature, dtype=np.float64)
     hour = np.asarray(hour_of_day, dtype=np.float64)
 
-    # Base effect: moderate everywhere
-    effect = np.full_like(temp, 30.0)
+    # Temperature response: sigmoid centered at 75F, slope 0.12
+    temp_response = 1.0 / (1.0 + np.exp(-0.12 * (temp - 75.0)))
 
-    # Hot afternoon bonus: temp > 90F and hour in [14, 18]
-    hot_afternoon = (temp > 90.0) & (hour >= 14.0) & (hour <= 18.0)
-    effect = np.where(hot_afternoon, 150.0 + 2.0 * (temp - 90.0), effect)
+    # Hour response: Gaussian peak at 16:00, sigma=3.5 hours
+    hour_response = np.exp(-0.5 * ((hour - 16.0) / 3.5) ** 2)
 
-    # Warm afternoon: temp > 80F and hour in [14, 18] but not hot
-    warm_afternoon = (temp > 80.0) & (temp <= 90.0) & (hour >= 14.0) & (hour <= 18.0)
-    effect = np.where(warm_afternoon, 60.0 + 1.0 * (temp - 80.0), effect)
-
-    # Mild night suppression: temp < 70F or hour in [0, 6]
-    mild_night = (temp < 70.0) | (hour <= 6.0)
-    # Scale down: colder and later at night means less effect
-    night_factor = np.clip((temp - 50.0) / 40.0, 0.0, 1.0)
-    effect = np.where(mild_night, 5.0 * night_factor, effect)
+    # Combined: peak ~350 MW at hottest afternoon hours
+    effect = 350.0 * temp_response * hour_response
 
     return np.maximum(effect, 0.0)
 
@@ -269,14 +269,16 @@ class DemandResponseScenario:
             humidity, hour_of_day, day_of_week, is_holiday, target_load,
             and optionally load_lag_* columns).
         seed: Random seed controlling treatment assignment randomness.
-        treatment_cost: Fixed cost per demand-response event.
+        treatment_cost: Fixed cost per demand-response event.  The default
+            (60.0) produces an oracle treat rate of ~25-35% on typical
+            covariate distributions (uniform temps 50-105 F).
     """
 
     def __init__(
         self,
         covariates: pd.DataFrame,
         seed: int = 0,
-        treatment_cost: float = 50.0,
+        treatment_cost: float = 60.0,
     ) -> None:
         self._covariates = covariates.copy()
         self._seed = seed
@@ -467,6 +469,7 @@ class DemandResponseScenario:
                 objective_name="objective",
                 minimize=True,
                 seed=seed,
+                max_skips=0,  # disable skip logic -- policy eval is cheap
             )
             engine.run_loop(budget)
             best_result = engine.log.best_result("objective", minimize=True)
