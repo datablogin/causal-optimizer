@@ -11,7 +11,7 @@ import json
 import warnings
 from dataclasses import asdict, dataclass, field
 from datetime import date, timedelta
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
 import pandas as pd
 
@@ -95,6 +95,58 @@ def _last_weekday(year: int, month: int, weekday: int) -> date:
     while d.weekday() != weekday:
         d -= timedelta(days=1)
     return d
+
+
+# ---------------------------------------------------------------------------
+# Internal result TypedDicts (typed alternatives to dict[str, Any])
+# ---------------------------------------------------------------------------
+
+
+class _TimestampResult(TypedDict):
+    series: Any  # pd.Series
+    summary: dict[str, object]
+    warnings: list[dict[str, object]]
+    stop: bool
+
+
+class _CadenceResult(TypedDict):
+    inferred_cadence: str
+    cadence_regularity: float
+    gap_count: int
+    warnings: list[dict[str, object]]
+    stop: bool
+
+
+class _DSTResult(TypedDict, total=False):
+    dst_suspected: bool
+    short_days: int
+    long_days: int
+    notes: list[str]
+
+
+class _IntervalResult(TypedDict):
+    recommended_convention: str
+    confidence: float
+    notes: list[str]
+
+
+class _CalendarBasisResult(TypedDict):
+    best_timezone: str
+    scores: list[dict[str, object]]
+
+
+class _HolidayResult(TypedDict):
+    recommended: bool
+    calendar: str
+    reason: str
+    confidence: float
+
+
+class _AggregationResult(TypedDict):
+    recommended_rollup: str
+    target_cadence: str
+    reason: str
+    confidence: float
 
 
 # ---------------------------------------------------------------------------
@@ -218,6 +270,11 @@ class TimeSeriesCalendarProfiler:
         dataset_id: str = "unknown",
     ) -> TimeSeriesCalendarProfile:
         """Run all profiler checks and return a structured profile."""
+        if target_col is not None and target_col not in data.columns:
+            raise ValueError(
+                f"target_col={target_col!r} not found in DataFrame columns: {list(data.columns)}"
+            )
+
         profile_warnings: list[dict[str, object]] = []
         recommendations: list[CalendarProfileRecommendation] = []
         stop = False
@@ -398,7 +455,7 @@ class TimeSeriesCalendarProfiler:
             dataset_id=dataset_id,
             summary=summary,
             timezone_analysis=timezone_analysis,
-            interval_analysis=interval_result,
+            interval_analysis=dict(interval_result),
             calendar_analysis=calendar_analysis,
             aggregation_analysis=aggregation_analysis,
             warnings=profile_warnings,
@@ -410,7 +467,7 @@ class TimeSeriesCalendarProfiler:
     # Check 1: Timestamp parse + monotonicity
     # -----------------------------------------------------------------------
 
-    def _check_timestamps(self, data: pd.DataFrame, timestamp_col: str) -> dict[str, Any]:
+    def _check_timestamps(self, data: pd.DataFrame, timestamp_col: str) -> _TimestampResult:
         """Parse timestamps and check for duplicates, monotonicity, mixed tz."""
         ts_warnings: list[dict[str, object]] = []
         stop = False
@@ -475,7 +532,7 @@ class TimeSeriesCalendarProfiler:
     # Check 2: Cadence inference
     # -----------------------------------------------------------------------
 
-    def _infer_cadence(self, ts: pd.Series[Any]) -> dict[str, Any]:
+    def _infer_cadence(self, ts: pd.Series[Any]) -> _CadenceResult:
         """Infer the dominant time interval and regularity."""
         cadence_warnings: list[dict[str, object]] = []
         stop = False
@@ -559,7 +616,7 @@ class TimeSeriesCalendarProfiler:
     # Check 3: DST / timezone artifact detection
     # -----------------------------------------------------------------------
 
-    def _detect_dst(self, ts: pd.Series[Any]) -> dict[str, Any]:
+    def _detect_dst(self, ts: pd.Series[Any]) -> _DSTResult:
         """Look for 23-hour/25-hour day patterns suggesting DST transitions."""
         ts_clean = ts.dropna().sort_values()
         if len(ts_clean) < 48:
@@ -607,7 +664,7 @@ class TimeSeriesCalendarProfiler:
     # Check 4: Interval convention detection
     # -----------------------------------------------------------------------
 
-    def _detect_interval_convention(self, ts: pd.Series[Any]) -> dict[str, Any]:
+    def _detect_interval_convention(self, ts: pd.Series[Any]) -> _IntervalResult:
         """Heuristic: detect hour-ending vs interval-start labeling."""
         ts_clean = ts.dropna().sort_values()
         if len(ts_clean) < 24:
@@ -667,11 +724,11 @@ class TimeSeriesCalendarProfiler:
         ts: pd.Series[Any],
         target: pd.Series[Any],
         candidate_timezones: list[str],
-    ) -> dict[str, Any]:
+    ) -> _CalendarBasisResult:
         """Compare variance explained by hour-of-day buckets across timezones.
 
         Uses three complementary signals:
-        1. Global hour-of-day R2 (eta-squared) — weight 0.4.
+        1. Global hour-of-day eta-squared (between-group SS / total SS) — weight 0.4.
         2. Within-hour homogeneity (1 - avg_within_std/overall_std) — weight 0.4.
         3. Midnight-alignment bonus: 0.2 if the first record in a candidate
            timezone falls on hour 0 while the raw (UTC) hour is non-zero.
@@ -725,7 +782,7 @@ class TimeSeriesCalendarProfiler:
                 group_means = target_aligned.groupby(hours).transform("mean")
                 ss_between = float(((group_means - target_aligned.mean()) ** 2).sum())
                 ss_total = float(((target_aligned - target_aligned.mean()) ** 2).sum())
-                global_r2 = ss_between / max(ss_total, 1e-10)
+                eta_squared = ss_between / max(ss_total, 1e-10)
 
                 # Within-hour homogeneity: lower avg within-group std = better
                 within_stds = target_aligned.groupby(hours).std()
@@ -741,10 +798,12 @@ class TimeSeriesCalendarProfiler:
                 first_local_hour = int(hours.iloc[0])
                 midnight_aligned = first_local_hour == 0 and first_utc_hour != 0
 
-                combined = 0.4 * global_r2 + 0.4 * homogeneity + (0.2 if midnight_aligned else 0.0)
+                combined = (
+                    0.4 * eta_squared + 0.4 * homogeneity + (0.2 if midnight_aligned else 0.0)
+                )
 
                 notes = [
-                    f"Global hour R2={global_r2:.4f}",
+                    f"Hour eta-squared={eta_squared:.4f}",
                     f"Homogeneity={homogeneity:.4f}",
                     f"Combined={combined:.4f}",
                 ]
@@ -787,7 +846,7 @@ class TimeSeriesCalendarProfiler:
         target: pd.Series[Any] | None,
         calendar_tz: str,
         holiday_calendar: str,
-    ) -> dict[str, Any]:
+    ) -> _HolidayResult:
         """Check if holiday flags improve target variance explanation."""
         if target is None or holiday_calendar == "NONE":
             return {
@@ -878,7 +937,7 @@ class TimeSeriesCalendarProfiler:
 
     def _recommend_aggregation(
         self, inferred_cadence: str, expected_cadence: str | None
-    ) -> dict[str, Any]:
+    ) -> _AggregationResult:
         """Recommend rollup if current cadence is finer than expected.
 
         Note: defaults to ``"mean"`` aggregation, which is correct for

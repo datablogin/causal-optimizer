@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import itertools
 from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from causal_optimizer.diagnostics.time_calendar_profiler import (
     TimeSeriesCalendarProfile,
@@ -155,8 +157,6 @@ class TestHourEndingDetection:
         # (hour 0 never appears).  We build multiple days of hourly data
         # starting at 01:00 with hour 0 explicitly excluded so the
         # profiler's "shift_back_one_hour" detection path fires.
-        import itertools
-
         dates = pd.date_range("2023-01-01", periods=3, freq="D")
         hours = range(1, 24)  # 01:00 through 23:00 — no hour 0
         ts_list = sorted(
@@ -227,3 +227,153 @@ class TestSubHourlyAggregation:
         agg = profile.aggregation_analysis
         assert agg["recommended_rollup"] == "mean"
         assert agg["target_cadence"] == "hourly"
+
+
+class TestParseFailures:
+    """Unparseable timestamps produce warnings and stop when rate exceeds threshold."""
+
+    def test_unparseable_timestamps_warn(self) -> None:
+        df = pd.DataFrame(
+            {
+                "timestamp": ["2023-01-01 00:00", "NOT_A_DATE", "2023-01-01 02:00"]
+                + [f"2023-01-01 {h:02d}:00" for h in range(3, 48)],
+                "target_load": np.random.default_rng(42).normal(100, 10, 48),
+            }
+        )
+        profiler = TimeSeriesCalendarProfiler()
+        profile = profiler.profile(df, timestamp_col="timestamp")
+
+        assert profile.summary["parse_ok"] is False
+        warning_codes = [w["code"] for w in profile.warnings]
+        assert "PARSE_FAILURE" in warning_codes
+
+
+class TestGapDetection:
+    """Large gaps in timestamps produce gap warnings."""
+
+    def test_gap_detected(self) -> None:
+        # Create hourly data with a 12-hour gap in the middle
+        ts_part1 = pd.date_range("2023-01-01", periods=48, freq="h")
+        ts_part2 = pd.date_range("2023-01-03 12:00", periods=48, freq="h")
+        ts = ts_part1.append(ts_part2)
+        rng = np.random.default_rng(42)
+        df = pd.DataFrame({"timestamp": ts, "target_load": rng.normal(100, 10, len(ts))})
+
+        profiler = TimeSeriesCalendarProfiler()
+        profile = profiler.profile(df, timestamp_col="timestamp")
+
+        warning_codes = [w["code"] for w in profile.warnings]
+        assert "GAPS_DETECTED" in warning_codes
+
+
+class TestToDictAndHumanSummary:
+    """Serialization via to_dict() and human_summary() round-trips correctly."""
+
+    def test_to_dict_returns_dict(self) -> None:
+        df = _make_hourly_df(periods=48)
+        profiler = TimeSeriesCalendarProfiler()
+        profile = profiler.profile(df, timestamp_col="timestamp")
+
+        result = profile.to_dict()
+        assert isinstance(result, dict)
+        assert "dataset_id" in result
+        assert "summary" in result
+        assert "recommendations" in result
+
+    def test_to_json_returns_string(self) -> None:
+        df = _make_hourly_df(periods=48)
+        profiler = TimeSeriesCalendarProfiler()
+        profile = profiler.profile(df, timestamp_col="timestamp")
+
+        import json
+
+        result = profile.to_json()
+        parsed = json.loads(result)
+        assert parsed["dataset_id"] == "unknown"
+
+    def test_human_summary_contains_key_info(self) -> None:
+        df = _make_hourly_df(periods=48)
+        profiler = TimeSeriesCalendarProfiler()
+        profile = profiler.profile(df, timestamp_col="timestamp")
+
+        text = profile.human_summary()
+        assert "Time-Series Calendar Profile" in text
+        assert "Rows:" in text
+        assert "Cadence:" in text
+
+
+class TestCalendarBasisTzAwareInput:
+    """_compare_calendar_basis handles tz-aware input without raising."""
+
+    def test_tz_aware_timestamps_handled(self) -> None:
+        # Create tz-aware UTC timestamps
+        ts = pd.date_range("2023-01-01", periods=168, freq="h", tz="UTC")
+        rng = np.random.default_rng(42)
+        local_hours = ts.tz_convert("US/Central").hour.to_numpy(dtype=float)
+        peak = np.where((local_hours >= 9) & (local_hours <= 17), 40.0, 0.0)
+        target = 100.0 + peak + rng.normal(0, 3, len(ts))
+
+        df = pd.DataFrame({"timestamp": ts, "target_load": target})
+
+        profiler = TimeSeriesCalendarProfiler()
+        profile = profiler.profile(
+            df,
+            timestamp_col="timestamp",
+            target_col="target_load",
+            candidate_timezones=["UTC", "US/Central"],
+        )
+
+        # Should not raise; should produce a valid profile
+        assert isinstance(profile, TimeSeriesCalendarProfile)
+        assert profile.timezone_analysis["recommended_calendar_timezone"] in {
+            "UTC",
+            "US/Central",
+        }
+
+
+class TestEmptyDataFrame:
+    """Empty DataFrame produces a stop profile."""
+
+    def test_empty_dataframe(self) -> None:
+        df = pd.DataFrame({"timestamp": pd.Series([], dtype="datetime64[ns]")})
+        profiler = TimeSeriesCalendarProfiler()
+        profile = profiler.profile(df, timestamp_col="timestamp")
+
+        assert profile.stop is True
+
+
+class TestTargetColValidation:
+    """Passing a target_col that does not exist raises ValueError."""
+
+    def test_missing_target_col_raises(self) -> None:
+        df = _make_hourly_df(periods=48)
+        profiler = TimeSeriesCalendarProfiler()
+
+        with pytest.raises(ValueError, match="target_col.*not found"):
+            profiler.profile(df, timestamp_col="timestamp", target_col="nonexistent")
+
+
+class TestWeeklyCadenceDetection:
+    """Weekly data is classified as 'weekly' cadence."""
+
+    def test_weekly_cadence(self) -> None:
+        ts = pd.date_range("2023-01-01", periods=52, freq="W")
+        rng = np.random.default_rng(42)
+        df = pd.DataFrame({"timestamp": ts, "target_load": rng.normal(100, 10, len(ts))})
+
+        profiler = TimeSeriesCalendarProfiler()
+        profile = profiler.profile(df, timestamp_col="timestamp")
+
+        assert profile.summary["inferred_cadence"] == "weekly"
+
+
+class TestStoreUtcNotEmittedForPlainUTC:
+    """store-utc recommendation should NOT appear when data is UTC-only with no DST."""
+
+    def test_no_store_utc_for_plain_utc(self) -> None:
+        df = _make_hourly_df(periods=168)
+        profiler = TimeSeriesCalendarProfiler()
+        profile = profiler.profile(df, timestamp_col="timestamp")
+
+        rec_ids = [r.id for r in profile.recommendations]
+        assert "store-utc" not in rec_ids
