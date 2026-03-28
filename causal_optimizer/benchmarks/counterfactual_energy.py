@@ -66,12 +66,21 @@ class CounterfactualBenchmarkResult:
 def _treatment_effect(temperature: np.ndarray, hour_of_day: np.ndarray) -> np.ndarray:
     """Compute the deterministic treatment effect (load reduction in MW).
 
-    The effect is large on hot afternoons, near-zero on mild nights,
-    and moderate otherwise.  No stochastic noise -- counterfactual
-    truth is exact.
+    Uses a smooth, continuous function of temperature and hour so the
+    effect distribution has no large point-mass clusters.  The effect
+    is large on hot afternoons (~300 MW), moderate on warm afternoons
+    (~100-200 MW), and near-zero on cool nights (<5 MW).
+
+    Temperature component: sigmoid centered at 24 C (steep transition
+    zone 18-30 C).  Hour component: Gaussian peak at 16:00 with
+    sigma 3.5 h.  The product is scaled so the theoretical maximum
+    is 350 MW (temp >> 40 C, hour = 16).
+
+    Temperature is expected in **Celsius**.  No stochastic noise --
+    counterfactual truth is exact.
 
     Args:
-        temperature: Array of temperatures (Fahrenheit).
+        temperature: Array of temperatures (Celsius).
         hour_of_day: Array of hour values (0-23).
 
     Returns:
@@ -80,24 +89,16 @@ def _treatment_effect(temperature: np.ndarray, hour_of_day: np.ndarray) -> np.nd
     temp = np.asarray(temperature, dtype=np.float64)
     hour = np.asarray(hour_of_day, dtype=np.float64)
 
-    # Base effect: moderate everywhere
-    effect = np.full_like(temp, 30.0)
+    # Temperature response: sigmoid centered at 24C (~75F), slope 0.22
+    # At 18C -> ~21% response; at 30C -> ~79% response (transition zone).
+    temp_response = 1.0 / (1.0 + np.exp(-0.22 * (temp - 24.0)))
 
-    # Hot afternoon bonus: temp > 90F and hour in [14, 18]
-    hot_afternoon = (temp > 90.0) & (hour >= 14.0) & (hour <= 18.0)
-    effect = np.where(hot_afternoon, 150.0 + 2.0 * (temp - 90.0), effect)
+    # Hour response: Gaussian peak at 16:00, sigma=3.5 hours
+    hour_response = np.exp(-0.5 * ((hour - 16.0) / 3.5) ** 2)
 
-    # Warm afternoon: temp > 80F and hour in [14, 18] but not hot
-    warm_afternoon = (temp > 80.0) & (temp <= 90.0) & (hour >= 14.0) & (hour <= 18.0)
-    effect = np.where(warm_afternoon, 60.0 + 1.0 * (temp - 80.0), effect)
-
-    # Mild night suppression: temp < 70F or hour in [0, 6]
-    mild_night = (temp < 70.0) | (hour <= 6.0)
-    # Scale down: colder and later at night means less effect
-    night_factor = np.clip((temp - 50.0) / 40.0, 0.0, 1.0)
-    effect = np.where(mild_night, 5.0 * night_factor, effect)
-
-    return np.maximum(effect, 0.0)
+    # Combined: peak ~350 MW at hottest afternoon hours
+    # Product of two positive factors -- always >= 0, but guard defensively.
+    return np.maximum(350.0 * temp_response * hour_response, 0.0)
 
 
 def _propensity(temperature: np.ndarray, hour_of_day: np.ndarray) -> np.ndarray:
@@ -107,7 +108,7 @@ def _propensity(temperature: np.ndarray, hour_of_day: np.ndarray) -> np.ndarray:
     is more likely when it would be most effective).
 
     Args:
-        temperature: Array of temperatures (Fahrenheit).
+        temperature: Array of temperatures (Celsius).
         hour_of_day: Array of hour values (0-23).
 
     Returns:
@@ -117,8 +118,10 @@ def _propensity(temperature: np.ndarray, hour_of_day: np.ndarray) -> np.ndarray:
     hour = np.asarray(hour_of_day, dtype=np.float64)
 
     # Strong propensity driven by temperature and afternoon hours.
-    # Temperature component: centered at 80F, steep slope
-    temp_z = 0.08 * (temp - 80.0)
+    # Temperature component: centered at 27C (~80F), slope 0.14 per C.
+    # Roughly equivalent to the old F-scale slope after conversion
+    # (0.08/F * 1.8 F/C = 0.144/C ~ 0.14/C).
+    temp_z = 0.14 * (temp - 27.0)
 
     # Hour component: peaks at 16, decays away from afternoon
     hour_z = np.where(
@@ -188,7 +191,7 @@ def evaluate_policy(
         Tuple of (policy_value, decision_error_rate).
         policy_value is the average net benefit (higher is better).
     """
-    temp_thresh = float(params.get("treat_temp_threshold", 80.0))
+    temp_thresh = float(params.get("treat_temp_threshold", 27.0))
     hour_start = int(params.get("treat_hour_start", 14))
     hour_end = int(params.get("treat_hour_end", 18))
     humidity_thresh = float(params.get("treat_humidity_threshold", 0.0))
@@ -269,14 +272,16 @@ class DemandResponseScenario:
             humidity, hour_of_day, day_of_week, is_holiday, target_load,
             and optionally load_lag_* columns).
         seed: Random seed controlling treatment assignment randomness.
-        treatment_cost: Fixed cost per demand-response event.
+        treatment_cost: Fixed cost per demand-response event.  The default
+            (60.0) produces an oracle treat rate of ~25-35% on typical
+            covariate distributions (temps 10-41 C).
     """
 
     def __init__(
         self,
         covariates: pd.DataFrame,
         seed: int = 0,
-        treatment_cost: float = 50.0,
+        treatment_cost: float = 60.0,
     ) -> None:
         self._covariates = covariates.copy()
         self._seed = seed
@@ -362,8 +367,8 @@ class DemandResponseScenario:
                 Variable(
                     name="treat_temp_threshold",
                     variable_type=VariableType.CONTINUOUS,
-                    lower=60.0,
-                    upper=100.0,
+                    lower=15.0,
+                    upper=40.0,
                 ),
                 Variable(
                     name="treat_hour_start",
@@ -467,6 +472,7 @@ class DemandResponseScenario:
                 objective_name="objective",
                 minimize=True,
                 seed=seed,
+                max_skips=0,  # disable skip logic -- policy eval is cheap
             )
             engine.run_loop(budget)
             best_result = engine.log.best_result("objective", minimize=True)

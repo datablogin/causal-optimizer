@@ -107,8 +107,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--treatment-cost",
         type=float,
-        default=50.0,
-        help="Fixed cost per demand-response event (default: 50.0).",
+        default=60.0,
+        help="Fixed cost per demand-response event (default: 60.0).",
     )
     parser.add_argument(
         "--output",

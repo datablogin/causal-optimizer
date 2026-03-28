@@ -16,6 +16,7 @@ import pytest
 from causal_optimizer.benchmarks.counterfactual_energy import (
     CounterfactualBenchmarkResult,
     DemandResponseScenario,
+    _treatment_effect,
 )
 
 # ── Fixtures ─────────────────────────────────────────────────────────
@@ -29,7 +30,7 @@ def scenario() -> DemandResponseScenario:
     n = 480  # 20 days of hourly data — enough for propensity correlation tests
     hours = np.tile(np.arange(24), n // 24 + 1)[:n]
     days = np.repeat(np.arange(n // 24 + 1), 24)[:n]
-    temps = 50.0 + 55.0 * rng.random(n)  # 50-105F range (wide for hot/cold contrast)
+    temps = 10.0 + 31.0 * rng.random(n)  # 10-41C range (wide for hot/cold contrast)
     humidity = 30.0 + 50.0 * rng.random(n)  # 30-80%
     base_load = 1000.0 + 200.0 * rng.random(n)
 
@@ -87,13 +88,23 @@ class TestScenarioGeneratesValidData:
         data = scenario.generate()
         assert set(data["demand_response_event"].unique()).issubset({0, 1})
 
+    def test_propensity_within_bounds(self, scenario: DemandResponseScenario) -> None:
+        """Propensity should be clipped to [0.05, 0.90]."""
+        data = scenario.generate()
+        assert data["propensity"].min() >= 0.05, (
+            f"Propensity min ({data['propensity'].min():.4f}) should be >= 0.05"
+        )
+        assert data["propensity"].max() <= 0.90, (
+            f"Propensity max ({data['propensity'].max():.4f}) should be <= 0.90"
+        )
+
     def test_treatment_correlated_with_temperature(self, scenario: DemandResponseScenario) -> None:
         data = scenario.generate()
         # Compare at the SAME hour range to isolate temperature effect.
         # Use afternoon hours (14-18) where propensity is highest.
         afternoon = data[data["hour_of_day"].between(14, 18)]
-        high_temp = afternoon[afternoon["temperature"] > 90]
-        low_temp = afternoon[afternoon["temperature"] < 70]
+        high_temp = afternoon[afternoon["temperature"] > 32]  # >32C (~90F)
+        low_temp = afternoon[afternoon["temperature"] < 21]  # <21C (~70F)
         if len(high_temp) > 3 and len(low_temp) > 3:
             high_rate = high_temp["demand_response_event"].mean()
             low_rate = low_temp["demand_response_event"].mean()
@@ -173,10 +184,10 @@ class TestTreatmentEffectVariesByContext:
 
     def test_hot_afternoon_effect_larger(self, scenario: DemandResponseScenario) -> None:
         data = scenario.generate()
-        # Hot afternoons: temp > 85, hour in [14, 18]
-        hot_afternoon = data[(data["temperature"] > 85) & (data["hour_of_day"].between(14, 18))]
-        # Mild nights: temp < 70, hour in [0, 6]
-        mild_night = data[(data["temperature"] < 70) & (data["hour_of_day"].isin(range(7)))]
+        # Hot afternoons: temp > 30C (~86F), hour in [14, 18]
+        hot_afternoon = data[(data["temperature"] > 30) & (data["hour_of_day"].between(14, 18))]
+        # Mild nights: temp < 21C (~70F), hour in [0, 6]
+        mild_night = data[(data["temperature"] < 21) & (data["hour_of_day"].isin(range(7)))]
         if len(hot_afternoon) > 0 and len(mild_night) > 0:
             hot_effect = hot_afternoon["true_treatment_effect"].mean()
             mild_effect = mild_night["true_treatment_effect"].mean()
@@ -288,7 +299,7 @@ class TestReproducibility:
         df = pd.DataFrame(
             {
                 "timestamp": pd.date_range("2023-01-01", periods=n, freq="h"),
-                "temperature": 60 + 30 * rng.random(n),
+                "temperature": 10 + 25 * rng.random(n),  # 10-35C
                 "humidity": 40 + 30 * rng.random(n),
                 "hour_of_day": np.tile(np.arange(24), n // 24 + 1)[:n],
                 "day_of_week": np.zeros(n, dtype=int),
@@ -310,7 +321,7 @@ class TestReproducibility:
         df = pd.DataFrame(
             {
                 "timestamp": pd.date_range("2023-01-01", periods=n, freq="h"),
-                "temperature": 60 + 30 * rng.random(n),
+                "temperature": 10 + 25 * rng.random(n),  # 10-35C
                 "humidity": 40 + 30 * rng.random(n),
                 "hour_of_day": np.tile(np.arange(24), n // 24 + 1)[:n],
                 "day_of_week": np.zeros(n, dtype=int),
@@ -326,3 +337,144 @@ class TestReproducibility:
         d2 = s2.generate()
         # Treatment assignments should differ (same covariates, different seed)
         assert not (d1["demand_response_event"] == d2["demand_response_event"]).all()
+
+
+# ── Test 7: Non-degenerate oracle (Sprint 18 repair) ─────────────
+
+
+class TestOracleTreatsMeaningfulMinority:
+    """Oracle should selectively treat 10-40% of rows, not 0% or 100%."""
+
+    def test_oracle_treat_rate_in_range(self, scenario: DemandResponseScenario) -> None:
+        """Oracle treats between 10% and 40% of rows."""
+        data = scenario.generate()
+        cost = scenario.treatment_cost
+        effect = data["true_treatment_effect"].values
+        oracle_treat = effect > cost
+        treat_rate = float(oracle_treat.mean())
+        assert 0.10 <= treat_rate <= 0.40, f"Oracle treat rate {treat_rate:.3f} not in [0.10, 0.40]"
+
+    def test_oracle_value_positive(self, scenario: DemandResponseScenario) -> None:
+        """Oracle policy value must be strictly positive (not zero)."""
+        data = scenario.generate()
+        oracle_value = scenario.oracle_policy_value(data)
+        assert oracle_value > 0.0, f"Oracle value should be > 0, got {oracle_value:.4f}"
+
+    def test_never_treat_has_regret(self, scenario: DemandResponseScenario) -> None:
+        """'Never treat' should have measurable regret vs oracle."""
+        data = scenario.generate()
+        oracle_value = scenario.oracle_policy_value(data)
+        never_treat_value = 0.0  # by definition
+        regret = oracle_value - never_treat_value
+        assert regret > 1.0, f"Never-treat regret should be > 1.0, got {regret:.4f}"
+
+    def test_always_treat_has_regret(self, scenario: DemandResponseScenario) -> None:
+        """'Always treat' should have measurable regret vs oracle.
+
+        Treating mild nights costs more than it saves, so always-treat
+        should underperform the selective oracle policy.
+        """
+        data = scenario.generate()
+        cost = scenario.treatment_cost
+        oracle_value = scenario.oracle_policy_value(data)
+        # Always-treat: net benefit = mean(effect - cost) for all rows
+        always_treat_value = float((data["true_treatment_effect"] - cost).mean())
+        regret = oracle_value - always_treat_value
+        assert regret > 0.5, f"Always-treat regret should be > 0.5, got {regret:.4f}"
+
+
+# ── Test 8: Treatment effect heterogeneity (quantitative) ────────
+
+
+class TestTreatmentEffectHeterogeneity:
+    """Treatment effect must vary significantly by covariate context."""
+
+    def test_hot_afternoon_effect_much_larger_than_cool_night(self) -> None:
+        """Peak hot-afternoon effect should be at least 10x cool-night effect."""
+        temps_hot = np.array([35.0, 38.0, 41.0])  # 35-41C (~95-106F)
+        hours_hot = np.array([15.0, 16.0, 17.0])
+        hot_effects = _treatment_effect(temps_hot, hours_hot)
+
+        temps_cool = np.array([13.0, 16.0, 18.0])  # 13-18C (~55-64F)
+        hours_cool = np.array([2.0, 3.0, 4.0])
+        cool_effects = _treatment_effect(temps_cool, hours_cool)
+
+        assert hot_effects.mean() > 10.0 * cool_effects.mean(), (
+            f"Hot afternoon mean effect ({hot_effects.mean():.1f}) should be "
+            f">10x cool night mean effect ({cool_effects.mean():.1f})"
+        )
+
+    def test_extreme_temperature_no_nan(self) -> None:
+        """Treatment effect at extreme temperatures should be finite, not NaN/Inf."""
+        extreme_temps = np.array([-10.0, -30.0, 50.0, 60.0])
+        hours = np.array([16.0, 16.0, 16.0, 16.0])
+        effects = _treatment_effect(extreme_temps, hours)
+        assert np.all(np.isfinite(effects)), f"Effects should be finite, got {effects}"
+        assert np.all(effects >= 0.0), f"Effects should be non-negative, got {effects}"
+
+    def test_warm_afternoon_effect_moderate(self) -> None:
+        """Warm (27-32C) afternoon effect should be moderate -- above cost but below hot."""
+        temps = np.array([28.0, 29.0, 31.0])  # 28-31C (~82-88F)
+        hours = np.array([15.0, 16.0, 17.0])
+        effects = _treatment_effect(temps, hours)
+        # Moderate: should be above default treatment cost but well below hot afternoon.
+        # Pinned to DemandResponseScenario's default (60.0).  If that default
+        # changes, update this constant to match.
+        default_cost = 60.0
+        assert effects.mean() > default_cost, (
+            f"Warm afternoon effect ({effects.mean():.1f}) "
+            f"should be > treatment_cost ({default_cost})"
+        )
+        hot_effects = _treatment_effect(np.array([38.0]), np.array([16.0]))  # 38C (~100F)
+        assert effects.mean() < hot_effects[0], (
+            f"Warm afternoon effect ({effects.mean():.1f}) should be < "
+            f"hot afternoon effect ({hot_effects[0]:.1f})"
+        )
+
+
+# ── Test 9: Smoke benchmark non-zero regret ──────────────────────
+
+
+class TestSmokeBenchmarkNonDegenerate:
+    """Budget=3 benchmark should produce non-trivial oracle and some regret."""
+
+    def test_smoke_oracle_positive(self, scenario: DemandResponseScenario) -> None:
+        """Oracle value should be positive even in the smoke test."""
+        result = scenario.run_benchmark(budget=3, seed=0, strategy="random")
+        assert result.oracle_value > 0.0, (
+            f"Oracle value should be > 0, got {result.oracle_value:.4f}"
+        )
+
+    def test_smoke_nonzero_regret_for_random(self, scenario: DemandResponseScenario) -> None:
+        """Random strategy with budget=3 should have measurable regret."""
+        # With only 3 random policies, it is extremely unlikely to match oracle
+        result = scenario.run_benchmark(budget=3, seed=0, strategy="random")
+        assert result.regret > 0.0, (
+            f"Random budget=3 should have regret > 0, got {result.regret:.4f}"
+        )
+
+
+# ── Test 10: Benchmark reproducibility ────────────────────────────
+
+
+class TestBenchmarkReproducibility:
+    """Same scenario + seed + strategy should produce identical results."""
+
+    def test_same_seed_same_result(self, scenario: DemandResponseScenario) -> None:
+        r1 = scenario.run_benchmark(budget=3, seed=42, strategy="random")
+        r2 = scenario.run_benchmark(budget=3, seed=42, strategy="random")
+        assert r1.policy_value == pytest.approx(r2.policy_value, abs=1e-9)
+        assert r1.oracle_value == pytest.approx(r2.oracle_value, abs=1e-9)
+        assert r1.regret == pytest.approx(r2.regret, abs=1e-9)
+        assert r1.decision_error_rate == pytest.approx(r2.decision_error_rate, abs=1e-9)
+
+    def test_different_seed_different_result(self, scenario: DemandResponseScenario) -> None:
+        """Different seeds should generally produce different policies."""
+        r1 = scenario.run_benchmark(budget=5, seed=0, strategy="random")
+        r2 = scenario.run_benchmark(budget=5, seed=99, strategy="random")
+        # At least the policy value or decision error should differ
+        differs = (
+            abs(r1.policy_value - r2.policy_value) > 1e-9
+            or abs(r1.decision_error_rate - r2.decision_error_rate) > 1e-9
+        )
+        assert differs, "Different seeds should produce different random policies"
