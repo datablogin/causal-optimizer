@@ -151,24 +151,30 @@ class TestHourEndingDetection:
     """test_hour_ending_detection: First timestamp 01:00 instead of 00:00 -> recommends shift."""
 
     def test_hour_ending_detection(self) -> None:
-        # Hour-ending convention: labels are 01:00, 02:00, ..., 24:00 (or 00:00 next day)
-        # instead of interval-start 00:00, 01:00, ..., 23:00
-        ts = pd.date_range("2023-01-01 01:00", periods=168, freq="h")
+        # Hour-ending convention: labels are 01:00, 02:00, ..., 23:00
+        # (hour 0 never appears).  We build multiple days of hourly data
+        # starting at 01:00 with hour 0 explicitly excluded so the
+        # profiler's "shift_back_one_hour" detection path fires.
+        import itertools
+
+        dates = pd.date_range("2023-01-01", periods=3, freq="D")
+        hours = range(1, 24)  # 01:00 through 23:00 — no hour 0
+        ts_list = sorted(
+            pd.Timestamp(d.date()) + pd.Timedelta(hours=h)
+            for d, h in itertools.product(dates, hours)
+        )
         rng = np.random.default_rng(42)
         df = pd.DataFrame(
             {
-                "timestamp": ts,
-                "target_load": rng.normal(100, 10, 168),
+                "timestamp": ts_list,
+                "target_load": rng.normal(100, 10, len(ts_list)),
             }
         )
 
         profiler = TimeSeriesCalendarProfiler()
         profile = profiler.profile(df, timestamp_col="timestamp")
 
-        assert profile.interval_analysis["recommended_convention"] in (
-            "shift_back_one_hour",
-            "needs_review",
-        )
+        assert profile.interval_analysis["recommended_convention"] == "shift_back_one_hour"
 
 
 class TestMarketHintERCOT:

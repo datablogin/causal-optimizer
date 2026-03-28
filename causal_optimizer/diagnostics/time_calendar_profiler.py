@@ -243,8 +243,8 @@ class TimeSeriesCalendarProfiler:
             stop = True
         profile_warnings.extend(ts_result["warnings"])
 
-        if summary["duplicate_timestamps"]:
-            dup_count = summary["duplicate_timestamps"]
+        dup_count = summary["duplicate_timestamps"]
+        if isinstance(dup_count, int) and dup_count > 0:
             recommendations.append(
                 CalendarProfileRecommendation(
                     id="dedup-timestamps",
@@ -303,7 +303,7 @@ class TimeSeriesCalendarProfiler:
         # --- 6. Holiday calendar recommendation --------------------------
         holiday_result = self._recommend_holidays(
             ts_series,
-            data.get(target_col) if target_col else None,
+            data[target_col] if target_col and target_col in data.columns else None,
             calendar_tz,
             holiday_calendar,
         )
@@ -569,10 +569,21 @@ class TimeSeriesCalendarProfiler:
         dates = ts_clean.dt.date
         hours_per_day = dates.value_counts().sort_index()
 
-        # The median gives us the "expected" hours-per-day
+        # The median gives us the "expected" rows-per-day
         expected = int(hours_per_day.median())
         if expected <= 0:
             return {"dst_suspected": False, "notes": ["unexpected hour counts"]}
+
+        # DST detection is only reliable for hourly-ish data where we expect
+        # ~24 rows per day.  For sub-hourly data the +/-1 row heuristic does
+        # not correspond to DST transitions.
+        if expected not in (23, 24, 25):
+            return {
+                "dst_suspected": False,
+                "notes": [
+                    f"Skipping DST detection: {expected} rows/day suggests non-hourly cadence"
+                ],
+            }
 
         short_days = int((hours_per_day == expected - 1).sum())
         long_days = int((hours_per_day == expected + 1).sum())
@@ -825,7 +836,7 @@ class TimeSeriesCalendarProfiler:
         for y in years:
             all_holidays |= _us_federal_holidays(y)
 
-        is_holiday = pd.Series([d in all_holidays for d in local_dates], index=common_idx)
+        is_holiday = local_dates.isin(all_holidays)
 
         holiday_count = int(is_holiday.sum())
         if holiday_count < 2:
@@ -848,7 +859,7 @@ class TimeSeriesCalendarProfiler:
             return {
                 "recommended": True,
                 "calendar": holiday_calendar,
-                "reason": f"Holiday effect detected (Cohen's d={effect_size:.2f}). "
+                "reason": f"Holiday effect detected (effect size={effect_size:.2f}). "
                 f"Holiday mean={holiday_mean:.1f}, "
                 f"non-holiday mean={non_holiday_mean:.1f}",
                 "confidence": min(0.5 + effect_size * 0.3, 0.95),
