@@ -11,7 +11,7 @@ import json
 import warnings
 from dataclasses import asdict, dataclass, field
 from datetime import date, timedelta
-from typing import Any
+from typing import Any, Literal
 
 import pandas as pd
 
@@ -107,7 +107,7 @@ class CalendarProfileRecommendation:
     """A single actionable recommendation from the profiler."""
 
     id: str
-    priority: str  # P0, P1, P2
+    priority: Literal["P0", "P1", "P2"]
     action: str
     reason: str
     confidence: float
@@ -218,7 +218,7 @@ class TimeSeriesCalendarProfiler:
         dataset_id: str = "unknown",
     ) -> TimeSeriesCalendarProfile:
         """Run all profiler checks and return a structured profile."""
-        warnings: list[dict[str, object]] = []
+        profile_warnings: list[dict[str, object]] = []
         recommendations: list[CalendarProfileRecommendation] = []
         stop = False
 
@@ -241,7 +241,7 @@ class TimeSeriesCalendarProfiler:
 
         if ts_result["stop"]:
             stop = True
-        warnings.extend(ts_result["warnings"])
+        profile_warnings.extend(ts_result["warnings"])
 
         if summary["duplicate_timestamps"]:
             dup_count = summary["duplicate_timestamps"]
@@ -262,7 +262,7 @@ class TimeSeriesCalendarProfiler:
 
         if cadence_result["stop"]:
             stop = True
-        warnings.extend(cadence_result["warnings"])
+        profile_warnings.extend(cadence_result["warnings"])
 
         # --- 3. DST / timezone artifact detection ------------------------
         dst_result = self._detect_dst(ts_series)
@@ -401,7 +401,7 @@ class TimeSeriesCalendarProfiler:
             interval_analysis=interval_result,
             calendar_analysis=calendar_analysis,
             aggregation_analysis=aggregation_analysis,
-            warnings=warnings,
+            warnings=profile_warnings,
             recommendations=recommendations,
             stop=stop,
         )
@@ -412,7 +412,7 @@ class TimeSeriesCalendarProfiler:
 
     def _check_timestamps(self, data: pd.DataFrame, timestamp_col: str) -> dict[str, Any]:
         """Parse timestamps and check for duplicates, monotonicity, mixed tz."""
-        warnings: list[dict[str, object]] = []
+        ts_warnings: list[dict[str, object]] = []
         stop = False
 
         raw = data[timestamp_col]
@@ -423,7 +423,7 @@ class TimeSeriesCalendarProfiler:
 
         if n_failed > 0:
             fail_rate = n_failed / max(n_total, 1)
-            warnings.append(
+            ts_warnings.append(
                 {
                     "code": "PARSE_FAILURE",
                     "severity": "error",
@@ -436,7 +436,7 @@ class TimeSeriesCalendarProfiler:
         ts_clean = ts.dropna()
         monotonic = bool(ts_clean.is_monotonic_increasing)
         if not monotonic:
-            warnings.append(
+            ts_warnings.append(
                 {
                     "code": "NOT_MONOTONIC",
                     "severity": "warning",
@@ -447,7 +447,7 @@ class TimeSeriesCalendarProfiler:
         dup_count = int(ts_clean.duplicated().sum())
         if dup_count > 0:
             stop = True
-            warnings.append(
+            ts_warnings.append(
                 {
                     "code": "DUPLICATE_TIMESTAMPS",
                     "severity": "error",
@@ -467,7 +467,7 @@ class TimeSeriesCalendarProfiler:
         return {
             "series": ts,
             "summary": summary,
-            "warnings": warnings,
+            "warnings": ts_warnings,
             "stop": stop,
         }
 
@@ -477,7 +477,7 @@ class TimeSeriesCalendarProfiler:
 
     def _infer_cadence(self, ts: pd.Series[Any]) -> dict[str, Any]:
         """Infer the dominant time interval and regularity."""
-        warnings: list[dict[str, object]] = []
+        cadence_warnings: list[dict[str, object]] = []
         stop = False
 
         ts_clean = ts.dropna().sort_values()
@@ -516,7 +516,7 @@ class TimeSeriesCalendarProfiler:
             cadence = "hourly"
         elif 84600 <= median_seconds <= 90000:
             cadence = "daily"
-        elif 600000 <= median_seconds <= 610000:
+        elif 575000 <= median_seconds <= 635000:
             cadence = "weekly"
 
         # Regularity: fraction of diffs within 10% of median
@@ -528,7 +528,7 @@ class TimeSeriesCalendarProfiler:
         gap_threshold = median_seconds * 1.5
         gap_count = int((diff_seconds > gap_threshold).sum())
         if gap_count > 0:
-            warnings.append(
+            cadence_warnings.append(
                 {
                     "code": "GAPS_DETECTED",
                     "severity": "warning",
@@ -538,7 +538,7 @@ class TimeSeriesCalendarProfiler:
 
         if regularity < 0.8 and cadence == "unknown":
             stop = True
-            warnings.append(
+            cadence_warnings.append(
                 {
                     "code": "CADENCE_AMBIGUOUS",
                     "severity": "error",
@@ -551,7 +551,7 @@ class TimeSeriesCalendarProfiler:
             "inferred_cadence": cadence,
             "cadence_regularity": round(regularity, 4),
             "gap_count": gap_count,
-            "warnings": warnings,
+            "warnings": cadence_warnings,
             "stop": stop,
         }
 
@@ -606,14 +606,12 @@ class TimeSeriesCalendarProfiler:
                 "notes": ["insufficient data for interval convention detection"],
             }
 
-        first_hour = int(ts_clean.iloc[0].hour)
-        first_minute = int(ts_clean.iloc[0].minute)
-
         # Check if the first timestamp of the earliest date starts at hour 1
         # (classic hour-ending: the first interval of the day is labeled 01:00)
         earliest_date = ts_clean.dt.date.min()
         first_of_day = ts_clean[ts_clean.dt.date == earliest_date]
-        first_hour_of_day = int(first_of_day.iloc[0].hour) if len(first_of_day) > 0 else first_hour
+        first_hour_of_day = int(first_of_day.iloc[0].hour) if len(first_of_day) > 0 else 0
+        first_minute = int(first_of_day.iloc[0].minute) if len(first_of_day) > 0 else 0
 
         # Heuristic: if first timestamp of day is 01:00 (not 00:00),
         # and data is hourly-ish, suspect hour-ending
@@ -803,6 +801,9 @@ class TimeSeriesCalendarProfiler:
             }
 
         ts_aligned = ts_clean.loc[common_idx]
+        # Normalize to tz-naive UTC so tz_localize("UTC") never fails
+        if ts_aligned.dt.tz is not None:
+            ts_aligned = ts_aligned.dt.tz_convert("UTC").dt.tz_localize(None)
         target_aligned = target_clean.loc[common_idx].astype(float)
 
         # Build holiday flag
@@ -812,7 +813,11 @@ class TimeSeriesCalendarProfiler:
             else:
                 local_ts = ts_aligned
             local_dates = local_ts.dt.date
-        except Exception:
+        except Exception as exc:
+            warnings.warn(
+                f"Holiday tz conversion failed for {calendar_tz}: {exc}",
+                stacklevel=2,
+            )
             local_dates = ts_aligned.dt.date
 
         years = {d.year for d in local_dates if isinstance(d, date)}
