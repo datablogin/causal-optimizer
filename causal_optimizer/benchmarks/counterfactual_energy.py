@@ -273,7 +273,7 @@ class DemandResponseScenario:
         seed: Random seed controlling treatment assignment randomness.
         treatment_cost: Fixed cost per demand-response event.  The default
             (60.0) produces an oracle treat rate of ~25-35% on typical
-            covariate distributions (uniform temps 50-105 F).
+            covariate distributions (temps 10-41 C).
     """
 
     def __init__(
