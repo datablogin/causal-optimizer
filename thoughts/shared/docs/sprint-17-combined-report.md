@@ -50,15 +50,19 @@
 ### Key Observations vs Sprint 16
 
 Sprint 16 showed `differentiated: PASS` because causal beat surrogate_only on ercot_north_c.
-Sprint 17 shows `differentiated: FAIL` -- causal and surrogate_only are identical at budget=20
-and budget=40 on both datasets. At budget=80, small differences emerge but the suite
-considers them identical because at smaller budgets the strategies produce byte-identical
-results (both converge to the same initial exploration then follow the same fallback path).
+Sprint 17 shows `differentiated: FAIL`. The suite evaluates differentiation at the
+**largest budget only** (budget=80) using `build_benchmark_summary()`, which selects the
+largest-budget `StrategyStats` per dataset. The `check_acceptance()` rule then requires
+causal and surrogate_only test MAE means to differ by more than 0.1%.
 
-The causal fallback differentiation from PR #70 (Sprint 16) is only active once the engine
-reaches the optimization phase (budget > 10 experiments), and the effect is small enough
-that at budget=20 and budget=40 the engine does not yet diverge. Only at budget=80 does
-the longer optimization run produce measurably different results.
+At budget=80, the actual differences are:
+
+- ercot_north_c: causal 132.83 vs surrogate_only 132.95 → 0.09% (below 0.1% threshold)
+- ercot_coast: causal 105.65 vs surrogate_only 105.58 → 0.07% (below 0.1% threshold)
+
+Both datasets fall just under the 0.1% differentiation threshold, so the suite correctly
+reports `differentiated: FAIL`. The strategies do produce numerically different results at
+budget=80, but the gap is too small to clear the acceptance bar.
 
 ### Full Results (All Budgets)
 
