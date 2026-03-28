@@ -422,7 +422,8 @@ class TestTreatmentEffectHeterogeneity:
         # changes, update this constant to match.
         default_cost = 60.0
         assert effects.mean() > default_cost, (
-            f"Warm afternoon effect ({effects.mean():.1f}) should be > treatment_cost ({default_cost})"
+            f"Warm afternoon effect ({effects.mean():.1f}) "
+            f"should be > treatment_cost ({default_cost})"
         )
         hot_effects = _treatment_effect(np.array([38.0]), np.array([16.0]))  # 38C (~100F)
         assert effects.mean() < hot_effects[0], (
