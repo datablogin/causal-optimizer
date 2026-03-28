@@ -247,5 +247,6 @@ def test_null_signal_check_high_variance_winner() -> None:
         strategies=["random", "surrogate_only", "causal"],
         threshold=0.02,
     )
-    # Could be WARN or PASS depending on mean — the key is it shouldn't silently pass
-    assert verdict.verdict in {"PASS", "WARN"}
+    # causal mean MAE ≈ 97 vs random ≈ 101, ~3.96% improvement exceeds 2% threshold
+    assert verdict.verdict == "WARN"
+    assert verdict.has_consistent_winner

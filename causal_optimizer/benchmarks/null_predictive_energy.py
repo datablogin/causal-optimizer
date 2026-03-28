@@ -39,7 +39,8 @@ class NullSignalResult:
 
     Attributes:
         verdict: ``"PASS"`` if no strategy wins consistently,
-            ``"WARN"`` if a strategy appears to win.
+            ``"WARN"`` if a strategy appears to win,
+            ``"ERROR"`` if no valid results are available.
         has_consistent_winner: True if any strategy beats random by more
             than *threshold* across all seeds.
         best_strategy: Name of the best-performing strategy (may be noise).
@@ -248,7 +249,7 @@ def check_null_signal(
 
     if not strategy_means:
         return NullSignalResult(
-            verdict="WARN",
+            verdict="ERROR",
             has_consistent_winner=False,
             best_strategy="none",
             best_improvement=0.0,

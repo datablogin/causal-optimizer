@@ -128,7 +128,9 @@ def _fmt_mean_std(values: list[float]) -> str:
     if not values:
         return "N/A"
     arr = np.array(values)
-    return f"{arr.mean():.4f} +/- {arr.std():.4f}"
+    if len(arr) > 1:
+        return f"{arr.mean():.4f} +/- {arr.std(ddof=1):.4f}"
+    return f"{arr.mean():.4f} +/- 0.0000"
 
 
 def _print_summary(results: list[PredictiveBenchmarkResult]) -> None:
@@ -286,6 +288,12 @@ def main() -> None:
         print(f"Null-signal verdict: {verdict.verdict}")
         for detail in verdict.details:
             print(f"  - {detail}")
+
+        if verdict.verdict != "PASS":
+            sys.exit(1)
+    else:
+        print("WARNING: No benchmark results collected — all runs failed.", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
