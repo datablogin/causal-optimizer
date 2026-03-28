@@ -219,6 +219,14 @@ def check_null_signal(
     if no strategy is more than *threshold* (relative) better than the
     ``"random"`` baseline.  Returns WARN if any strategy appears to win.
 
+    .. note::
+
+        This is a simple threshold check on the mean-of-means, **not** a
+        formal hypothesis test (e.g., paired t-test).  It is designed as
+        a fast smoke check for the negative-control benchmark.  Strategies
+        with zero valid results are flagged in the details list so callers
+        can detect incomplete runs.
+
     Args:
         results: List of benchmark results (across strategies and seeds).
         strategies: List of strategy names to compare.
@@ -246,6 +254,11 @@ def check_null_signal(
                 f"{s}: mean_test_mae={strategy_means[s]:.4f} "
                 f"+/- {strategy_stds[s]:.4f} (n={len(maes)})"
             )
+
+    # Flag strategies with zero valid results
+    for s in strategies:
+        if not strategy_maes[s]:
+            details.append(f"{s}: no valid results (0 finite test MAE values)")
 
     if not strategy_means:
         return NullSignalResult(

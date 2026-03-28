@@ -287,7 +287,10 @@ def main() -> None:
         print("=" * 90)
         _print_summary(results)
 
-        # Run null-signal check
+        # Run null-signal check.
+        # NOTE: The verdict aggregates across all budgets intentionally.
+        # On null (permuted) data no budget should confer an advantage, so
+        # pooling increases the effective sample size for the threshold check.
         print()
         verdict = check_null_signal(results, strategies)
         print(f"Null-signal verdict: {verdict.verdict}")

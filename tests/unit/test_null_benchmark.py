@@ -142,6 +142,12 @@ def test_null_benchmark_smoke() -> None:
 
     This is a smoke test that exercises the full null benchmark pipeline
     using the synthetic fixture data. It does NOT require real Parquet data.
+
+    Only the ``"random"`` strategy is exercised here because ``surrogate_only``
+    and ``"causal"`` run ``ExperimentEngine.run_loop()`` which is substantially
+    slower and is already covered by separate integration tests. The purpose of
+    this test is to verify the null-benchmark plumbing (permutation, splitting,
+    runner wiring), not the engine strategies themselves.
     """
     df = _make_energy_df(n=200, seed=0)
     permuted = permute_target(df, target_col="target_load", seed=99999)
@@ -307,3 +313,18 @@ def test_check_null_signal_no_results() -> None:
     )
     assert verdict.verdict == "ERROR"
     assert not verdict.has_consistent_winner
+
+
+def test_check_null_signal_flags_zero_result_strategies() -> None:
+    """Strategies with no valid results are flagged in details."""
+    # Only provide results for 'random'; 'causal' has no results
+    results = [
+        _make_benchmark_result(strategy="random", budget=40, seed=s, test_mae=100.0)
+        for s in range(3)
+    ]
+    verdict = check_null_signal(
+        results=results,
+        strategies=["random", "causal"],
+    )
+    assert verdict.verdict == "PASS"
+    assert any("causal: no valid results" in d for d in verdict.details)
