@@ -8,6 +8,7 @@ and rule-based — no ML models involved.
 from __future__ import annotations
 
 import json
+import warnings
 from dataclasses import asdict, dataclass, field
 from datetime import date, timedelta
 from typing import Any
@@ -350,16 +351,17 @@ class TimeSeriesCalendarProfiler:
                 )
             )
 
-        # Storage recommendation
-        recommendations.append(
-            CalendarProfileRecommendation(
-                id="store-utc",
-                priority="P2",
-                action="Store timestamps in UTC for unambiguous serialization",
-                reason="UTC avoids DST ambiguity in storage",
-                confidence=0.9,
+        # Storage recommendation — only when DST or non-UTC calendar tz is relevant
+        if dst_suspected or calendar_tz != "UTC":
+            recommendations.append(
+                CalendarProfileRecommendation(
+                    id="store-utc",
+                    priority="P2",
+                    action="Store timestamps in UTC for unambiguous serialization",
+                    reason="UTC avoids DST ambiguity in storage",
+                    confidence=0.9,
+                )
             )
-        )
 
         # Build timezone analysis
         tz_confidence = 0.5
@@ -514,6 +516,8 @@ class TimeSeriesCalendarProfiler:
             cadence = "hourly"
         elif 84600 <= median_seconds <= 90000:
             cadence = "daily"
+        elif 600000 <= median_seconds <= 610000:
+            cadence = "weekly"
 
         # Regularity: fraction of diffs within 10% of median
         tolerance = max(median_seconds * 0.1, 1.0)
@@ -668,6 +672,9 @@ class TimeSeriesCalendarProfiler:
         within-group variance and lowering the homogeneity score.
         """
         ts_clean = ts.dropna()
+        # Normalize to tz-naive UTC so tz_localize("UTC") never fails
+        if ts_clean.dt.tz is not None:
+            ts_clean = ts_clean.dt.tz_convert("UTC").dt.tz_localize(None)
         target_clean = target.loc[ts_clean.index].dropna()
         common_idx = ts_clean.index.intersection(target_clean.index)
         ts_aligned = ts_clean.loc[common_idx]
@@ -746,12 +753,16 @@ class TimeSeriesCalendarProfiler:
                 if combined > best_combined:
                     best_combined = combined
                     best_tz = tz
-            except Exception:
+            except Exception as exc:
+                warnings.warn(
+                    f"Timezone evaluation failed for {tz}: {exc}",
+                    stacklevel=2,
+                )
                 scores.append(
                     {
                         "timezone": tz,
                         "score": 0.0,
-                        "notes": ["failed to evaluate"],
+                        "notes": [f"failed to evaluate: {exc}"],
                     }
                 )
 
@@ -852,7 +863,13 @@ class TimeSeriesCalendarProfiler:
     def _recommend_aggregation(
         self, inferred_cadence: str, expected_cadence: str | None
     ) -> dict[str, Any]:
-        """Recommend rollup if current cadence is finer than expected."""
+        """Recommend rollup if current cadence is finer than expected.
+
+        Note: defaults to ``"mean"`` aggregation, which is correct for
+        instantaneous measurements (temperature, price, load-as-power).
+        For cumulative quantities (energy = power x time) the caller
+        should override with ``"sum"``.
+        """
         if expected_cadence is None:
             return {
                 "recommended_rollup": "none",
@@ -867,7 +884,8 @@ class TimeSeriesCalendarProfiler:
                 "recommended_rollup": "mean",
                 "target_cadence": "hourly",
                 "reason": f"Data is {inferred_cadence} but expected cadence is hourly. "
-                "Mean aggregation recommended for temperature-like variables.",
+                "Mean aggregation recommended for instantaneous variables "
+                "(temperature, price); use sum for cumulative quantities (energy).",
                 "confidence": 0.8,
             }
 
@@ -876,7 +894,8 @@ class TimeSeriesCalendarProfiler:
                 "recommended_rollup": "mean",
                 "target_cadence": "daily",
                 "reason": "Data is hourly but expected cadence is daily. "
-                "Mean aggregation recommended.",
+                "Mean aggregation recommended for instantaneous variables; "
+                "use sum for cumulative quantities.",
                 "confidence": 0.7,
             }
 
