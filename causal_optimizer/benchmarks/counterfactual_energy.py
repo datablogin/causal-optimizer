@@ -90,16 +90,15 @@ def _treatment_effect(temperature: np.ndarray, hour_of_day: np.ndarray) -> np.nd
     hour = np.asarray(hour_of_day, dtype=np.float64)
 
     # Temperature response: sigmoid centered at 24C (~75F), slope 0.22
-    # (equivalent to 0.12 in Fahrenheit, scaled by 9/5)
+    # At 18C -> ~21% response; at 30C -> ~79% response (transition zone).
     temp_response = 1.0 / (1.0 + np.exp(-0.22 * (temp - 24.0)))
 
     # Hour response: Gaussian peak at 16:00, sigma=3.5 hours
     hour_response = np.exp(-0.5 * ((hour - 16.0) / 3.5) ** 2)
 
     # Combined: peak ~350 MW at hottest afternoon hours
-    effect = 350.0 * temp_response * hour_response
-
-    return np.maximum(effect, 0.0)
+    # Product of two positive factors -- always >= 0, but guard defensively.
+    return np.maximum(350.0 * temp_response * hour_response, 0.0)
 
 
 def _propensity(temperature: np.ndarray, hour_of_day: np.ndarray) -> np.ndarray:

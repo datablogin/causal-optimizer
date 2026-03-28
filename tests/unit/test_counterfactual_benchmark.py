@@ -399,8 +399,10 @@ class TestTreatmentEffectHeterogeneity:
         temps = np.array([28.0, 29.0, 31.0])  # 28-31C (~82-88F)
         hours = np.array([15.0, 16.0, 17.0])
         effects = _treatment_effect(temps, hours)
-        # Moderate: should be clearly above zero but well below hot afternoon
-        assert effects.mean() > 20.0, f"Warm afternoon effect ({effects.mean():.1f}) should be > 20"
+        # Moderate: should be above treatment cost (60.0) but well below hot afternoon
+        assert effects.mean() > 60.0, (
+            f"Warm afternoon effect ({effects.mean():.1f}) should be > treatment_cost (60.0)"
+        )
         hot_effects = _treatment_effect(np.array([38.0]), np.array([16.0]))  # 38C (~100F)
         assert effects.mean() < hot_effects[0], (
             f"Warm afternoon effect ({effects.mean():.1f}) should be < "
