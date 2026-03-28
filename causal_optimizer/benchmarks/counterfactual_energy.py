@@ -119,8 +119,8 @@ def _propensity(temperature: np.ndarray, hour_of_day: np.ndarray) -> np.ndarray:
 
     # Strong propensity driven by temperature and afternoon hours.
     # Temperature component: centered at 27C (~80F), slope 0.14 per C.
-    # Steeper than old F-scale slope (0.08/F) to strengthen confounding --
-    # ensures treatment assignment correlates strongly with covariates.
+    # Roughly equivalent to the old F-scale slope after conversion
+    # (0.08/F * 1.8 F/C = 0.144/C ~ 0.14/C).
     temp_z = 0.14 * (temp - 27.0)
 
     # Hour component: peaks at 16, decays away from afternoon

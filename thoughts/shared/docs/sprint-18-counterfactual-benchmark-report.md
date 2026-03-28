@@ -26,7 +26,7 @@ a meaningful minority of rows and weak strategies have measurable regret.
 | Metric | Value |
 |--------|-------|
 | Oracle treat rate | 31.9% (8,399 / 26,291 rows) |
-| Oracle policy value | 36.80 |
+| Oracle policy value (full dataset) | 36.80 |
 | Always-treat policy value | 3.17 |
 | Never-treat policy value | 0.00 |
 
@@ -37,7 +37,9 @@ benefit), confirming the decision boundary is meaningful.
 
 ## Regret by Strategy and Budget
 
-Results are averaged over 5 seeds (0--4). Oracle test-set value = 48.41.
+Results are averaged over 5 seeds (0--4). Oracle test-set value = 48.41
+(higher than the full-dataset value of 36.80 because the train/test split
+selects different covariate distributions).
 
 | Strategy | Budget | Mean Policy Value | Mean Regret | Std Regret | Decision Error |
 |----------|--------|-------------------|-------------|------------|----------------|

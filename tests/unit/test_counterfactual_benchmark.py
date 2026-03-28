@@ -417,9 +417,10 @@ class TestTreatmentEffectHeterogeneity:
         temps = np.array([28.0, 29.0, 31.0])  # 28-31C (~82-88F)
         hours = np.array([15.0, 16.0, 17.0])
         effects = _treatment_effect(temps, hours)
-        # Moderate: should be above default treatment cost but well below hot afternoon
-        # Use the default cost from DemandResponseScenario so this test adapts if cost changes
-        default_cost = 60.0  # DemandResponseScenario default
+        # Moderate: should be above default treatment cost but well below hot afternoon.
+        # Pinned to DemandResponseScenario's default (60.0).  If that default
+        # changes, update this constant to match.
+        default_cost = 60.0
         assert effects.mean() > default_cost, (
             f"Warm afternoon effect ({effects.mean():.1f}) should be > treatment_cost ({default_cost})"
         )
