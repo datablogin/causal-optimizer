@@ -28,7 +28,7 @@ from typing import Any
 import numpy as np
 
 from causal_optimizer.benchmarks.null_predictive_energy import (
-    _VALID_STRATEGIES as _LIB_VALID_STRATEGIES,
+    VALID_STRATEGIES as _LIB_VALID_STRATEGIES,
 )
 from causal_optimizer.benchmarks.null_predictive_energy import (
     check_null_signal,
@@ -51,6 +51,8 @@ def _sanitize_for_json(obj: Any) -> Any:
     """Recursively convert nested dicts/lists to JSON-safe Python types."""
     if isinstance(obj, dict):
         return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, np.ndarray):
+        return [_sanitize_for_json(v) for v in obj.tolist()]
     if isinstance(obj, (list, tuple)):
         return [_sanitize_for_json(v) for v in obj]
     if isinstance(obj, np.integer):

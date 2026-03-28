@@ -93,7 +93,7 @@ def permute_target(
 
 # ── Null benchmark strategy runner ────────────────────────────────────
 
-_VALID_STRATEGIES: frozenset[str] = frozenset({"random", "surrogate_only", "causal"})
+VALID_STRATEGIES: frozenset[str] = frozenset({"random", "surrogate_only", "causal"})
 _DEFAULT_CHECKPOINTS: list[int] = [5, 10, 20, 40, 80]
 
 
@@ -125,10 +125,10 @@ def run_null_strategy(
         A :class:`PredictiveBenchmarkResult`, or ``None`` if all experiments crashed.
 
     Raises:
-        ValueError: If *strategy* is not in ``_VALID_STRATEGIES``.
+        ValueError: If *strategy* is not in ``VALID_STRATEGIES``.
     """
-    if strategy not in _VALID_STRATEGIES:
-        msg = f"Unknown strategy {strategy!r}. Must be one of {sorted(_VALID_STRATEGIES)}."
+    if strategy not in VALID_STRATEGIES:
+        msg = f"Unknown strategy {strategy!r}. Must be one of {sorted(VALID_STRATEGIES)}."
         raise ValueError(msg)
 
     t_start = time.perf_counter()

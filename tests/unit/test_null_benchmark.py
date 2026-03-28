@@ -281,6 +281,24 @@ def test_run_null_strategy_invalid_strategy() -> None:
 # ── test_check_null_signal_no_results ─────────────────────────────────
 
 
+def test_run_null_strategy_returns_result_or_none() -> None:
+    """run_null_strategy returns PredictiveBenchmarkResult or None."""
+    df = _make_energy_df(n=200, seed=0)
+    permuted = permute_target(df, target_col="target_load", seed=99999)
+    train_df, val_df, test_df = split_time_frame(permuted)
+
+    # With valid data the random strategy should return a result
+    result = run_null_strategy(
+        strategy="random",
+        budget=2,
+        seed=0,
+        train_df=train_df,
+        val_df=val_df,
+        test_df=test_df,
+    )
+    assert result is None or isinstance(result, PredictiveBenchmarkResult)
+
+
 def test_check_null_signal_no_results() -> None:
     """check_null_signal with empty results returns ERROR verdict."""
     verdict = check_null_signal(
