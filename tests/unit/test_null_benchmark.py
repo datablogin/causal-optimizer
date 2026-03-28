@@ -12,6 +12,7 @@ import pandas as pd
 import pytest
 
 from causal_optimizer.benchmarks.null_predictive_energy import (
+    VALID_STRATEGIES,
     check_null_signal,
     permute_target,
     run_null_strategy,
@@ -173,6 +174,8 @@ def test_null_benchmark_smoke() -> None:
 
 def test_null_signal_check_no_winner() -> None:
     """Feed mock results where all strategies perform similarly -> PASS."""
+    # Small per-strategy offsets well within the 2% threshold (max ~0.8% of 100)
+    strategy_offsets = {"random": 0.0, "surrogate_only": 0.3, "causal": -0.5}
     results = []
     for seed in range(5):
         for strategy in ["random", "surrogate_only", "causal"]:
@@ -181,8 +184,8 @@ def test_null_signal_check_no_winner() -> None:
                     strategy=strategy,
                     budget=40,
                     seed=seed,
-                    # All strategies have similar MAE (~100) with small noise
-                    test_mae=100.0 + seed * 0.5,
+                    # All strategies have similar MAE (~100) with small per-strategy noise
+                    test_mae=100.0 + seed * 0.5 + strategy_offsets[strategy],
                 )
             )
 
@@ -328,3 +331,99 @@ def test_check_null_signal_flags_zero_result_strategies() -> None:
     )
     assert verdict.verdict == "PASS"
     assert any("causal: no valid results" in d for d in verdict.details)
+
+
+# ── test_null_signal_check_budget_masking ─────────────────────────────
+
+
+def test_null_signal_check_budget_masking() -> None:
+    """Per-budget check catches a false win hidden by cross-budget averaging.
+
+    causal is 10% worse than random at budget=20, and 10% better at
+    budget=40.  Pooled, these cancel to ~0% difference -> pooled PASS.
+    But the per-budget check should flag budget=40 -> overall WARN.
+    """
+    results = []
+    for seed in range(5):
+        base_mae = 100.0 + seed * 0.5
+        # budget=20: causal 10% WORSE (higher MAE) than random
+        results.append(
+            _make_benchmark_result(strategy="random", budget=20, seed=seed, test_mae=base_mae)
+        )
+        results.append(
+            _make_benchmark_result(
+                strategy="causal", budget=20, seed=seed, test_mae=base_mae * 1.10
+            )
+        )
+        # budget=40: causal 10% BETTER (lower MAE) than random
+        results.append(
+            _make_benchmark_result(strategy="random", budget=40, seed=seed, test_mae=base_mae)
+        )
+        results.append(
+            _make_benchmark_result(
+                strategy="causal", budget=40, seed=seed, test_mae=base_mae * 0.90
+            )
+        )
+
+    verdict = check_null_signal(
+        results=results,
+        strategies=["random", "causal"],
+        threshold=0.02,
+    )
+    # The per-budget check should catch the budget=40 false win
+    assert verdict.verdict == "WARN", (
+        f"Expected WARN due to per-budget false win, got {verdict.verdict}. "
+        f"Details: {verdict.details}"
+    )
+    assert verdict.has_consistent_winner
+    # Verify at least one detail line mentions budget=40
+    assert any("budget=40" in d and "WARNING" in d for d in verdict.details)
+
+
+# ── test_run_null_strategy_returns_none_on_crash ──────────────────────
+
+
+def test_run_null_strategy_returns_none_on_crash(monkeypatch: pytest.MonkeyPatch) -> None:
+    """run_null_strategy returns None when all experiments crash (best_params is None)."""
+    from unittest.mock import MagicMock
+
+    from causal_optimizer.benchmarks import null_predictive_energy as mod
+    from causal_optimizer.domain_adapters.energy_load import EnergyLoadAdapter
+
+    df = _make_energy_df(n=200, seed=0)
+    permuted = permute_target(df, target_col="target_load", seed=99999)
+    train_df, val_df, test_df = split_time_frame(permuted)
+
+    # Build a real adapter to get a valid search space
+    real_adapter = EnergyLoadAdapter(data=pd.concat([train_df, val_df], ignore_index=True), seed=0)
+    real_space = real_adapter.get_search_space()
+
+    # Mock runner whose .run() always returns NaN mae
+    mock_runner = MagicMock()
+    mock_runner.run.return_value = {"mae": float("nan")}
+
+    # Patch constructors so run_null_strategy uses our mocks
+    monkeypatch.setattr(
+        mod, "EnergyLoadAdapter", lambda **_kw: MagicMock(get_search_space=lambda: real_space)
+    )
+    monkeypatch.setattr(mod, "ValidationEnergyRunner", lambda **_kw: mock_runner)
+
+    result = run_null_strategy(
+        strategy="random",
+        budget=3,
+        seed=0,
+        train_df=train_df,
+        val_df=val_df,
+        test_df=test_df,
+    )
+    # NaN < inf is False, so best_params stays None -> returns None
+    assert result is None
+
+
+# ── test_valid_strategies_is_public ───────────────────────────────────
+
+
+def test_valid_strategies_is_public() -> None:
+    """VALID_STRATEGIES is importable and contains expected members."""
+    assert isinstance(VALID_STRATEGIES, frozenset)
+    assert {"random", "surrogate_only", "causal"} == VALID_STRATEGIES

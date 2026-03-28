@@ -69,6 +69,12 @@ def permute_target(
     column, preserving all covariate structure and marginal distribution
     of the target.
 
+    .. note::
+
+        Call this **before** :func:`~causal_optimizer.benchmarks.predictive_energy.split_time_frame`
+        so that the permutation applies to the full dataset prior to the
+        train/val/test split.
+
     Args:
         df: Input DataFrame containing the target column.
         target_col: Name of the column to permute (default ``"target_load"``).
@@ -94,7 +100,7 @@ def permute_target(
 # ── Null benchmark strategy runner ────────────────────────────────────
 
 VALID_STRATEGIES: frozenset[str] = frozenset({"random", "surrogate_only", "causal"})
-_DEFAULT_CHECKPOINTS: list[int] = [5, 10, 20, 40, 80]
+_DEFAULT_CHECKPOINTS: tuple[int, ...] = (5, 10, 20, 40, 80)
 
 
 def run_null_strategy(
@@ -219,13 +225,19 @@ def check_null_signal(
     if no strategy is more than *threshold* (relative) better than the
     ``"random"`` baseline.  Returns WARN if any strategy appears to win.
 
+    The check is applied both **per-budget** and **pooled across budgets**.
+    If any single budget shows a false win exceeding *threshold*, the
+    overall verdict is WARN even if the pooled means cancel out.  This
+    prevents budget-level false wins from being masked by averaging.
+
     .. note::
 
         This is a simple threshold check on the mean-of-means, **not** a
         formal hypothesis test (e.g., paired t-test).  It is designed as
         a fast smoke check for the negative-control benchmark.  Strategies
         with zero valid results are flagged in the details list so callers
-        can detect incomplete runs.
+        can detect incomplete runs.  Results whose ``strategy`` is not in
+        *strategies* are silently ignored.
 
     Args:
         results: List of benchmark results (across strategies and seeds).
@@ -237,7 +249,7 @@ def check_null_signal(
     """
     details: list[str] = []
 
-    # Compute mean test MAE per strategy
+    # Compute mean test MAE per strategy (pooled across all budgets)
     strategy_maes: dict[str, list[float]] = {s: [] for s in strategies}
     for r in results:
         if r.strategy in strategy_maes and math.isfinite(r.test_mae):
@@ -283,19 +295,69 @@ def check_null_signal(
 
     best_improvement = (baseline_mae - best_mae) / baseline_mae if baseline_mae > 0 else 0.0
 
-    # Check if any strategy beats baseline by more than threshold
-    has_consistent_winner = False
+    # ── Per-budget check ──────────────────────────────────────────────
+    # Group results by budget and check each budget independently.
+    budgets_seen: set[int] = {r.budget for r in results if r.strategy in strategy_maes}
+    per_budget_winner = False
+
+    if len(budgets_seen) > 1:
+        details.append("--- per-budget breakdown ---")
+
+    for budget in sorted(budgets_seen):
+        budget_maes: dict[str, list[float]] = {s: [] for s in strategies}
+        for r in results:
+            if r.budget == budget and r.strategy in budget_maes and math.isfinite(r.test_mae):
+                budget_maes[r.strategy].append(r.test_mae)
+
+        budget_means: dict[str, float] = {}
+        for s, maes in budget_maes.items():
+            if maes:
+                budget_means[s] = float(np.mean(maes))
+
+        budget_baseline_key = (
+            "random"
+            if "random" in budget_means
+            else max(budget_means, key=lambda k: budget_means[k])
+            if budget_means
+            else None
+        )
+        if budget_baseline_key is None:
+            continue
+        budget_baseline = budget_means[budget_baseline_key]
+        if budget_baseline <= 0:
+            continue
+
+        for s, mean_mae in budget_means.items():
+            if s == budget_baseline_key:
+                continue
+            rel_improvement = (budget_baseline - mean_mae) / budget_baseline
+            if rel_improvement > threshold:
+                per_budget_winner = True
+                details.append(
+                    f"WARNING: budget={budget}: {s} beats {budget_baseline_key} "
+                    f"by {rel_improvement:.1%} (>{threshold:.0%} threshold)"
+                )
+            elif len(budgets_seen) > 1:
+                details.append(
+                    f"budget={budget}: {s} vs {budget_baseline_key} "
+                    f"delta={rel_improvement:.1%} (within threshold)"
+                )
+
+    # ── Pooled check ──────────────────────────────────────────────────
+    pooled_winner = False
     for s, mean_mae in strategy_means.items():
         if s == baseline_key:
             continue
         if baseline_mae > 0:
             rel_improvement = (baseline_mae - mean_mae) / baseline_mae
             if rel_improvement > threshold:
-                has_consistent_winner = True
+                pooled_winner = True
                 details.append(
-                    f"WARNING: {s} beats {baseline_key} by {rel_improvement:.1%} "
-                    f"(>{threshold:.0%} threshold) on null data"
+                    f"WARNING: pooled: {s} beats {baseline_key} by "
+                    f"{rel_improvement:.1%} (>{threshold:.0%} threshold) on null data"
                 )
+
+    has_consistent_winner = per_budget_winner or pooled_winner
 
     verdict: Literal["PASS", "WARN", "ERROR"]
     if has_consistent_winner:
