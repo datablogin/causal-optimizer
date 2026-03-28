@@ -28,6 +28,9 @@ from typing import Any
 import numpy as np
 
 from causal_optimizer.benchmarks.null_predictive_energy import (
+    _VALID_STRATEGIES as _LIB_VALID_STRATEGIES,
+)
+from causal_optimizer.benchmarks.null_predictive_energy import (
     check_null_signal,
     permute_target,
     run_null_strategy,
@@ -40,7 +43,7 @@ from causal_optimizer.benchmarks.predictive_energy import (
 
 logger = logging.getLogger(__name__)
 
-_VALID_STRATEGIES: frozenset[str] = frozenset({"random", "surrogate_only", "causal"})
+_VALID_STRATEGIES = _LIB_VALID_STRATEGIES
 _PERMUTATION_SEED_OFFSET = 99999
 
 

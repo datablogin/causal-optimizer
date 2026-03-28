@@ -14,8 +14,12 @@ import pytest
 from causal_optimizer.benchmarks.null_predictive_energy import (
     check_null_signal,
     permute_target,
+    run_null_strategy,
 )
-from causal_optimizer.benchmarks.predictive_energy import PredictiveBenchmarkResult
+from causal_optimizer.benchmarks.predictive_energy import (
+    PredictiveBenchmarkResult,
+    split_time_frame,
+)
 
 # ── Fixtures ──────────────────────────────────────────────────────────
 
@@ -139,13 +143,8 @@ def test_null_benchmark_smoke() -> None:
     This is a smoke test that exercises the full null benchmark pipeline
     using the synthetic fixture data. It does NOT require real Parquet data.
     """
-    from causal_optimizer.benchmarks.null_predictive_energy import run_null_strategy
-
     df = _make_energy_df(n=200, seed=0)
     permuted = permute_target(df, target_col="target_load", seed=99999)
-
-    from causal_optimizer.benchmarks.predictive_energy import split_time_frame
-
     train_df, val_df, test_df = split_time_frame(permuted)
 
     result = run_null_strategy(
@@ -250,3 +249,43 @@ def test_null_signal_check_high_variance_winner() -> None:
     # causal mean MAE ≈ 97 vs random ≈ 101, ~3.96% improvement exceeds 2% threshold
     assert verdict.verdict == "WARN"
     assert verdict.has_consistent_winner
+
+
+# ── test_permute_target_invalid_column ────────────────────────────────
+
+
+def test_permute_target_invalid_column() -> None:
+    """Permuting a non-existent column raises ValueError."""
+    df = _make_energy_df(n=50, seed=0)
+    with pytest.raises(ValueError, match="not found"):
+        permute_target(df, target_col="nonexistent_column", seed=0)
+
+
+# ── test_run_null_strategy_invalid_strategy ───────────────────────────
+
+
+def test_run_null_strategy_invalid_strategy() -> None:
+    """Passing an invalid strategy name raises ValueError."""
+    df = _make_energy_df(n=50, seed=0)
+    with pytest.raises(ValueError, match="Unknown strategy"):
+        run_null_strategy(
+            strategy="invalid_strategy",
+            budget=3,
+            seed=0,
+            train_df=df,
+            val_df=df,
+            test_df=df,
+        )
+
+
+# ── test_check_null_signal_no_results ─────────────────────────────────
+
+
+def test_check_null_signal_no_results() -> None:
+    """check_null_signal with empty results returns ERROR verdict."""
+    verdict = check_null_signal(
+        results=[],
+        strategies=["random", "surrogate_only", "causal"],
+    )
+    assert verdict.verdict == "ERROR"
+    assert not verdict.has_consistent_winner

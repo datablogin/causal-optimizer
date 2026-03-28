@@ -18,7 +18,7 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
@@ -48,7 +48,7 @@ class NullSignalResult:
         details: Human-readable details.
     """
 
-    verdict: str
+    verdict: Literal["PASS", "WARN", "ERROR"]
     has_consistent_winner: bool
     best_strategy: str
     best_improvement: float
@@ -284,6 +284,7 @@ def check_null_signal(
                     f"(>{threshold:.0%} threshold) on null data"
                 )
 
+    verdict: Literal["PASS", "WARN", "ERROR"]
     if has_consistent_winner:
         verdict = "WARN"
         details.append(
