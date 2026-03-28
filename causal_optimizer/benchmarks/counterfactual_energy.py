@@ -71,15 +71,16 @@ def _treatment_effect(temperature: np.ndarray, hour_of_day: np.ndarray) -> np.nd
     is large on hot afternoons (~300 MW), moderate on warm afternoons
     (~100-200 MW), and near-zero on cool nights (<5 MW).
 
-    Temperature component: sigmoid centered at 75 F (steep transition
-    zone 65-85 F).  Hour component: Gaussian peak at 16:00 with
+    Temperature component: sigmoid centered at 24 C (steep transition
+    zone 18-30 C).  Hour component: Gaussian peak at 16:00 with
     sigma 3.5 h.  The product is scaled so the theoretical maximum
-    is 350 MW (temp >> 100 F, hour = 16).
+    is 350 MW (temp >> 40 C, hour = 16).
 
-    No stochastic noise -- counterfactual truth is exact.
+    Temperature is expected in **Celsius**.  No stochastic noise --
+    counterfactual truth is exact.
 
     Args:
-        temperature: Array of temperatures (Fahrenheit).
+        temperature: Array of temperatures (Celsius).
         hour_of_day: Array of hour values (0-23).
 
     Returns:
@@ -88,8 +89,9 @@ def _treatment_effect(temperature: np.ndarray, hour_of_day: np.ndarray) -> np.nd
     temp = np.asarray(temperature, dtype=np.float64)
     hour = np.asarray(hour_of_day, dtype=np.float64)
 
-    # Temperature response: sigmoid centered at 75F, slope 0.12
-    temp_response = 1.0 / (1.0 + np.exp(-0.12 * (temp - 75.0)))
+    # Temperature response: sigmoid centered at 24C (~75F), slope 0.22
+    # (equivalent to 0.12 in Fahrenheit, scaled by 9/5)
+    temp_response = 1.0 / (1.0 + np.exp(-0.22 * (temp - 24.0)))
 
     # Hour response: Gaussian peak at 16:00, sigma=3.5 hours
     hour_response = np.exp(-0.5 * ((hour - 16.0) / 3.5) ** 2)
@@ -107,7 +109,7 @@ def _propensity(temperature: np.ndarray, hour_of_day: np.ndarray) -> np.ndarray:
     is more likely when it would be most effective).
 
     Args:
-        temperature: Array of temperatures (Fahrenheit).
+        temperature: Array of temperatures (Celsius).
         hour_of_day: Array of hour values (0-23).
 
     Returns:
@@ -117,8 +119,8 @@ def _propensity(temperature: np.ndarray, hour_of_day: np.ndarray) -> np.ndarray:
     hour = np.asarray(hour_of_day, dtype=np.float64)
 
     # Strong propensity driven by temperature and afternoon hours.
-    # Temperature component: centered at 80F, steep slope
-    temp_z = 0.08 * (temp - 80.0)
+    # Temperature component: centered at 27C (~80F), steep slope
+    temp_z = 0.14 * (temp - 27.0)
 
     # Hour component: peaks at 16, decays away from afternoon
     hour_z = np.where(
@@ -188,7 +190,7 @@ def evaluate_policy(
         Tuple of (policy_value, decision_error_rate).
         policy_value is the average net benefit (higher is better).
     """
-    temp_thresh = float(params.get("treat_temp_threshold", 80.0))
+    temp_thresh = float(params.get("treat_temp_threshold", 27.0))
     hour_start = int(params.get("treat_hour_start", 14))
     hour_end = int(params.get("treat_hour_end", 18))
     humidity_thresh = float(params.get("treat_humidity_threshold", 0.0))
@@ -364,8 +366,8 @@ class DemandResponseScenario:
                 Variable(
                     name="treat_temp_threshold",
                     variable_type=VariableType.CONTINUOUS,
-                    lower=60.0,
-                    upper=100.0,
+                    lower=15.0,
+                    upper=40.0,
                 ),
                 Variable(
                     name="treat_hour_start",

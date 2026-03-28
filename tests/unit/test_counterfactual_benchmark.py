@@ -30,7 +30,7 @@ def scenario() -> DemandResponseScenario:
     n = 480  # 20 days of hourly data — enough for propensity correlation tests
     hours = np.tile(np.arange(24), n // 24 + 1)[:n]
     days = np.repeat(np.arange(n // 24 + 1), 24)[:n]
-    temps = 50.0 + 55.0 * rng.random(n)  # 50-105F range (wide for hot/cold contrast)
+    temps = 10.0 + 31.0 * rng.random(n)  # 10-41C range (wide for hot/cold contrast)
     humidity = 30.0 + 50.0 * rng.random(n)  # 30-80%
     base_load = 1000.0 + 200.0 * rng.random(n)
 
@@ -93,8 +93,8 @@ class TestScenarioGeneratesValidData:
         # Compare at the SAME hour range to isolate temperature effect.
         # Use afternoon hours (14-18) where propensity is highest.
         afternoon = data[data["hour_of_day"].between(14, 18)]
-        high_temp = afternoon[afternoon["temperature"] > 90]
-        low_temp = afternoon[afternoon["temperature"] < 70]
+        high_temp = afternoon[afternoon["temperature"] > 32]  # >32C (~90F)
+        low_temp = afternoon[afternoon["temperature"] < 21]  # <21C (~70F)
         if len(high_temp) > 3 and len(low_temp) > 3:
             high_rate = high_temp["demand_response_event"].mean()
             low_rate = low_temp["demand_response_event"].mean()
@@ -174,10 +174,10 @@ class TestTreatmentEffectVariesByContext:
 
     def test_hot_afternoon_effect_larger(self, scenario: DemandResponseScenario) -> None:
         data = scenario.generate()
-        # Hot afternoons: temp > 85, hour in [14, 18]
-        hot_afternoon = data[(data["temperature"] > 85) & (data["hour_of_day"].between(14, 18))]
-        # Mild nights: temp < 70, hour in [0, 6]
-        mild_night = data[(data["temperature"] < 70) & (data["hour_of_day"].isin(range(7)))]
+        # Hot afternoons: temp > 30C (~86F), hour in [14, 18]
+        hot_afternoon = data[(data["temperature"] > 30) & (data["hour_of_day"].between(14, 18))]
+        # Mild nights: temp < 21C (~70F), hour in [0, 6]
+        mild_night = data[(data["temperature"] < 21) & (data["hour_of_day"].isin(range(7)))]
         if len(hot_afternoon) > 0 and len(mild_night) > 0:
             hot_effect = hot_afternoon["true_treatment_effect"].mean()
             mild_effect = mild_night["true_treatment_effect"].mean()
@@ -289,7 +289,7 @@ class TestReproducibility:
         df = pd.DataFrame(
             {
                 "timestamp": pd.date_range("2023-01-01", periods=n, freq="h"),
-                "temperature": 60 + 30 * rng.random(n),
+                "temperature": 10 + 25 * rng.random(n),  # 10-35C
                 "humidity": 40 + 30 * rng.random(n),
                 "hour_of_day": np.tile(np.arange(24), n // 24 + 1)[:n],
                 "day_of_week": np.zeros(n, dtype=int),
@@ -311,7 +311,7 @@ class TestReproducibility:
         df = pd.DataFrame(
             {
                 "timestamp": pd.date_range("2023-01-01", periods=n, freq="h"),
-                "temperature": 60 + 30 * rng.random(n),
+                "temperature": 10 + 25 * rng.random(n),  # 10-35C
                 "humidity": 40 + 30 * rng.random(n),
                 "hour_of_day": np.tile(np.arange(24), n // 24 + 1)[:n],
                 "day_of_week": np.zeros(n, dtype=int),
@@ -387,11 +387,11 @@ class TestTreatmentEffectHeterogeneity:
 
     def test_hot_afternoon_effect_much_larger_than_cool_night(self) -> None:
         """Peak hot-afternoon effect should be at least 10x cool-night effect."""
-        temps_hot = np.array([95.0, 100.0, 105.0])
+        temps_hot = np.array([35.0, 38.0, 41.0])  # 35-41C (~95-106F)
         hours_hot = np.array([15.0, 16.0, 17.0])
         hot_effects = _treatment_effect(temps_hot, hours_hot)
 
-        temps_cool = np.array([55.0, 60.0, 65.0])
+        temps_cool = np.array([13.0, 16.0, 18.0])  # 13-18C (~55-64F)
         hours_cool = np.array([2.0, 3.0, 4.0])
         cool_effects = _treatment_effect(temps_cool, hours_cool)
 
@@ -401,15 +401,15 @@ class TestTreatmentEffectHeterogeneity:
         )
 
     def test_warm_afternoon_effect_moderate(self) -> None:
-        """Warm (80-90F) afternoon effect should be moderate -- above cost but below hot."""
-        temps = np.array([82.0, 85.0, 88.0])
+        """Warm (27-32C) afternoon effect should be moderate -- above cost but below hot."""
+        temps = np.array([28.0, 29.0, 31.0])  # 28-31C (~82-88F)
         hours = np.array([15.0, 16.0, 17.0])
         effects = _treatment_effect(temps, hours)
         # Moderate: should be clearly above zero but well below hot afternoon
         assert effects.mean() > 20.0, (
             f"Warm afternoon effect ({effects.mean():.1f}) should be > 20"
         )
-        hot_effects = _treatment_effect(np.array([100.0]), np.array([16.0]))
+        hot_effects = _treatment_effect(np.array([38.0]), np.array([16.0]))  # 38C (~100F)
         assert effects.mean() < hot_effects[0], (
             f"Warm afternoon effect ({effects.mean():.1f}) should be < "
             f"hot afternoon effect ({hot_effects[0]:.1f})"
