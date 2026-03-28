@@ -473,7 +473,23 @@ class TimeSeriesCalendarProfiler:
         stop = False
 
         raw = data[timestamp_col]
-        ts = pd.to_datetime(raw, errors="coerce")
+        try:
+            ts = pd.to_datetime(raw, errors="coerce")
+        except ValueError:
+            # Mixed UTC offsets (e.g. DST transitions) cause pd.to_datetime to
+            # raise even with errors="coerce".  Retry with utc=True so every
+            # timestamp is normalised to UTC and the profiler can continue.
+            ts = pd.to_datetime(raw, utc=True, errors="coerce")
+            ts_warnings.append(
+                {
+                    "code": "MIXED_OFFSETS",
+                    "severity": "warning",
+                    "message": (
+                        "Timestamps contain mixed UTC offsets (e.g. DST transition). "
+                        "Normalised to UTC for profiling."
+                    ),
+                }
+            )
         n_total = len(ts)
         n_failed = int(ts.isna().sum() - raw.isna().sum())  # only count parse failures
         parse_ok = n_failed == 0

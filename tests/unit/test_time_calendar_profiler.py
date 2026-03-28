@@ -367,6 +367,34 @@ class TestWeeklyCadenceDetection:
         assert profile.summary["inferred_cadence"] == "weekly"
 
 
+class TestMixedOffsetDSTNoCrash:
+    """Mixed UTC offsets around DST transitions must not crash the profiler."""
+
+    def test_mixed_offset_dst_no_crash(self) -> None:
+        df = pd.DataFrame(
+            {
+                "timestamp": [
+                    "2023-03-12 00:00:00-0600",
+                    "2023-03-12 01:00:00-0600",
+                    "2023-03-12 03:00:00-0500",
+                    "2023-03-12 04:00:00-0500",
+                ],
+                "target_load": [100.0, 110.0, 120.0, 115.0],
+            }
+        )
+
+        profiler = TimeSeriesCalendarProfiler()
+        profile = profiler.profile(df, timestamp_col="timestamp")
+
+        # Must return a structured result, not crash
+        assert isinstance(profile, TimeSeriesCalendarProfile)
+        # Must contain a warning about mixed offsets
+        warning_codes = [w["code"] for w in profile.warnings]
+        assert "MIXED_OFFSETS" in warning_codes
+        # UTC normalization resolves the issue — should not stop
+        assert profile.stop is False
+
+
 class TestStoreUtcNotEmittedForPlainUTC:
     """store-utc recommendation should NOT appear when data is UTC-only with no DST."""
 
