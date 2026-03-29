@@ -173,7 +173,8 @@ def _confounded_propensity(
     logit_confounded = logit_base + 1.5 * (grid_stress - 0.5)
     confounded_prop = 1.0 / (1.0 + np.exp(-logit_confounded))
 
-    return np.clip(confounded_prop, 0.05, 0.90)
+    result: np.ndarray = np.clip(confounded_prop, 0.05, 0.90)
+    return result
 
 
 class ConfoundedDemandResponse(DemandResponseScenario):
