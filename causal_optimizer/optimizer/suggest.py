@@ -63,6 +63,9 @@ _TARGETED_SEED_OFFSET = 7919
 #: but they are retained for external test imports.
 _CAUSAL_LHS_CANDIDATES = 50
 _CAUSAL_TARGETED_CANDIDATES = 50
+#: Threshold above which ``causal_softness`` is treated as hard focus (Sprint 18
+#: behavior).  ``causal_softness >= _HARD_FOCUS_THRESHOLD`` pins non-focus vars.
+_HARD_FOCUS_THRESHOLD = 1e5
 #: Variable types eligible for normalized diversity scoring.
 _NUMERIC_TYPES = frozenset({VariableType.CONTINUOUS, VariableType.INTEGER})
 
@@ -246,6 +249,8 @@ def _suggest_exploration(
 
     # Gather existing experiment parameters for diversity scoring (read-only)
     existing_params = [r.parameters for r in experiment_log.results]
+    # Build var_map once — reused across all candidate scoring calls.
+    var_map = {v.name: v for v in search_space.variables}
 
     best_candidate = candidates[0]
     best_score = -float("inf")
@@ -256,6 +261,7 @@ def _suggest_exploration(
             ancestor_names=ancestor_names,
             search_space=search_space,
             alpha=causal_exploration_weight,
+            var_map=var_map,
         )
         if score > best_score:
             best_score = score
@@ -270,6 +276,7 @@ def _score_candidate_causal_exploration(
     ancestor_names: set[str],
     search_space: SearchSpace,
     alpha: float = 0.3,
+    var_map: dict[str, Variable] | None = None,
 ) -> float:
     """Score an LHS candidate for causal-weighted exploration.
 
@@ -289,11 +296,14 @@ def _score_candidate_causal_exploration(
         ancestor_names: Names of variables that are causal ancestors.
         search_space: Search space for normalization bounds.
         alpha: Weight for ancestor diversity bonus.
+        var_map: Pre-built ``{name: Variable}`` dict.  If *None*, built
+            from *search_space* (slower when called in a loop).
 
     Returns:
         Combined diversity score (non-negative).
     """
-    var_map = {v.name: v for v in search_space.variables}
+    if var_map is None:
+        var_map = {v.name: v for v in search_space.variables}
     # Only score numeric variables -- categorical/boolean can't be normalized.
     numeric_vars = [
         v
@@ -627,7 +637,7 @@ def _suggest_surrogate(
       where ``causal_alignment`` measures ancestor-variable variation.
     - Non-focus variables are NOT pinned to best values (soft constraint).
 
-    Hard-focus backward compatibility (``causal_softness >= 1e5``):
+    Hard-focus backward compatibility (``causal_softness >= _HARD_FOCUS_THRESHOLD``):
     - Trains RF only on focus variables.
     - Pins non-focus variables to best-known values.
     - Equivalent to Sprint 18 behavior.
@@ -646,7 +656,7 @@ def _suggest_surrogate(
         return _random_sample(search_space, seed=seed)
 
     # Determine if we use soft or hard mode
-    use_soft = causal_graph is not None and causal_softness < 1e5
+    use_soft = causal_graph is not None and causal_softness < _HARD_FOCUS_THRESHOLD
 
     # Filter to focus variables; fall back to all if empty
     focus_var_names = [v for v in all_var_names if v in focus_variables] if focus_variables else []

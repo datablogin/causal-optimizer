@@ -169,6 +169,12 @@ class ExperimentEngine:
         """
         if not 0.0 <= audit_skip_rate <= 1.0:
             raise ValueError(f"audit_skip_rate must be in [0.0, 1.0], got {audit_skip_rate!r}")
+        if causal_exploration_weight < 0:
+            raise ValueError(
+                f"causal_exploration_weight must be >= 0, got {causal_exploration_weight!r}"
+            )
+        if causal_softness < 0:
+            raise ValueError(f"causal_softness must be >= 0, got {causal_softness!r}")
         if discovery_method is not None and discovery_method not in self._VALID_DISCOVERY_METHODS:
             raise ValueError(
                 f"discovery_method={discovery_method!r} is not valid; "
