@@ -34,23 +34,27 @@ All strategies complete without crashes at budget=3.
 
 ## Variant 2: Confounded Treatment Assignment (`confounded`)
 
-**Mechanism:** Hidden confounder "grid stress" ~ Beta(2, 5) affects both:
+**Mechanism:** Hidden confounder "grid stress" ~ Beta(2, 5) + 0.3 * normalized_temperature
+affects both:
 1. Treatment propensity: logit(p) += 1.5 * (stress - 0.5)
-2. Base load: Y(0) += 500 * stress
+2. Base load: Y(0) += 500 * stress (but Y(1) = base_load - effect, NO stress shift)
 
-This creates Simpson's paradox: treated hours have systematically higher base load (due
-to grid stress), making the apparent treatment benefit larger than the true causal effect.
+Because Y(0) includes grid stress but Y(1) does not, the apparent treatment benefit
+`y0 - y1 = effect + 500 * grid_stress` is inflated for high-stress hours. Since grid
+stress correlates with temperature, policies selecting hot hours appear more beneficial
+than they truly are. The oracle uses true_treatment_effect (independent of grid stress)
+and is unbiased.
 
-**Why causal should help:** The causal graph includes a bidirected edge
-(`treat_temp_threshold` <-> `objective`) marking the confounding. POMIS-aware search
-recognizes the hidden common cause and avoids chasing the biased outcome surface.
+**Why causal should help:** The causal graph includes bidirected edges on all three
+treatment parameters, signaling the hidden common cause. POMIS-aware search recognizes
+the confounding and avoids chasing the inflated outcome surface.
 
 **Oracle statistics (480-row synthetic covariates, seed=123):**
 
 - Oracle treat rate: ~32% (within required 10-40% range)
-- Naive vs oracle disagreement: >5% (confirmed Simpson's paradox effect)
+- Naive vs oracle disagreement: >5% (confirmed confounding bias)
 - Naive ATE bias: >10% relative to true ATE
-- Bidirected edges in graph: 1 (marking the confounder)
+- Bidirected edges in graph: 3 (one per treatment parameter)
 
 **Smoke results (budget=3, seed=0):**
 

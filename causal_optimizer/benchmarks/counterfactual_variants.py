@@ -172,29 +172,33 @@ class ConfoundedDemandResponse(DemandResponseScenario):
     Introduces a hidden confounder ("grid stress") that affects BOTH:
 
     1. Treatment assignment probability (high stress -> more likely to treat)
-    2. Base load outcome (high stress -> higher load, making treatment
-       *appear* more effective because load reduction is larger)
-
-    This creates Simpson's paradox: naive estimation sees treated hours
-    with higher load (due to grid stress, not treatment) and overestimates
-    treatment benefit.  The oracle policy (based on true causal effect)
-    differs from the naive "best predictor" policy.
+    2. Base load outcome (high stress -> higher Y(0), inflating the
+       *apparent* treatment benefit y0 - y1)
 
     **Confounding mechanism:**
 
-    Grid stress U ~ Beta(2, 5) is unobserved.  It affects:
+    Grid stress U ~ Beta(2, 5) + 0.3 * normalized_temperature.  U is
+    unobserved but correlates with temperature, creating a back-door
+    path from policy parameters to the outcome.  It affects:
 
-    - Y(0): base_load += 500 * U (higher stress -> higher load)
-    - Propensity: logit(p) += 1.5 * (U - 0.5) (higher stress -> more treatment)
+    - Y(0): base_load += 500 * U (higher stress -> higher base load)
+    - Y(1): base_load - effect (NO grid stress shift -- treatment
+      outcome is purely causal)
+    - Propensity: logit(p) += 1.5 * (U - 0.5)
 
-    The treatment effect itself is NOT affected by grid stress -- it is
-    still a deterministic function of temperature and hour only.  But
-    because treated units tend to have higher U (and thus higher Y(0)),
-    the observed Y(0) - Y(1) difference is biased upward for treated
-    units.
+    Because Y(0) includes grid stress but Y(1) does not, the apparent
+    treatment benefit ``y0 - y1 = effect + 500 * U`` is inflated for
+    high-stress hours.  Since U correlates with temperature, policies
+    that set a low temperature threshold (treating many hot hours) will
+    appear better than they truly are.
+
+    The oracle uses ``true_treatment_effect`` (= ``effect``, independent
+    of U) and is therefore unbiased.  A naive estimator that uses
+    ``y0 - y1`` will overestimate the benefit in high-temperature
+    windows and recommend over-treating.
 
     Inherits ``run_benchmark`` from :class:`DemandResponseScenario`
-    unchanged -- the causal graph's bidirected edge alerts POMIS
+    unchanged -- the causal graph's bidirected edges alert POMIS
     computation to be conservative about intervention sets.
     """
 
@@ -202,8 +206,9 @@ class ConfoundedDemandResponse(DemandResponseScenario):
         """Generate confounded counterfactual data.
 
         Overrides the base ``generate()`` to introduce grid stress as a
-        hidden confounder that shifts both base load and treatment
-        propensity.
+        hidden confounder that inflates Y(0) but not Y(1), so the
+        apparent benefit ``y0 - y1`` is confounded while the true
+        treatment effect remains causal.
         """
         rng = np.random.default_rng(self._seed)
         df = self._covariates.copy()
@@ -211,16 +216,28 @@ class ConfoundedDemandResponse(DemandResponseScenario):
         temp = df["temperature"].values
         hour = df["hour_of_day"].values
 
-        # Hidden confounder: grid stress ~ Beta(2, 5), mean ~0.286
-        grid_stress = rng.beta(2.0, 5.0, size=len(df))
+        # Hidden confounder: grid stress ~ Beta(2, 5) + temperature correlation.
+        # Correlating with temperature creates a back-door path so that
+        # policies selecting high-temperature hours see inflated benefits.
+        temp_norm = (temp - temp.min()) / (temp.max() - temp.min() + 1e-8)
+        grid_stress = np.clip(
+            rng.beta(2.0, 5.0, size=len(df)) + 0.3 * temp_norm,
+            0.0,
+            1.0,
+        )
 
-        # Y(0) includes confounding shift: high stress -> higher base load
         y0_base = df["target_load"].values.astype(np.float64)
+
+        # Y(0) includes confounding: high stress -> higher base load
         y0 = y0_base + 500.0 * grid_stress
 
-        # Treatment effect: deterministic given covariates only (not grid stress)
+        # Treatment effect: deterministic given covariates only
         effect = _treatment_effect(temp, hour)
-        y1 = y0 - effect
+
+        # Y(1) does NOT carry grid stress -- treatment outcome is causal.
+        # This makes y0 - y1 = effect + 500 * grid_stress, so the
+        # apparent benefit is inflated for high-stress (high-temp) hours.
+        y1 = y0_base - effect
 
         # Treatment assignment: confounded propensity
         propensity = _confounded_propensity(temp, hour, grid_stress)
@@ -234,7 +251,7 @@ class ConfoundedDemandResponse(DemandResponseScenario):
         df["observed_outcome"] = observed
         df["true_treatment_effect"] = effect
         df["propensity"] = propensity
-        df["grid_stress"] = grid_stress
+        df["_debug_grid_stress"] = grid_stress
 
         return df
 
@@ -249,12 +266,14 @@ class ConfoundedDemandResponse(DemandResponseScenario):
 
     @staticmethod
     def causal_graph() -> CausalGraph:
-        """Return causal graph with bidirected edge marking confounding.
+        """Return causal graph with bidirected edges marking confounding.
 
-        The directed edge structure matches the base benchmark.  A
-        bidirected edge between ``treat_temp_threshold`` and ``objective``
-        signals that an unobserved confounder (grid stress) affects both
-        the treatment decision context and the outcome.
+        The directed edge structure matches the base benchmark.  Bidirected
+        edges on the three treatment-parameter nodes signal that an
+        unobserved confounder (grid stress) affects both the treatment
+        decision context and the outcome.  Grid stress correlates with
+        temperature and shifts propensity via all three parameters, so all
+        three carry confounding.
         """
         return CausalGraph(
             edges=[
@@ -266,6 +285,8 @@ class ConfoundedDemandResponse(DemandResponseScenario):
             ],
             bidirected_edges=[
                 ("treat_temp_threshold", "objective"),
+                ("treat_hour_start", "objective"),
+                ("treat_hour_end", "objective"),
             ],
         )
 
@@ -275,8 +296,8 @@ class ConfoundedDemandResponse(DemandResponseScenario):
         Estimates treatment effect as the difference in mean outcome
         between treated and untreated groups, stratified by temperature
         bin.  Because grid stress confounds the treatment assignment,
-        this estimate is biased upward -- treated units have
-        systematically higher base load.
+        this estimate is biased -- the direction depends on the
+        interplay between the confounded Y(0) and treatment selection.
 
         Args:
             data: DataFrame with ``demand_response_event`` and
