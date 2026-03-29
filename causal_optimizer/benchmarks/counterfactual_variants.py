@@ -37,10 +37,14 @@ if TYPE_CHECKING:
     import pandas as pd
 
 from causal_optimizer.benchmarks.counterfactual_energy import (
+    CounterfactualBenchmarkResult,
     DemandResponseScenario,
+    _PolicyRunner,
     _propensity,
     _treatment_effect,
+    evaluate_policy,
 )
+from causal_optimizer.benchmarks.runner import sample_random_params
 from causal_optimizer.types import (
     CausalGraph,
     SearchSpace,
@@ -252,6 +256,8 @@ class ConfoundedDemandResponse(DemandResponseScenario):
         df["true_treatment_effect"] = effect
         df["propensity"] = propensity
         df["_debug_grid_stress"] = grid_stress
+        # Deconfounded Y(0) for causal evaluation (no grid stress).
+        df["_deconfounded_y0"] = y0_base
 
         return df
 
@@ -327,3 +333,105 @@ class ConfoundedDemandResponse(DemandResponseScenario):
             naive_effects[mask] = naive_eff
 
         return naive_effects > cost
+
+    def oracle_policy_value(self, data: pd.DataFrame) -> float:
+        """Oracle value anchored to the true causal effect, not confounded y0-y1.
+
+        In the confounded variant, ``y0 - y1 = effect + 500 * grid_stress``,
+        so the inherited oracle (which uses ``_net_benefit(y0, y1, ...)``)
+        would NOT be the ceiling of the causal metric.  We override to
+        compute oracle value from ``true_treatment_effect`` directly.
+        """
+        effect = data["true_treatment_effect"].values
+        oracle_treat = effect > self.treatment_cost
+        unit_benefit = np.where(oracle_treat, effect - self.treatment_cost, 0.0)
+        return float(unit_benefit.mean())
+
+    def run_benchmark(
+        self,
+        budget: int,
+        seed: int,
+        strategy: str = "random",
+    ) -> CounterfactualBenchmarkResult:
+        """Run one strategy, evaluating on the deconfounded causal metric.
+
+        The optimizer trains on **confounded** data (``y0`` includes grid
+        stress), so surrogate_only learns the biased landscape.  The final
+        evaluation swaps ``y0`` to the deconfounded baseline so that
+        ``y0 - y1 = effect`` — the true causal benefit.  This ensures
+        regret is non-negative and measures distance to the causal oracle.
+        """
+        import time
+        from typing import Any
+
+        from causal_optimizer.engine.loop import ExperimentEngine
+
+        valid_strategies = {"random", "surrogate_only", "causal"}
+        if strategy not in valid_strategies:
+            msg = f"Unknown strategy {strategy!r}, expected one of {sorted(valid_strategies)}"
+            raise ValueError(msg)
+
+        t_start = time.monotonic()
+
+        data = self.generate()
+        n = len(data)
+        opt_end = int(n * 0.8)
+        val_data = data.iloc[:opt_end].reset_index(drop=True)
+        test_data = data.iloc[opt_end:].reset_index(drop=True)
+
+        space = self.search_space()
+        # Runner trains on CONFOUNDED data (optimizer sees biased landscape)
+        runner = _PolicyRunner(val_data, self.treatment_cost)
+
+        if strategy == "random":
+            rng = np.random.default_rng(seed)
+            best_obj = float("inf")
+            best_params: dict[str, Any] | None = None
+            for _ in range(budget):
+                params = sample_random_params(space, rng)
+                metrics = runner.run(params)
+                obj = metrics["objective"]
+                if obj < best_obj:
+                    best_obj = obj
+                    best_params = params
+        else:
+            graph = self.causal_graph() if strategy == "causal" else None
+            engine = ExperimentEngine(
+                search_space=space,
+                runner=runner,
+                causal_graph=graph,
+                objective_name="objective",
+                minimize=True,
+                seed=seed,
+                max_skips=0,
+            )
+            engine.run_loop(budget)
+            best_result = engine.log.best_result("objective", minimize=True)
+            best_params = best_result.parameters if best_result is not None else None
+
+        # Evaluate on DECONFOUNDED test set (swap y0 to remove grid stress)
+        eval_data = test_data.copy()
+        eval_data["y0"] = eval_data["_deconfounded_y0"]
+
+        if best_params is not None:
+            policy_value, decision_error = evaluate_policy(
+                eval_data, best_params, self.treatment_cost
+            )
+        else:
+            policy_value = 0.0
+            oracle_treat = eval_data["true_treatment_effect"].values > self.treatment_cost
+            decision_error = float(np.mean(oracle_treat))
+
+        oracle_value = self.oracle_policy_value(eval_data)
+        regret = oracle_value - policy_value
+
+        return CounterfactualBenchmarkResult(
+            strategy=strategy,
+            budget=budget,
+            seed=seed,
+            policy_value=policy_value,
+            oracle_value=oracle_value,
+            regret=regret,
+            decision_error_rate=decision_error,
+            runtime_seconds=time.monotonic() - t_start,
+        )
