@@ -63,6 +63,21 @@ _TARGETED_SEED_OFFSET = 7919
 #: but they are retained for external test imports.
 _CAUSAL_LHS_CANDIDATES = 50
 _CAUSAL_TARGETED_CANDIDATES = 50
+#: Variable types eligible for normalized diversity scoring.
+_NUMERIC_TYPES = frozenset({VariableType.CONTINUOUS, VariableType.INTEGER})
+
+
+def _normalize_value(var: Variable, value: float) -> float:
+    """Normalize *value* to [0, 1] using the variable's bounds.
+
+    Returns 0.0 for variables without finite bounds or zero-width ranges.
+    """
+    if var.lower is None or var.upper is None:
+        return 0.0
+    rng_size = var.upper - var.lower
+    if rng_size <= 0:
+        return 0.0
+    return (value - var.lower) / rng_size
 
 
 def _derive_seed(seed: int | None, step: int) -> int | None:
@@ -210,28 +225,27 @@ def _suggest_exploration(
 
     designer = FactorialDesigner(search_space)
 
-    # No graph or weight=0: original behavior (single LHS sample)
-    if causal_graph is None or causal_exploration_weight <= 0.0:
+    def _single_lhs() -> dict[str, Any]:
         designs = designer.latin_hypercube(n_samples=1, seed=seed)
         return designs[0] if designs else _random_sample(search_space, seed=seed)
+
+    # No graph or weight=0: original behavior (single LHS sample)
+    if causal_graph is None or causal_exploration_weight <= 0.0:
+        return _single_lhs()
 
     # Causal-weighted exploration: generate N candidates, score, pick best
     ancestors = causal_graph.ancestors(objective_name)
     ancestor_names = {v for v in search_space.variable_names if v in ancestors}
 
-    # If no ancestors found in search space, fall back to pure LHS
     if not ancestor_names:
-        designs = designer.latin_hypercube(n_samples=1, seed=seed)
-        return designs[0] if designs else _random_sample(search_space, seed=seed)
+        return _single_lhs()
 
-    candidates = designer.latin_hypercube(
-        n_samples=_EXPLORATION_LHS_CANDIDATES, seed=seed
-    )
+    candidates = designer.latin_hypercube(n_samples=_EXPLORATION_LHS_CANDIDATES, seed=seed)
     if not candidates:
         return _random_sample(search_space, seed=seed)
 
-    # Gather existing experiment parameters for diversity scoring
-    existing_params = [dict(r.parameters) for r in experiment_log.results]
+    # Gather existing experiment parameters for diversity scoring (read-only)
+    existing_params = [r.parameters for r in experiment_log.results]
 
     best_candidate = candidates[0]
     best_score = -float("inf")
@@ -280,48 +294,34 @@ def _score_candidate_causal_exploration(
         Combined diversity score (non-negative).
     """
     var_map = {v.name: v for v in search_space.variables}
-    # Only score numeric (continuous / integer) variables — categorical and
-    # boolean dimensions cannot be meaningfully normalized to [0, 1].
-    numeric_types = {VariableType.CONTINUOUS, VariableType.INTEGER}
-    numeric_var_names = [
-        v.name
+    # Only score numeric variables -- categorical/boolean can't be normalized.
+    numeric_vars = [
+        v
         for v in search_space.variables
-        if v.variable_type in numeric_types and v.lower is not None and v.upper is not None
+        if v.variable_type in _NUMERIC_TYPES and v.lower is not None and v.upper is not None
     ]
-
-    def _normalize(name: str, value: float) -> float:
-        """Normalize a value to [0, 1] using variable bounds."""
-        var = var_map.get(name)
-        if var is None or var.lower is None or var.upper is None:
-            return 0.0
-        rng_size = var.upper - var.lower
-        if rng_size <= 0:
-            return 0.0
-        return (value - var.lower) / rng_size
-
-    ancestor_numeric = [v for v in numeric_var_names if v in ancestor_names]
+    numeric_var_names = [v.name for v in numeric_vars]
+    ancestor_numeric = [n for n in numeric_var_names if n in ancestor_names]
 
     if not numeric_var_names:
-        return 1.0  # No numeric variables to score — all candidates equal
+        return 1.0  # No numeric variables to score
 
     if not existing_params:
-        # No history — all candidates are equally good; ancestor bonus breaks ties
         ancestor_dims = [
-            _normalize(v, float(candidate.get(v, 0.0))) for v in ancestor_numeric
+            _normalize_value(var_map[v], float(candidate.get(v, 0.0))) for v in ancestor_numeric
         ]
         return 1.0 + alpha * float(np.std(ancestor_dims)) if ancestor_dims else 1.0
 
-    # Compute min-distance from candidate to existing experiments (normalized)
     min_base_dist = float("inf")
     min_ancestor_dist = float("inf")
 
     for existing in existing_params:
-        # Base diversity: all numeric dimensions
-        base_diffs = []
-        ancestor_diffs = []
+        base_diffs: list[float] = []
+        ancestor_diffs: list[float] = []
         for v_name in numeric_var_names:
-            c_val = _normalize(v_name, float(candidate.get(v_name, 0.0)))
-            e_val = _normalize(v_name, float(existing.get(v_name, 0.0)))
+            var = var_map[v_name]
+            c_val = _normalize_value(var, float(candidate.get(v_name, 0.0)))
+            e_val = _normalize_value(var, float(existing.get(v_name, 0.0)))
             diff = abs(c_val - e_val)
             base_diffs.append(diff)
             if v_name in ancestor_names:
@@ -649,9 +649,7 @@ def _suggest_surrogate(
     use_soft = causal_graph is not None and causal_softness < 1e5
 
     # Filter to focus variables; fall back to all if empty
-    focus_var_names = (
-        [v for v in all_var_names if v in focus_variables] if focus_variables else []
-    )
+    focus_var_names = [v for v in all_var_names if v in focus_variables] if focus_variables else []
     if not focus_var_names:
         focus_var_names = all_var_names
 
@@ -702,9 +700,7 @@ def _suggest_surrogate(
         candidates.extend(targeted)
     else:
         # Surrogate-only mode: pure LHS candidates (original behavior)
-        candidates = designer.latin_hypercube(
-            n_samples=_SURROGATE_ONLY_CANDIDATES, seed=seed
-        )
+        candidates = designer.latin_hypercube(n_samples=_SURROGATE_ONLY_CANDIDATES, seed=seed)
 
     # Hard mode: pin non-focus variables to best-known values (Sprint 18 behavior)
     if not use_soft:
@@ -740,11 +736,7 @@ def _suggest_surrogate(
         else:
             adjusted = pred
 
-        if minimize:
-            is_better = adjusted < best_score
-        else:
-            is_better = adjusted > best_score
-
+        is_better = adjusted < best_score if minimize else adjusted > best_score
         if is_better:
             best_score = adjusted
             best_candidate = candidate
@@ -784,12 +776,12 @@ def _causal_alignment_score(
         var = var_map.get(name)
         if var is None or var.lower is None or var.upper is None:
             continue
-        rng_size = var.upper - var.lower
-        if rng_size <= 0:
+        if (var.upper - var.lower) <= 0:
             continue
-        c_val = float(candidate.get(name, (var.lower + var.upper) / 2))
-        b_val = float(best_params.get(name, (var.lower + var.upper) / 2))
-        diffs.append(abs(c_val - b_val) / rng_size)
+        mid = (var.lower + var.upper) / 2
+        c_norm = _normalize_value(var, float(candidate.get(name, mid)))
+        b_norm = _normalize_value(var, float(best_params.get(name, mid)))
+        diffs.append(abs(c_norm - b_norm))
 
     return float(np.mean(diffs)) if diffs else 0.0
 

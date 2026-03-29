@@ -167,9 +167,9 @@ def test_causal_exploration_weight_zero_is_pure_lhs() -> None:
             seed=seed,
         )
         for var_name in ss.variable_names:
-            assert with_graph[var_name] == pytest.approx(
-                without_graph[var_name], abs=1e-10
-            ), f"With weight=0, {var_name} should be identical with and without graph"
+            assert with_graph[var_name] == pytest.approx(without_graph[var_name], abs=1e-10), (
+                f"With weight=0, {var_name} should be identical with and without graph"
+            )
 
 
 # ---- Test 4: Soft ranking uses all variables ----
@@ -296,9 +296,7 @@ def test_soft_ranking_does_not_exclude_non_ancestors() -> None:
         if non_ancestor_varied:
             break
 
-    assert non_ancestor_varied, (
-        "Non-ancestor variables should vary from midpoint in soft mode"
-    )
+    assert non_ancestor_varied, "Non-ancestor variables should vary from midpoint in soft mode"
 
 
 # ---- Test 7: Targeted rebalancing early ----
@@ -307,9 +305,7 @@ def test_soft_ranking_does_not_exclude_non_ancestors() -> None:
 def test_targeted_rebalancing_early() -> None:
     """At experiment count ~12, targeted ratio should be ~30%."""
     ratio = _get_targeted_ratio(experiment_count=12)
-    assert 0.25 <= ratio <= 0.35, (
-        f"Early optimization should use ~30% targeted, got {ratio:.2f}"
-    )
+    assert 0.25 <= ratio <= 0.35, f"Early optimization should use ~30% targeted, got {ratio:.2f}"
 
 
 # ---- Test 8: Targeted rebalancing late ----
@@ -380,9 +376,9 @@ def test_no_graph_unchanged() -> None:
             seed=seed,
         )
         for var_name in ss.variable_names:
-            assert result_new[var_name] == pytest.approx(
-                result_old[var_name], abs=1e-10
-            ), f"Without graph, exploration should be unchanged for {var_name}"
+            assert result_new[var_name] == pytest.approx(result_old[var_name], abs=1e-10), (
+                f"Without graph, exploration should be unchanged for {var_name}"
+            )
 
 
 # ---- Test: Engine accepts new config params ----
