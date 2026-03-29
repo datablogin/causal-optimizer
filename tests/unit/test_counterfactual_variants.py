@@ -19,7 +19,6 @@ import pytest
 
 from causal_optimizer.benchmarks.counterfactual_energy import (
     CounterfactualBenchmarkResult,
-    _treatment_effect,
 )
 from causal_optimizer.benchmarks.counterfactual_variants import (
     ConfoundedDemandResponse,
@@ -270,16 +269,12 @@ class TestSmokeHighNoise:
         assert math.isfinite(result.regret)
         assert result.regret >= -1e-9
 
-    def test_smoke_high_noise_surrogate(
-        self, high_noise_scenario: HighNoiseDemandResponse
-    ) -> None:
+    def test_smoke_high_noise_surrogate(self, high_noise_scenario: HighNoiseDemandResponse) -> None:
         result = high_noise_scenario.run_benchmark(budget=3, seed=0, strategy="surrogate_only")
         assert isinstance(result, CounterfactualBenchmarkResult)
         assert math.isfinite(result.policy_value)
 
-    def test_smoke_high_noise_causal(
-        self, high_noise_scenario: HighNoiseDemandResponse
-    ) -> None:
+    def test_smoke_high_noise_causal(self, high_noise_scenario: HighNoiseDemandResponse) -> None:
         result = high_noise_scenario.run_benchmark(budget=3, seed=0, strategy="causal")
         assert isinstance(result, CounterfactualBenchmarkResult)
         assert math.isfinite(result.policy_value)
@@ -308,9 +303,7 @@ class TestSmokeConfounded:
         assert isinstance(result, CounterfactualBenchmarkResult)
         assert math.isfinite(result.policy_value)
 
-    def test_smoke_confounded_causal(
-        self, confounded_scenario: ConfoundedDemandResponse
-    ) -> None:
+    def test_smoke_confounded_causal(self, confounded_scenario: ConfoundedDemandResponse) -> None:
         result = confounded_scenario.run_benchmark(budget=3, seed=0, strategy="causal")
         assert isinstance(result, CounterfactualBenchmarkResult)
         assert math.isfinite(result.policy_value)

@@ -128,9 +128,7 @@ class HighNoiseDemandResponse(DemandResponseScenario):
             ("treat_day_filter", "base_load"),
         ]
 
-        nuisance_edges = [
-            (f"noise_var_{i}", "nuisance_sink") for i in range(_NUM_NUISANCE_VARS)
-        ]
+        nuisance_edges = [(f"noise_var_{i}", "nuisance_sink") for i in range(_NUM_NUISANCE_VARS)]
 
         return CausalGraph(edges=base_edges + nuisance_edges)
 
