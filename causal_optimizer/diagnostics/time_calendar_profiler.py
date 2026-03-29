@@ -280,8 +280,7 @@ class TimeSeriesCalendarProfiler:
         stop = False
 
         # --- Resolve candidate timezones from market hint ----------------
-        if candidate_timezones is None:
-            candidate_timezones = ["UTC"]
+        candidate_timezones = ["UTC"] if candidate_timezones is None else list(candidate_timezones)
         if market_hint and market_hint.lower() in _MARKET_TIMEZONES:
             for tz in _MARKET_TIMEZONES[market_hint.lower()]:
                 if tz not in candidate_timezones:
@@ -402,8 +401,14 @@ class TimeSeriesCalendarProfiler:
                     priority="P1",
                     action=f"Derive calendar features (hour_of_day, day_of_week, is_holiday) "
                     f"in {calendar_tz}",
-                    reason=f"Calendar features explain more target variance "
-                    f"in {calendar_tz} than UTC",
+                    reason=(
+                        f"Calendar features explain more target variance in {calendar_tz} than UTC"
+                    )
+                    if target_col and target_col in data.columns
+                    else (
+                        f"Market convention for {market_hint!r} uses {calendar_tz}; "
+                        f"no target column provided for statistical comparison"
+                    ),
                     confidence=0.8,
                 )
             )
