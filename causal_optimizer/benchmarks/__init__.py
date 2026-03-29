@@ -10,6 +10,10 @@ from causal_optimizer.benchmarks.counterfactual_energy import (
     DemandResponseScenario,
     evaluate_policy,
 )
+from causal_optimizer.benchmarks.counterfactual_variants import (
+    ConfoundedDemandResponse,
+    HighNoiseDemandResponse,
+)
 from causal_optimizer.benchmarks.high_dimensional import HighDimensionalSparseBenchmark
 from causal_optimizer.benchmarks.interaction import InteractionBenchmark
 from causal_optimizer.benchmarks.interaction_scm import InteractionSCM
@@ -63,9 +67,11 @@ __all__ = [
     "BenchmarkRunner",
     "BenchmarkSCM",
     "CompleteGraphBenchmark",
+    "ConfoundedDemandResponse",
     "CounterfactualBenchmarkResult",
     "DemandResponseScenario",
     "HighDimensionalSparseBenchmark",
+    "HighNoiseDemandResponse",
     "InteractionBenchmark",
     "InteractionSCM",
     "NullSignalResult",

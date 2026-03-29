@@ -4,10 +4,17 @@ Runs random, surrogate-only, and causal strategies on the semi-synthetic
 demand-response benchmark using real ERCOT covariates with known treatment
 effects.
 
+Supports three variants via ``--variant``:
+
+- ``base`` (default): 3 causal parents + 2 noise dimensions.
+- ``high_noise``: 3 causal parents + 2 original noise + 10 nuisance dimensions.
+- ``confounded``: Hidden confounder (grid stress) biases treatment assignment.
+
 Usage::
 
     python scripts/counterfactual_benchmark.py \\
         --data-path data/ercot_north_c_dfw_2022_2024.parquet \\
+        --variant base \\
         --budgets 10,20,40 \\
         --seeds 0,1,2,3,4 \\
         --strategies random,surrogate_only,causal \\
@@ -32,6 +39,10 @@ import pandas as pd
 from causal_optimizer.benchmarks.counterfactual_energy import (
     CounterfactualBenchmarkResult,
     DemandResponseScenario,
+)
+from causal_optimizer.benchmarks.counterfactual_variants import (
+    ConfoundedDemandResponse,
+    HighNoiseDemandResponse,
 )
 from causal_optimizer.benchmarks.predictive_energy import load_energy_frame
 
@@ -71,8 +82,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         argv: Argument list (defaults to ``sys.argv[1:]``).
 
     Returns:
-        Parsed namespace with ``data_path``, ``area_id``, ``budgets``,
-        ``seeds``, ``strategies``, ``treatment_cost``, and ``output``.
+        Parsed namespace with ``data_path``, ``area_id``, ``variant``,
+        ``budgets``, ``seeds``, ``strategies``, ``treatment_cost``,
+        and ``output``.
     """
     parser = argparse.ArgumentParser(
         description=(
@@ -88,6 +100,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--area-id",
         default=None,
         help="Filter to one balancing area (optional).",
+    )
+    parser.add_argument(
+        "--variant",
+        default="base",
+        choices=["base", "high_noise", "confounded"],
+        help=(
+            "Benchmark variant: 'base' (default), 'high_noise' (10+ nuisance dims), "
+            "or 'confounded' (Simpson's paradox from hidden confounder)."
+        ),
     )
     parser.add_argument(
         "--budgets",
@@ -240,12 +261,22 @@ def main() -> None:
     covariates = prepare_covariates(df)
     logger.info("Prepared %d covariate rows", len(covariates))
 
-    # Create scenario
-    scenario = DemandResponseScenario(
+    # Create scenario (variant-specific)
+    variant = args.variant
+    scenario_cls: type[DemandResponseScenario]
+    if variant == "high_noise":
+        scenario_cls = HighNoiseDemandResponse
+    elif variant == "confounded":
+        scenario_cls = ConfoundedDemandResponse
+    else:
+        scenario_cls = DemandResponseScenario
+
+    scenario = scenario_cls(
         covariates=covariates,
         seed=0,  # data generation seed (fixed for reproducibility)
         treatment_cost=args.treatment_cost,
     )
+    logger.info("Using variant: %s (%s)", variant, scenario_cls.__name__)
 
     # Run all combinations
     results: list[CounterfactualBenchmarkResult] = []
@@ -286,6 +317,7 @@ def main() -> None:
     # Write JSON output
     output_data = {
         "benchmark": "counterfactual_demand_response",
+        "variant": variant,
         "data_source": str(args.data_path),
         "treatment_cost": args.treatment_cost,
         "n_covariates": len(covariates),
