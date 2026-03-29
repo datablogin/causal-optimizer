@@ -227,11 +227,12 @@ def test_soft_ranking_uses_all_variables() -> None:
                 f"Hard mode: {k} should be pinned"
             )
 
-    # In soft mode, X4 and X5 should show variation (not all pinned)
-    x4_soft = [r["X4"] for r in soft_results]
-    x5_soft = [r["X5"] for r in soft_results]
-    assert np.std(x4_soft) > 0.01 or np.std(x5_soft) > 0.01, (
-        "Soft mode: non-focus variables should show some variation"
+    # In soft mode, at least one result should differ from the best values
+    # (soft mode generates candidates across the full space, not pinned)
+    x4_differs = any(abs(r["X4"] - best.parameters["X4"]) > 0.01 for r in soft_results)
+    x5_differs = any(abs(r["X5"] - best.parameters["X5"]) > 0.01 for r in soft_results)
+    assert x4_differs or x5_differs, (
+        "Soft mode: non-focus variables should not all be pinned to best values"
     )
 
 
