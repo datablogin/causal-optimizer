@@ -17,9 +17,12 @@ stronger positive-control pressure for causal guidance:
 
 Both variants reuse the same treatment-effect function as the base
 benchmark (sigmoid * Gaussian on temperature and hour) so oracle
-statistics are directly comparable.  Both inherit ``run_benchmark``
-from the base class -- only ``generate``, ``search_space``, and
-``causal_graph`` are overridden (the minimum needed for polymorphism).
+statistics are directly comparable.  ``HighNoiseDemandResponse``
+inherits ``run_benchmark`` from the base class (only ``generate``,
+``search_space``, and ``causal_graph`` are overridden).
+``ConfoundedDemandResponse`` overrides ``run_benchmark`` to
+deconfound the evaluation metric -- the optimizer trains on biased
+data but is evaluated on the true causal benefit.
 
 Public API
 ----------
@@ -29,7 +32,7 @@ Public API
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -163,7 +166,10 @@ def _confounded_propensity(
     base_prop = _propensity(temperature, hour_of_day)
 
     # Shift logit by grid stress: high stress -> more likely to treat.
-    logit_base = np.log(base_prop / (1.0 - base_prop))
+    # Epsilon guard: _propensity clips to [0.05, 0.90], so logit is bounded,
+    # but guard against future changes that widen the clip range.
+    safe_prop = np.clip(base_prop, 1e-6, 1.0 - 1e-6)
+    logit_base = np.log(safe_prop / (1.0 - safe_prop))
     logit_confounded = logit_base + 1.5 * (grid_stress - 0.5)
     confounded_prop = 1.0 / (1.0 + np.exp(-logit_confounded))
 
@@ -362,7 +368,6 @@ class ConfoundedDemandResponse(DemandResponseScenario):
         regret is non-negative and measures distance to the causal oracle.
         """
         import time
-        from typing import Any
 
         from causal_optimizer.engine.loop import ExperimentEngine
 
@@ -409,7 +414,11 @@ class ConfoundedDemandResponse(DemandResponseScenario):
             best_result = engine.log.best_result("objective", minimize=True)
             best_params = best_result.parameters if best_result is not None else None
 
-        # Evaluate on DECONFOUNDED test set (swap y0 to remove grid stress)
+        # Evaluate on DECONFOUNDED test set.  Swap y0 to remove grid stress
+        # so evaluate_policy computes y0-y1 = effect (the true causal benefit).
+        # oracle_policy_value is already overridden to use true_treatment_effect
+        # directly and doesn't need this swap, but eval_data is passed to it
+        # for interface consistency.
         eval_data = test_data.copy()
         eval_data["y0"] = eval_data["_deconfounded_y0"]
 
