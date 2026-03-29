@@ -334,3 +334,38 @@ class TestReproducibilityVariants:
         assert r1.oracle_value == pytest.approx(r2.oracle_value, abs=1e-9)
         assert r1.regret == pytest.approx(r2.regret, abs=1e-9)
         assert r1.decision_error_rate == pytest.approx(r2.decision_error_rate, abs=1e-9)
+
+
+# ── Test 12: Deconfounding swap produces y0 - y1 = effect ────────
+
+
+class TestDeconfoundingSwap:
+    """Verify that swapping y0 to _deconfounded_y0 recovers the true causal effect."""
+
+    def test_confounded_y0_minus_y1_differs_from_effect(
+        self, confounded_scenario: ConfoundedDemandResponse
+    ) -> None:
+        data = confounded_scenario.generate()
+        y0_confounded = data["y0"].values
+        y1 = data["y1"].values
+        effect = data["true_treatment_effect"].values
+
+        # Confounded: y0 - y1 != effect (inflated by grid stress)
+        apparent_benefit = y0_confounded - y1
+        assert not np.allclose(apparent_benefit, effect, atol=1.0), (
+            "Confounded y0 - y1 should differ from true_treatment_effect"
+        )
+
+    def test_deconfounded_y0_minus_y1_equals_effect(
+        self, confounded_scenario: ConfoundedDemandResponse
+    ) -> None:
+        data = confounded_scenario.generate()
+        y0_deconfounded = data["_deconfounded_y0"].values
+        y1 = data["y1"].values
+        effect = data["true_treatment_effect"].values
+
+        # Deconfounded: y0 - y1 = y0_base - (y0_base - effect) = effect
+        deconfounded_benefit = y0_deconfounded - y1
+        assert np.allclose(deconfounded_benefit, effect, atol=1e-9), (
+            "Deconfounded y0 - y1 should equal true_treatment_effect"
+        )

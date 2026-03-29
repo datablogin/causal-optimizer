@@ -207,9 +207,11 @@ class ConfoundedDemandResponse(DemandResponseScenario):
     ``y0 - y1`` will overestimate the benefit in high-temperature
     windows and recommend over-treating.
 
-    Inherits ``run_benchmark`` from :class:`DemandResponseScenario`
-    unchanged -- the causal graph's bidirected edges alert POMIS
-    computation to be conservative about intervention sets.
+    Overrides ``run_benchmark`` to deconfound the evaluation metric:
+    the optimizer trains on confounded data (y0 includes grid stress)
+    but is evaluated on the true causal benefit (y0 swapped to baseline).
+    The causal graph's bidirected edges alert POMIS computation to be
+    conservative about intervention sets.
     """
 
     def generate(self) -> pd.DataFrame:
