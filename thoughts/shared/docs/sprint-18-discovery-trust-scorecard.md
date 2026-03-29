@@ -6,7 +6,7 @@
 - **Sprint**: 18 (Discovery Trust)
 - **PRs included**: #86 (Time-Series Calendar Profiler), #87 (Counterfactual
   Benchmark Repair), #88 (Null-Signal Control Benchmark)
-- **Issue**: #89
+- **Issue**: #90
 
 ## 1. Sprint 18 Summary
 
@@ -272,8 +272,11 @@ surrogate_only** on any benchmark. The evidence suggests this is because:
   direct parents of MAE), providing no selective information.
 - On the counterfactual benchmark, the noise dimensions are easy to screen
   without causal knowledge.
-- At low budgets (B20, B40), causal and surrogate_only are byte-identical
-  because causal guidance only activates after the exploration phase.
+- At low budgets (B20, B40), causal guidance has limited room to help because
+  it only activates after the exploration phase (experiment 11+). On the
+  counterfactual benchmark, causal actually underperforms surrogate_only at
+  these budgets, likely because the focus-variable restriction over-constrains
+  early optimization steps.
 
 These are addressable through optimizer-core improvements, and the benchmark
 suite can now reliably evaluate whether those improvements help.
@@ -285,10 +288,11 @@ suite can now reliably evaluate whether those improvements help.
 The evidence base is now strong enough to support targeted optimizer
 experimentation. Recommended priorities:
 
-**Priority 1: Earlier causal influence.** At B20 and B40, causal and
-surrogate_only produce identical results because causal guidance only activates
-in the optimization phase (experiment 11+). With a budget of 20, only 10
-experiments benefit from causal guidance. Sprint 19 should explore:
+**Priority 1: Earlier causal influence.** At B20 and B40, causal guidance has
+limited impact because it only activates in the optimization phase (experiment
+11+). With a budget of 20, only 10 experiments benefit from causal guidance,
+and the focus-variable restriction may over-constrain those few steps. Sprint
+19 should explore:
 
 - Causal-informed exploration (use graph structure to bias LHS sampling)
 - Earlier phase transition (start optimization before experiment 11)
