@@ -15,6 +15,8 @@ on real ERCOT benchmarks, that the off-policy skip predictor has a 33% false-ski
 rate, and that the original counterfactual benchmark was degenerate (oracle =
 "never treat"). Sprint 17's verdict was **INVESTIGATE**: the harness works, but
 the evidence does not yet support a causal-advantage claim.
+(See `thoughts/shared/docs/sprint-17-combined-report.md` for full Sprint 17
+evidence.)
 
 Sprint 18 responds by strengthening the evidence base rather than tuning the
 optimizer. It delivered three tools for evaluating discovery trust:
@@ -124,7 +126,7 @@ never-treat scores zero.
 
 ### Regret by Strategy
 
-| Strategy | Budget | Mean Regret | Std Regret | Decision Error |
+| Strategy | Budget | Mean Regret (policy value units) | Std Regret | Decision Error |
 |----------|--------|-------------|------------|----------------|
 | random | 20 | 20.06 | 10.39 | 25.2% |
 | random | 40 | 19.11 | 9.21 | 27.2% |
@@ -162,8 +164,8 @@ never-treat scores zero.
 
 **Can the system exploit known signal?** Yes. Both surrogate_only and causal
 find near-optimal policies on a benchmark with non-trivial structure. At B80,
-both achieve regret under 2.5 against an oracle value of 48.41 -- over 95%
-policy efficiency.
+both achieve regret under 2.5 against an oracle value of 48.41 -- around 95%
+policy efficiency (surrogate_only 96.4%, causal 94.9%).
 
 **Does causal beat random when the graph has non-trivial structure?** Yes, at
 B80 (regret 2.46 vs 9.16). However, causal does not yet beat surrogate_only.
@@ -208,7 +210,8 @@ same 60/20/20 blocked time split.
 1. **No strategy shows consistent held-out improvement beyond noise.** The
    difference between best (surrogate_only, 3256.04) and worst (random,
    3261.03) is 4.99 MAE units, a 0.15% relative difference. Well within the
-   2% null-signal threshold.
+   2% null-signal threshold (chosen conservatively: any strategy that appears
+   to improve on random by more than 2% on null data warrants investigation).
 
 2. **Apparent differences are noise artifacts.** Random search achieves slightly
    lower validation MAE but slightly higher test MAE -- the classic pattern of
@@ -244,7 +247,8 @@ differences under 0.15%. The system does not manufacture false discovery.
 **Yes, partially.** On the repaired counterfactual benchmark:
 
 - Both learned strategies (surrogate_only and causal) dramatically outperform
-  random at B80, achieving over 95% policy efficiency.
+  random at B80, achieving around 95% policy efficiency (surrogate_only 96.4%,
+  causal 94.9%).
 - Causal does not yet outperform surrogate_only. This is honest: the current
   benchmark's noise structure is simple enough to screen without causal
   knowledge.
