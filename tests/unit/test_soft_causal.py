@@ -19,6 +19,7 @@ from causal_optimizer.optimizer.suggest import (
     _causal_alignment_score,
     _get_targeted_ratio,
     _score_candidate_causal_exploration,
+    _suggest_bayesian,
     _suggest_exploration,
     _suggest_surrogate,
 )
@@ -480,3 +481,67 @@ def test_targeted_ratio_at_midpoint() -> None:
     assert ratio == pytest.approx(0.50, abs=0.02), (
         f"Mid optimization should use ~50% targeted, got {ratio:.2f}"
     )
+
+
+# ---- Test: Ax/BoTorch path respects causal_softness ----
+
+
+def test_bayesian_soft_causal_uses_all_variables() -> None:
+    """In soft mode, _suggest_bayesian should let Ax optimize ALL variables.
+
+    Verifies that with low causal_softness, the Ax path does not pin
+    non-focus variables to midpoints (i.e., all variables are active in Ax).
+    In hard mode (high softness), non-focus variables should be fixed at
+    midpoint values by Ax.
+    """
+    ax = pytest.importorskip("ax", reason="ax-platform required for Ax path test")  # noqa: F841
+
+    ss = _make_search_space_5d()
+    graph = _make_causal_graph()
+    log = _make_experiment_log(n=15)
+
+    # Soft mode: causal_softness=0.5, all variables should be active
+    soft_results: list[dict[str, Any]] = []
+    for seed_offset in range(5):
+        # Use different logs with different seeds to get varied Ax suggestions
+        trial_log = _make_experiment_log(n=15, seed=42 + seed_offset)
+        result = _suggest_bayesian(
+            ss,
+            trial_log,
+            minimize=True,
+            objective_name="objective",
+            focus_variables=["X1", "X2", "X3"],
+            causal_softness=0.5,
+            causal_graph=graph,
+        )
+        soft_results.append(result)
+        # All variables must be present
+        for v in ss.variables:
+            assert v.name in result, f"Soft mode: missing variable {v.name}"
+
+    # In soft mode, X4 and X5 should NOT always be at the midpoint (5.0),
+    # since Ax is free to optimize them.
+    x4_at_midpoint = all(abs(r["X4"] - 5.0) < 0.5 for r in soft_results)
+    x5_at_midpoint = all(abs(r["X5"] - 5.0) < 0.5 for r in soft_results)
+    # At least one of X4, X5 should deviate from midpoint in at least one trial
+    assert not (x4_at_midpoint and x5_at_midpoint), (
+        "Soft mode: non-focus variables should not all be pinned to midpoint"
+    )
+
+    # Hard mode: causal_softness=1e6, non-focus vars should be at midpoint
+    hard_result = _suggest_bayesian(
+        ss,
+        log,
+        minimize=True,
+        objective_name="objective",
+        focus_variables=["X1", "X2", "X3"],
+        causal_softness=1e6,
+        causal_graph=graph,
+    )
+    for v in ss.variables:
+        assert v.name in hard_result, f"Hard mode: missing variable {v.name}"
+    # In hard mode, X4 and X5 should be at midpoint (5.0)
+    for k in ("X4", "X5"):
+        assert hard_result[k] == pytest.approx(5.0, abs=0.5), (
+            f"Hard mode: {k} should be near midpoint (got {hard_result[k]})"
+        )
