@@ -20,9 +20,10 @@ benchmark (sigmoid * Gaussian on temperature and hour) so oracle
 statistics are directly comparable.  ``HighNoiseDemandResponse``
 inherits ``run_benchmark`` from the base class (only ``generate``,
 ``search_space``, and ``causal_graph`` are overridden).
-``ConfoundedDemandResponse`` overrides ``run_benchmark`` to
-deconfound the evaluation metric -- the optimizer trains on biased
-data but is evaluated on the true causal benefit.
+``ConfoundedDemandResponse`` overrides ``_prepare_eval_data`` and
+``oracle_policy_value`` to deconfound the evaluation metric -- the
+optimizer trains on biased data but is evaluated on the true causal
+benefit.
 
 Public API
 ----------
@@ -204,9 +205,10 @@ class ConfoundedDemandResponse(DemandResponseScenario):
     ``y0 - y1`` will overestimate the benefit in high-temperature
     windows and recommend over-treating.
 
-    Overrides ``run_benchmark`` to deconfound the evaluation metric:
-    the optimizer trains on confounded data (y0 includes grid stress)
-    but is evaluated on the true causal benefit (y0 swapped to baseline).
+    Overrides ``_prepare_eval_data`` to swap ``y0`` to the deconfounded
+    baseline before evaluation, and ``oracle_policy_value`` to anchor
+    the oracle to the true causal effect (needed when the method is
+    called directly on confounded data outside of ``run_benchmark``).
     The causal graph's bidirected edges alert POMIS computation to be
     conservative about intervention sets.
     """
@@ -346,6 +348,12 @@ class ConfoundedDemandResponse(DemandResponseScenario):
         so the inherited oracle (which uses ``_net_benefit(y0, y1, ...)``)
         would NOT be the ceiling of the causal metric.  We override to
         compute oracle value from ``true_treatment_effect`` directly.
+
+        Note: when called through ``run_benchmark``, the data is already
+        deconfounded by ``_prepare_eval_data`` (y0 swapped to baseline),
+        so the base implementation would also produce the correct answer.
+        This override is still needed for direct calls on confounded data
+        (e.g., in tests or analysis scripts).
         """
         effect = data["true_treatment_effect"].values
         oracle_treat = effect > self.treatment_cost
