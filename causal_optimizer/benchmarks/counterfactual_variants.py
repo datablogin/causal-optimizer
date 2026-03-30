@@ -32,7 +32,7 @@ Public API
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -40,14 +40,10 @@ if TYPE_CHECKING:
     import pandas as pd
 
 from causal_optimizer.benchmarks.counterfactual_energy import (
-    CounterfactualBenchmarkResult,
     DemandResponseScenario,
-    _PolicyRunner,
-    _propensity,
-    _treatment_effect,
-    evaluate_policy,
+    propensity,
+    treatment_effect,
 )
-from causal_optimizer.benchmarks.runner import sample_random_params
 from causal_optimizer.types import (
     CausalGraph,
     SearchSpace,
@@ -163,10 +159,10 @@ def _confounded_propensity(
     Returns:
         Array of propensities in [0.05, 0.90].
     """
-    base_prop = _propensity(temperature, hour_of_day)
+    base_prop = propensity(temperature, hour_of_day)
 
     # Shift logit by grid stress: high stress -> more likely to treat.
-    # Epsilon guard: _propensity clips to [0.05, 0.90], so logit is bounded,
+    # Epsilon guard: propensity() clips to [0.05, 0.90], so logit is bounded,
     # but guard against future changes that widen the clip range.
     safe_prop = np.clip(base_prop, 1e-6, 1.0 - 1e-6)
     logit_base = np.log(safe_prop / (1.0 - safe_prop))
@@ -245,7 +241,7 @@ class ConfoundedDemandResponse(DemandResponseScenario):
         y0 = y0_base + 500.0 * grid_stress
 
         # Treatment effect: deterministic given covariates only
-        effect = _treatment_effect(temp, hour)
+        effect = treatment_effect(temp, hour)
 
         # Y(1) does NOT carry grid stress -- treatment outcome is causal.
         # This makes y0 - y1 = effect + 500 * grid_stress, so the
@@ -253,8 +249,8 @@ class ConfoundedDemandResponse(DemandResponseScenario):
         y1 = y0_base - effect
 
         # Treatment assignment: confounded propensity
-        propensity = _confounded_propensity(temp, hour, grid_stress)
-        treatment = (rng.random(len(df)) < propensity).astype(int)
+        prop_scores = _confounded_propensity(temp, hour, grid_stress)
+        treatment = (rng.random(len(df)) < prop_scores).astype(int)
 
         observed = np.where(treatment == 1, y1, y0)
 
@@ -263,7 +259,7 @@ class ConfoundedDemandResponse(DemandResponseScenario):
         df["y1"] = y1
         df["observed_outcome"] = observed
         df["true_treatment_effect"] = effect
-        df["propensity"] = propensity
+        df["propensity"] = prop_scores
         df["_debug_grid_stress"] = grid_stress
         # Deconfounded Y(0) for causal evaluation (no grid stress).
         df["_deconfounded_y0"] = y0_base
@@ -324,7 +320,7 @@ class ConfoundedDemandResponse(DemandResponseScenario):
         """
         import pandas as pd_rt  # runtime import; module-level is TYPE_CHECKING only
 
-        temp_bins = pd_rt.cut(data["temperature"], bins=5, labels=False)
+        temp_bins = pd_rt.cut(data["temperature"], bins=5, labels=False).fillna(-1).astype(int)
 
         naive_effects = np.zeros(len(data))
         for bin_val in range(5):
@@ -356,94 +352,15 @@ class ConfoundedDemandResponse(DemandResponseScenario):
         unit_benefit = np.where(oracle_treat, effect - self.treatment_cost, 0.0)
         return float(unit_benefit.mean())
 
-    def run_benchmark(
-        self,
-        budget: int,
-        seed: int,
-        strategy: str = "random",
-    ) -> CounterfactualBenchmarkResult:
-        """Run one strategy, evaluating on the deconfounded causal metric.
+    def _prepare_eval_data(self, test_data: pd.DataFrame) -> pd.DataFrame:
+        """Swap ``y0`` to the deconfounded baseline for causal evaluation.
 
         The optimizer trains on **confounded** data (``y0`` includes grid
-        stress), so surrogate_only learns the biased landscape.  The final
+        stress), so surrogate_only learns the biased landscape.  The
         evaluation swaps ``y0`` to the deconfounded baseline so that
-        ``y0 - y1 = effect`` — the true causal benefit.  This ensures
+        ``y0 - y1 = effect`` -- the true causal benefit.  This ensures
         regret is non-negative and measures distance to the causal oracle.
         """
-        import time
-
-        from causal_optimizer.engine.loop import ExperimentEngine
-
-        valid_strategies = {"random", "surrogate_only", "causal"}
-        if strategy not in valid_strategies:
-            msg = f"Unknown strategy {strategy!r}, expected one of {sorted(valid_strategies)}"
-            raise ValueError(msg)
-
-        t_start = time.monotonic()
-
-        data = self.generate()
-        n = len(data)
-        opt_end = int(n * 0.8)
-        val_data = data.iloc[:opt_end].reset_index(drop=True)
-        test_data = data.iloc[opt_end:].reset_index(drop=True)
-
-        space = self.search_space()
-        # Runner trains on CONFOUNDED data (optimizer sees biased landscape)
-        runner = _PolicyRunner(val_data, self.treatment_cost)
-
-        if strategy == "random":
-            rng = np.random.default_rng(seed)
-            best_obj = float("inf")
-            best_params: dict[str, Any] | None = None
-            for _ in range(budget):
-                params = sample_random_params(space, rng)
-                metrics = runner.run(params)
-                obj = metrics["objective"]
-                if obj < best_obj:
-                    best_obj = obj
-                    best_params = params
-        else:
-            graph = self.causal_graph() if strategy == "causal" else None
-            engine = ExperimentEngine(
-                search_space=space,
-                runner=runner,
-                causal_graph=graph,
-                objective_name="objective",
-                minimize=True,
-                seed=seed,
-                max_skips=0,
-            )
-            engine.run_loop(budget)
-            best_result = engine.log.best_result("objective", minimize=True)
-            best_params = best_result.parameters if best_result is not None else None
-
-        # Evaluate on DECONFOUNDED test set.  Swap y0 to remove grid stress
-        # so evaluate_policy computes y0-y1 = effect (the true causal benefit).
-        # oracle_policy_value is already overridden to use true_treatment_effect
-        # directly and doesn't need this swap, but eval_data is passed to it
-        # for interface consistency.
         eval_data = test_data.copy()
         eval_data["y0"] = eval_data["_deconfounded_y0"]
-
-        if best_params is not None:
-            policy_value, decision_error = evaluate_policy(
-                eval_data, best_params, self.treatment_cost
-            )
-        else:
-            policy_value = 0.0
-            oracle_treat = eval_data["true_treatment_effect"].values > self.treatment_cost
-            decision_error = float(np.mean(oracle_treat))
-
-        oracle_value = self.oracle_policy_value(eval_data)
-        regret = oracle_value - policy_value
-
-        return CounterfactualBenchmarkResult(
-            strategy=strategy,
-            budget=budget,
-            seed=seed,
-            policy_value=policy_value,
-            oracle_value=oracle_value,
-            regret=regret,
-            decision_error_rate=decision_error,
-            runtime_seconds=time.monotonic() - t_start,
-        )
+        return eval_data

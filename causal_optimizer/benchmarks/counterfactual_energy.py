@@ -63,7 +63,7 @@ class CounterfactualBenchmarkResult:
 # ── Treatment effect function ────────────────────────────────────────
 
 
-def _treatment_effect(temperature: np.ndarray, hour_of_day: np.ndarray) -> np.ndarray:
+def treatment_effect(temperature: np.ndarray, hour_of_day: np.ndarray) -> np.ndarray:
     """Compute the deterministic treatment effect (load reduction in MW).
 
     Uses a smooth, continuous function of temperature and hour so the
@@ -101,7 +101,7 @@ def _treatment_effect(temperature: np.ndarray, hour_of_day: np.ndarray) -> np.nd
     return np.maximum(350.0 * temp_response * hour_response, 0.0)
 
 
-def _propensity(temperature: np.ndarray, hour_of_day: np.ndarray) -> np.ndarray:
+def propensity(temperature: np.ndarray, hour_of_day: np.ndarray) -> np.ndarray:
     """Compute treatment propensity (probability of demand response event).
 
     Treatment is more likely on hot afternoons (mild confounding: treatment
@@ -232,7 +232,7 @@ def evaluate_policy(
 # ── Benchmark runner for policy evaluation ───────────────────────────
 
 
-class _PolicyRunner:
+class PolicyRunner:
     """ExperimentRunner that evaluates threshold policies on counterfactual data.
 
     Used internally by :meth:`DemandResponseScenario.run_benchmark` to
@@ -310,14 +310,14 @@ class DemandResponseScenario:
         y0 = df["target_load"].values.astype(np.float64)
 
         # Treatment effect: deterministic given covariates
-        effect = _treatment_effect(temp, hour)
+        effect = treatment_effect(temp, hour)
 
         # Y(1) = base load - treatment effect (treatment reduces load)
         y1 = y0 - effect
 
         # Treatment assignment via propensity
-        propensity = _propensity(temp, hour)
-        treatment = (rng.random(len(df)) < propensity).astype(int)
+        prop_scores = propensity(temp, hour)
+        treatment = (rng.random(len(df)) < prop_scores).astype(int)
 
         # Observed outcome: factual
         observed = np.where(treatment == 1, y1, y0)
@@ -327,7 +327,7 @@ class DemandResponseScenario:
         df["y1"] = y1
         df["observed_outcome"] = observed
         df["true_treatment_effect"] = effect
-        df["propensity"] = propensity
+        df["propensity"] = prop_scores
 
         return df
 
@@ -413,6 +413,23 @@ class DemandResponseScenario:
         oracle_treat = effect > self.treatment_cost
         return _net_benefit(y0, y1, oracle_treat, self.treatment_cost)
 
+    def _prepare_eval_data(self, test_data: pd.DataFrame) -> pd.DataFrame:
+        """Prepare evaluation data from the test split.
+
+        The base implementation returns ``test_data`` unchanged.  Subclasses
+        may override to transform the data before evaluation -- for example,
+        :class:`ConfoundedDemandResponse` swaps ``y0`` to the deconfounded
+        baseline so that the evaluation metric reflects true causal benefit.
+
+        Args:
+            test_data: Test-split DataFrame with counterfactual columns.
+
+        Returns:
+            DataFrame suitable for :func:`evaluate_policy` and
+            :meth:`oracle_policy_value`.
+        """
+        return test_data
+
     def run_benchmark(
         self,
         budget: int,
@@ -450,7 +467,7 @@ class DemandResponseScenario:
         test_data = data.iloc[opt_end:].reset_index(drop=True)
 
         space = self.search_space()
-        runner = _PolicyRunner(val_data, self.treatment_cost)
+        runner = PolicyRunner(val_data, self.treatment_cost)
 
         if strategy == "random":
             rng = np.random.default_rng(seed)
@@ -478,18 +495,21 @@ class DemandResponseScenario:
             best_result = engine.log.best_result("objective", minimize=True)
             best_params = best_result.parameters if best_result is not None else None
 
-        # Evaluate on test set
+        # Allow subclasses to transform the evaluation data (e.g., deconfounding)
+        eval_data = self._prepare_eval_data(test_data)
+
+        # Evaluate on (possibly transformed) test set
         if best_params is not None:
             policy_value, decision_error = evaluate_policy(
-                test_data, best_params, self.treatment_cost
+                eval_data, best_params, self.treatment_cost
             )
         else:
             # No valid policy found; use never-treat as fallback
             policy_value = 0.0  # never-treat has zero net benefit
-            oracle_treat = test_data["true_treatment_effect"].values > self.treatment_cost
+            oracle_treat = eval_data["true_treatment_effect"].values > self.treatment_cost
             decision_error = float(np.mean(oracle_treat))
 
-        oracle_value = self.oracle_policy_value(test_data)
+        oracle_value = self.oracle_policy_value(eval_data)
         regret = oracle_value - policy_value
 
         runtime = time.monotonic() - t_start

@@ -309,6 +309,25 @@ class TestSmokeConfounded:
         assert math.isfinite(result.policy_value)
 
 
+# ── Test 10b: Invalid strategy raises ValueError ────────────────
+
+
+class TestInvalidStrategyRaisesValueError:
+    """Passing an invalid strategy to run_benchmark must raise ValueError."""
+
+    def test_invalid_strategy_high_noise(
+        self, high_noise_scenario: HighNoiseDemandResponse
+    ) -> None:
+        with pytest.raises(ValueError, match="Unknown strategy"):
+            high_noise_scenario.run_benchmark(budget=3, seed=0, strategy="bogus")
+
+    def test_invalid_strategy_confounded(
+        self, confounded_scenario: ConfoundedDemandResponse
+    ) -> None:
+        with pytest.raises(ValueError, match="Unknown strategy"):
+            confounded_scenario.run_benchmark(budget=3, seed=0, strategy="bogus")
+
+
 # ── Test 11: Reproducibility for each variant ────────────────────
 
 
