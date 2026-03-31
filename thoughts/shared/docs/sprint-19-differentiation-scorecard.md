@@ -189,13 +189,12 @@ performance. The soft causal influence approach is directionally correct:
 earlier influence and softer weighting outperform the Sprint 18 approach
 of hard focus-variable restriction.
 
-**Limitation: `causal_softness` is not effective on the Ax/BoTorch path.**
-The soft ranking bonus only applies when the RF surrogate fallback is used.
-When Ax/BoTorch is available (the production path), the re-ranking uses
-pure causal alignment without a continuous softness trade-off. This means
-the documented `causal_softness` parameter does not have the expected
-effect on the primary optimization path. This should be addressed in
-Sprint 20.
+**Limitation: Ax/BoTorch path re-ranking is alignment-only.**
+`causal_softness` is now threaded into the Ax path (fixed during Sprint
+19 review), but the Ax re-ranking selects among Ax-suggested candidates
+using causal alignment alone — it does not blend GP-predicted objective
+values with alignment into a balanced score.  Sprint 20 should implement
+a weighted composite score on the Ax path for a true soft trade-off.
 
 ## 4. Skip Calibration
 
@@ -354,8 +353,8 @@ Specifically:
    and should be investigated.
 2. The confounded variant shows that bidirected edges alone do not help --
    actual deconfounding at the search level is needed.
-3. `causal_softness` does not affect the primary Ax/BoTorch path -- the
-   soft trade-off only works on the RF surrogate fallback.
+3. The Ax/BoTorch path now uses `causal_softness` for re-ranking, but
+   the re-ranking is alignment-only (no GP-predicted objective blend).
 
 ## 8. Sprint 20 Recommendation
 
@@ -387,12 +386,13 @@ If deconfounding at the search level is infeasible in one sprint, lower
 the confounded variant's priority and focus on hardening the high-noise
 advantage.
 
-### Direction C: Port soft ranking to the Ax/BoTorch path
+### Direction C: Balanced Ax re-ranking score
 
-The `causal_softness` parameter is currently inert on the primary Ax
-path. Sprint 20 should implement re-ranking of Ax candidates by a
-balanced score of predicted objective and causal alignment, so the
-documented parameter actually works on the production code path.
+`causal_softness` is now wired into the Ax path (Sprint 19 review fix),
+but the re-ranking selects among Ax candidates using causal alignment
+alone. Sprint 20 should implement a composite score that blends
+GP-predicted objective value with causal alignment, weighted by
+`causal_softness`, for a true soft trade-off on the production path.
 
 ### What not to do in Sprint 20
 
