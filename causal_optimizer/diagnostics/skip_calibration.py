@@ -125,6 +125,13 @@ def compute_skip_metrics(
 
     Returns:
         A :class:`SkipMetrics` summarizing the skip calibration quality.
+
+    Note:
+        Assumes that for every audited entry (``actual_value is not None``),
+        ``was_false_skip`` is also set.  Entries where ``was_false_skip``
+        is ``None`` count toward ``audited_skips`` but toward neither
+        ``false_skip_count`` nor ``true_skip_count``, so
+        ``false_skip_rate + true_skip_rate`` may be < 1.0 for such inputs.
     """
     total_skips = len(entries)
     total_candidates = total_skips + total_evaluated

@@ -764,7 +764,7 @@ class ExperimentEngine:
             best_val = best.metrics.get(
                 self.objective_name, float("inf") if self.minimize else float("-inf")
             )
-            was_correct = actual_outcome > best_val if self.minimize else actual_outcome < best_val
+            was_correct = actual_outcome >= best_val if self.minimize else actual_outcome <= best_val
         else:
             # No results yet -- can't evaluate correctness, assume incorrect
             was_correct = False
