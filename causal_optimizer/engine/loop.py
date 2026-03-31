@@ -116,6 +116,8 @@ class ExperimentEngine:
         experiment_id: str | None = None,
         strategy: str = "bayesian",
         audit_skip_rate: float = 0.0,
+        causal_exploration_weight: float = 0.3,
+        causal_softness: float = 0.5,
     ) -> None:
         """Initialize the experiment engine.
 
@@ -157,9 +159,22 @@ class ExperimentEngine:
             audit_skip_rate: Fraction of would-be-skipped candidates to
                 force-evaluate for calibration (default 0.0, disabled).
                 Must be in ``[0.0, 1.0]``.
+            causal_exploration_weight: Strength of causal bias during
+                exploration (0.0 = pure LHS, higher = more ancestor emphasis).
+                Default 0.3.  Set to 0.0 to recover Sprint 18 behavior.
+            causal_softness: Strength of causal alignment bonus during
+                optimization (0.0 = no bonus, large = approximates hard focus).
+                Default 0.5.  ``causal_exploration_weight=0.0`` +
+                ``causal_softness=inf`` recovers Sprint 18 behavior.
         """
         if not 0.0 <= audit_skip_rate <= 1.0:
             raise ValueError(f"audit_skip_rate must be in [0.0, 1.0], got {audit_skip_rate!r}")
+        if causal_exploration_weight < 0:
+            raise ValueError(
+                f"causal_exploration_weight must be >= 0, got {causal_exploration_weight!r}"
+            )
+        if causal_softness < 0:
+            raise ValueError(f"causal_softness must be >= 0, got {causal_softness!r}")
         if discovery_method is not None and discovery_method not in self._VALID_DISCOVERY_METHODS:
             raise ValueError(
                 f"discovery_method={discovery_method!r} is not valid; "
@@ -202,6 +217,8 @@ class ExperimentEngine:
         # auto-discovered graph from the first call would be treated as a user prior
         # and block re-discovery from the richer dataset.
         self._prior_causal_graph: CausalGraph | None = causal_graph
+        self.causal_exploration_weight: float = causal_exploration_weight
+        self.causal_softness: float = causal_softness
         self._discovery_method: str | None = discovery_method
         self._discovery_threshold: float = discovery_threshold
         self._discovery_bidir_threshold: float = discovery_bidir_threshold
@@ -560,6 +577,8 @@ class ExperimentEngine:
                         objectives=self._objectives,
                         strategy=self._strategy,
                         seed=self._seed,
+                        causal_exploration_weight=self.causal_exploration_weight,
+                        causal_softness=self.causal_softness,
                     )
 
         # Only pass pomis_sets during optimization phase (not used in exploitation)
@@ -576,6 +595,8 @@ class ExperimentEngine:
             objectives=self._objectives,
             strategy=self._strategy,
             seed=self._seed,
+            causal_exploration_weight=self.causal_exploration_weight,
+            causal_softness=self.causal_softness,
         )
 
     def step(self) -> ExperimentResult:
