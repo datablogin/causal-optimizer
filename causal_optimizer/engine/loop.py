@@ -641,7 +641,7 @@ class ExperimentEngine:
                 # Record rich audit entry for calibration analysis
                 audit_entry = SkipAuditEntry(
                     step=step_idx,
-                    parameters=parameters,
+                    parameters=dict(parameters),
                     skip_reason=self._predictor.last_skip_reason or "unknown",
                     predicted_value=(prediction.expected_value if prediction is not None else None),
                     model_quality=self._predictor.model_quality,
@@ -734,7 +734,7 @@ class ExperimentEngine:
         self,
         parameters: dict[str, Any],
         prediction: Any,
-        audit_entry: SkipAuditEntry | None = None,
+        audit_entry: SkipAuditEntry,
     ) -> None:
         """Force-evaluate a skipped candidate and record an AuditResult.
 
@@ -779,9 +779,8 @@ class ExperimentEngine:
         )
 
         # Update the SkipAuditEntry with ground truth
-        if audit_entry is not None:
-            audit_entry.actual_value = actual_outcome
-            audit_entry.was_false_skip = not was_correct
+        audit_entry.actual_value = actual_outcome
+        audit_entry.was_false_skip = not was_correct
 
     def _is_improvement_significant(self, current_objective: float) -> bool | None:
         """Check if the current objective is a statistically significant improvement.
