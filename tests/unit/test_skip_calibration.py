@@ -683,22 +683,37 @@ class TestMutatingRunnerAuditImmutability:
                 "SkipAuditEntry.parameters was mutated by runner"
             )
 
-    def test_audit_result_parameters_immutable(self) -> None:
-        """AuditResult.parameters must be a snapshot, not a live reference."""
+    def test_audit_result_parameters_immutable_direct(self) -> None:
+        """Call _audit_skipped_candidate directly to guarantee an AuditResult is created."""
         engine = ExperimentEngine(
             search_space=_make_search_space(),
             runner=_MutatingRunner(),
             seed=42,
             audit_skip_rate=1.0,
         )
-        engine.run_loop(20)
-        diag = engine.skip_diagnostics
+        # Run enough steps to build a log with a best result
+        engine.run_loop(5)
 
-        if diag.audit_results:
-            for result in diag.audit_results:
-                assert result.parameters.get("x") != 999.0, (
-                    "AuditResult.parameters was mutated by runner"
-                )
-                assert result.parameters.get("y") != 999.0, (
-                    "AuditResult.parameters was mutated by runner"
-                )
+        params = {"x": 1.5, "y": -2.0}
+        audit_entry = SkipAuditEntry(
+            step=99,
+            parameters=dict(params),
+            skip_reason="test",
+            predicted_value=0.0,
+            model_quality=0.5,
+            uncertainty=0.1,
+        )
+        engine._audit_skipped_candidate(params, None, audit_entry)
+
+        # Must have produced exactly one audit result
+        assert len(engine._audit_results) >= 1, "No AuditResult created"
+        result = engine._audit_results[-1]
+        assert result.parameters["x"] == pytest.approx(1.5), (
+            f"AuditResult.parameters['x'] = {result.parameters['x']}, expected 1.5"
+        )
+        assert result.parameters["y"] == pytest.approx(-2.0), (
+            f"AuditResult.parameters['y'] = {result.parameters['y']}, expected -2.0"
+        )
+        # Also verify the audit_entry was updated
+        assert audit_entry.actual_value is not None
+        assert audit_entry.was_false_skip is not None

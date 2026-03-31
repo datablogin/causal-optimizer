@@ -748,6 +748,7 @@ class ExperimentEngine:
                 in-place with ``actual_value`` and ``was_false_skip``.
         """
         predicted_outcome = prediction.expected_value if prediction is not None else float("nan")
+        original_parameters = dict(parameters)  # snapshot before runner.run() may mutate
         try:
             metrics = self.runner.run(parameters)
             if self.objective_name not in metrics:
@@ -773,7 +774,7 @@ class ExperimentEngine:
 
         self._audit_results.append(
             AuditResult(
-                parameters=dict(parameters),
+                parameters=original_parameters,
                 predicted_outcome=predicted_outcome,
                 actual_outcome=actual_outcome,
                 was_correct_skip=was_correct,
