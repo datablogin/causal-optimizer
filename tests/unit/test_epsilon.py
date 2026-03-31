@@ -692,6 +692,8 @@ class TestEngineEpsilonIntegration:
         mock_predictor.should_run_experiment.side_effect = [False, True]
         mock_predictor.fit.return_value = None
         mock_predictor.last_prediction = None
+        mock_predictor.last_skip_reason = "epsilon_observe"
+        mock_predictor.model_quality = 0.5
         engine._predictor = mock_predictor
 
         result = engine.step()
