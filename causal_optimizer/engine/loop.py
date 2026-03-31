@@ -15,7 +15,11 @@ import numpy as np
 
 from causal_optimizer.designer.screening import ScreeningDesigner, ScreeningResult
 from causal_optimizer.diagnostics.anytime import AnytimeMetrics
-from causal_optimizer.diagnostics.skip_calibration import AuditResult, SkipDiagnostics
+from causal_optimizer.diagnostics.skip_calibration import (
+    AuditResult,
+    SkipAuditEntry,
+    SkipDiagnostics,
+)
 from causal_optimizer.estimator.effects import EffectEstimator
 from causal_optimizer.evolution.map_elites import MAPElites
 from causal_optimizer.predictor.off_policy import OffPolicyPredictor
@@ -274,6 +278,7 @@ class ExperimentEngine:
         # Skip calibration instrumentation
         self._skip_log: list[dict[str, Any]] = []
         self._audit_results: list[AuditResult] = []
+        self._audit_entries: list[SkipAuditEntry] = []
         self._audit_skip_rate: float = audit_skip_rate
         self._audit_rng: np.random.Generator = np.random.default_rng(
             seed + 300007 if seed is not None else None
@@ -418,6 +423,7 @@ class ExperimentEngine:
             skip_ratio=n_skipped / n_considered if n_considered > 0 else 0.0,
             skip_confidences=confidences,
             audit_results=self._audit_results if self._audit_results else None,
+            audit_entries=list(self._audit_entries),
         )
 
     def anytime_metrics(self, checkpoints: list[int]) -> AnytimeMetrics:
@@ -632,9 +638,20 @@ class ExperimentEngine:
                 }
                 self._skip_log.append(skip_entry)
 
+                # Record rich audit entry for calibration analysis
+                audit_entry = SkipAuditEntry(
+                    step=step_idx,
+                    parameters=dict(parameters),
+                    skip_reason=self._predictor.last_skip_reason or "unknown",
+                    predicted_value=(prediction.expected_value if prediction is not None else None),
+                    model_quality=self._predictor.model_quality,
+                    uncertainty=(prediction.uncertainty if prediction is not None else 0.0),
+                )
+                self._audit_entries.append(audit_entry)
+
                 # Audit mode: force-evaluate a fraction of skipped candidates
                 if self._audit_skip_rate > 0.0 and self._audit_rng.random() < self._audit_skip_rate:
-                    self._audit_skipped_candidate(parameters, prediction)
+                    self._audit_skipped_candidate(parameters, prediction, audit_entry)
 
                 if prediction is not None:
                     logger.info(
@@ -717,6 +734,7 @@ class ExperimentEngine:
         self,
         parameters: dict[str, Any],
         prediction: Any,
+        audit_entry: SkipAuditEntry,
     ) -> None:
         """Force-evaluate a skipped candidate and record an AuditResult.
 
@@ -726,8 +744,11 @@ class ExperimentEngine:
         Args:
             parameters: The parameters that were skipped.
             prediction: The prediction from the off-policy predictor (may be None).
+            audit_entry: The :class:`SkipAuditEntry` for this skip, updated
+                in-place with ``actual_value`` and ``was_false_skip``.
         """
         predicted_outcome = prediction.expected_value if prediction is not None else float("nan")
+        original_parameters = dict(parameters)  # snapshot before runner.run() may mutate
         try:
             metrics = self.runner.run(parameters)
             if self.objective_name not in metrics:
@@ -744,19 +765,25 @@ class ExperimentEngine:
             best_val = best.metrics.get(
                 self.objective_name, float("inf") if self.minimize else float("-inf")
             )
-            was_correct = actual_outcome > best_val if self.minimize else actual_outcome < best_val
+            was_correct = (
+                actual_outcome >= best_val if self.minimize else actual_outcome <= best_val
+            )
         else:
-            # No results yet — can't evaluate correctness, assume incorrect
+            # No results yet -- can't evaluate correctness, assume incorrect
             was_correct = False
 
         self._audit_results.append(
             AuditResult(
-                parameters=parameters,
+                parameters=original_parameters,
                 predicted_outcome=predicted_outcome,
                 actual_outcome=actual_outcome,
                 was_correct_skip=was_correct,
             )
         )
+
+        # Update the SkipAuditEntry with ground truth
+        audit_entry.actual_value = actual_outcome
+        audit_entry.was_false_skip = not was_correct
 
     def _is_improvement_significant(self, current_objective: float) -> bool | None:
         """Check if the current objective is a statistically significant improvement.

@@ -95,11 +95,31 @@ class OffPolicyPredictor:
         self._obs_estimator: type | object | None = _NOT_TRIED
         self._experiment_log: ExperimentLog | None = None
         self._last_prediction: Prediction | None = None
+        self._last_skip_reason: str = ""
 
     @property
     def last_prediction(self) -> Prediction | None:
         """The prediction cached by the most recent ``should_run_experiment()`` call."""
         return self._last_prediction
+
+    @property
+    def last_skip_reason(self) -> str:
+        """The reason for the most recent skip decision.
+
+        Empty string if the last decision was to run (not skip).
+        Possible values: ``"low_uncertainty"`` (heuristic mode),
+        ``"epsilon_observe"`` (epsilon mode), ``""`` (not skipped).
+        """
+        return self._last_skip_reason
+
+    @property
+    def model_quality(self) -> float:
+        """Cross-validated R-squared of the surrogate model.
+
+        Returns 0.0 if the model has not been fitted or if there are
+        fewer than 10 experiments for cross-validation.
+        """
+        return self._model_quality
 
     def fit(
         self,
@@ -258,6 +278,7 @@ class OffPolicyPredictor:
         so callers can reuse it without a redundant ``predict()`` call.
         """
         self._last_prediction = None
+        self._last_skip_reason = ""
 
         if self.epsilon_mode:
             return self._should_run_epsilon(parameters)
@@ -284,7 +305,10 @@ class OffPolicyPredictor:
         if prediction is None:
             return True  # predict() failed (e.g. search space not set)
 
-        return prediction.uncertainty > self.uncertainty_threshold
+        should_run = prediction.uncertainty > self.uncertainty_threshold
+        if not should_run:
+            self._last_skip_reason = "low_uncertainty"
+        return should_run
 
     def _should_run_epsilon(self, parameters: dict[str, Any]) -> bool:
         """Epsilon controller decision logic from CBO (Aglietti et al.).
@@ -338,6 +362,7 @@ class OffPolicyPredictor:
                 "Epsilon controller chose observe (epsilon=%.3f); skipping experiment",
                 epsilon,
             )
+            self._last_skip_reason = "epsilon_observe"
             return False
 
         # With probability 1-epsilon, intervene (run experiment)

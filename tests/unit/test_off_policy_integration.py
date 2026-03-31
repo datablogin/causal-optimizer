@@ -114,6 +114,8 @@ class TestPredictorSkipping:
         engine._predictor.should_run_experiment.side_effect = [False, True]
         engine._predictor.fit.return_value = None
         engine._predictor.last_prediction = None
+        engine._predictor.last_skip_reason = "low_uncertainty"
+        engine._predictor.model_quality = 0.5
 
         result = engine.step()
         assert result is not None
@@ -129,10 +131,12 @@ class TestPredictorSkipping:
             max_skips=3,
         )
         engine._predictor = MagicMock(spec=OffPolicyPredictor)
-        # Always skip — but max_skips should break the loop
+        # Always skip -- but max_skips should break the loop
         engine._predictor.should_run_experiment.return_value = False
         engine._predictor.fit.return_value = None
         engine._predictor.last_prediction = None
+        engine._predictor.last_skip_reason = "low_uncertainty"
+        engine._predictor.model_quality = 0.5
 
         result = engine.step()
         assert result is not None
