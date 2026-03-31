@@ -16,7 +16,7 @@ import pytest
 from causal_optimizer.benchmarks.counterfactual_energy import (
     CounterfactualBenchmarkResult,
     DemandResponseScenario,
-    _treatment_effect,
+    treatment_effect,
 )
 
 # ── Fixtures ─────────────────────────────────────────────────────────
@@ -393,11 +393,11 @@ class TestTreatmentEffectHeterogeneity:
         """Peak hot-afternoon effect should be at least 10x cool-night effect."""
         temps_hot = np.array([35.0, 38.0, 41.0])  # 35-41C (~95-106F)
         hours_hot = np.array([15.0, 16.0, 17.0])
-        hot_effects = _treatment_effect(temps_hot, hours_hot)
+        hot_effects = treatment_effect(temps_hot, hours_hot)
 
         temps_cool = np.array([13.0, 16.0, 18.0])  # 13-18C (~55-64F)
         hours_cool = np.array([2.0, 3.0, 4.0])
-        cool_effects = _treatment_effect(temps_cool, hours_cool)
+        cool_effects = treatment_effect(temps_cool, hours_cool)
 
         assert hot_effects.mean() > 10.0 * cool_effects.mean(), (
             f"Hot afternoon mean effect ({hot_effects.mean():.1f}) should be "
@@ -408,7 +408,7 @@ class TestTreatmentEffectHeterogeneity:
         """Treatment effect at extreme temperatures should be finite, not NaN/Inf."""
         extreme_temps = np.array([-10.0, -30.0, 50.0, 60.0])
         hours = np.array([16.0, 16.0, 16.0, 16.0])
-        effects = _treatment_effect(extreme_temps, hours)
+        effects = treatment_effect(extreme_temps, hours)
         assert np.all(np.isfinite(effects)), f"Effects should be finite, got {effects}"
         assert np.all(effects >= 0.0), f"Effects should be non-negative, got {effects}"
 
@@ -416,7 +416,7 @@ class TestTreatmentEffectHeterogeneity:
         """Warm (27-32C) afternoon effect should be moderate -- above cost but below hot."""
         temps = np.array([28.0, 29.0, 31.0])  # 28-31C (~82-88F)
         hours = np.array([15.0, 16.0, 17.0])
-        effects = _treatment_effect(temps, hours)
+        effects = treatment_effect(temps, hours)
         # Moderate: should be above default treatment cost but well below hot afternoon.
         # Pinned to DemandResponseScenario's default (60.0).  If that default
         # changes, update this constant to match.
@@ -425,7 +425,7 @@ class TestTreatmentEffectHeterogeneity:
             f"Warm afternoon effect ({effects.mean():.1f}) "
             f"should be > treatment_cost ({default_cost})"
         )
-        hot_effects = _treatment_effect(np.array([38.0]), np.array([16.0]))  # 38C (~100F)
+        hot_effects = treatment_effect(np.array([38.0]), np.array([16.0]))  # 38C (~100F)
         assert effects.mean() < hot_effects[0], (
             f"Warm afternoon effect ({effects.mean():.1f}) should be < "
             f"hot afternoon effect ({hot_effects[0]:.1f})"
