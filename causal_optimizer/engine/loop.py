@@ -773,7 +773,7 @@ class ExperimentEngine:
 
         self._audit_results.append(
             AuditResult(
-                parameters=parameters,
+                parameters=dict(parameters),
                 predicted_outcome=predicted_outcome,
                 actual_outcome=actual_outcome,
                 was_correct_skip=was_correct,

@@ -52,6 +52,19 @@ class _QuadraticRunner:
         return {"objective": x**2 + y**2}
 
 
+class _MutatingRunner:
+    """Runner that mutates its input parameters dict during run()."""
+
+    def run(self, parameters: dict[str, Any]) -> dict[str, float]:
+        x = parameters.get("x", 0.0)
+        y = parameters.get("y", 0.0)
+        result = x**2 + y**2
+        # Mutate the input dict -- this should NOT corrupt audit entries
+        parameters["x"] = 999.0
+        parameters["y"] = 999.0
+        return {"objective": result}
+
+
 # ── 1. Dataclass tests ──────────────────────────────────────────────
 
 
@@ -643,3 +656,49 @@ class TestBackwardCompat:
         diag = engine.skip_diagnostics
         assert diag.candidates_skipped == 0
         assert len(diag.audit_entries) == 0
+
+
+# ── 12. Mutating runner cannot corrupt audit artifacts ──────────────
+
+
+class TestMutatingRunnerAuditImmutability:
+    """Regression: a runner that mutates parameters must not corrupt audit entries."""
+
+    def test_audit_entry_parameters_immutable(self) -> None:
+        """SkipAuditEntry.parameters must be a snapshot, not a live reference."""
+        engine = ExperimentEngine(
+            search_space=_make_search_space(),
+            runner=_MutatingRunner(),
+            seed=42,
+            audit_skip_rate=1.0,
+        )
+        engine.run_loop(20)
+        diag = engine.skip_diagnostics
+
+        for entry in diag.audit_entries:
+            assert entry.parameters.get("x") != 999.0, (
+                "SkipAuditEntry.parameters was mutated by runner"
+            )
+            assert entry.parameters.get("y") != 999.0, (
+                "SkipAuditEntry.parameters was mutated by runner"
+            )
+
+    def test_audit_result_parameters_immutable(self) -> None:
+        """AuditResult.parameters must be a snapshot, not a live reference."""
+        engine = ExperimentEngine(
+            search_space=_make_search_space(),
+            runner=_MutatingRunner(),
+            seed=42,
+            audit_skip_rate=1.0,
+        )
+        engine.run_loop(20)
+        diag = engine.skip_diagnostics
+
+        if diag.audit_results:
+            for result in diag.audit_results:
+                assert result.parameters.get("x") != 999.0, (
+                    "AuditResult.parameters was mutated by runner"
+                )
+                assert result.parameters.get("y") != 999.0, (
+                    "AuditResult.parameters was mutated by runner"
+                )
