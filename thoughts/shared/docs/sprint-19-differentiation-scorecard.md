@@ -256,6 +256,11 @@ to continuously monitor skip quality as the optimizer evolves.
 | surrogate_only | 40 | 3256.31 | 0.00 |
 | causal | 40 | 3259.11 | 2.16 |
 
+*Note: Identical causal values at B20 and B40 are expected on the null
+benchmark.  With permuted targets there is no real signal, so the
+surrogate converges to the same ridge predictor at both budget levels
+and the causal soft-ranking bonus has no effect on a null surface.*
+
 **Mean Test MAE Across All Seeds and Budgets:**
 
 | Strategy | Sprint 18 | Sprint 19 | Delta |
@@ -404,8 +409,8 @@ documented parameter actually works on the production code path.
 ### Test Results
 
 - **894 tests passed**, 15 skipped, 100 deselected (slow).
-- All Sprint 19 tests (18 variant tests, 13 soft causal tests, 31 skip
-  calibration tests) passing.
+- All Sprint 19 tests (18 variant tests, 15 soft causal tests, 33 skip
+  calibration tests in test_skip_calibration.py including 20 new) passing.
 
 ### Benchmark Runtimes
 
