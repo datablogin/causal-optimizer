@@ -18,6 +18,7 @@ from causal_optimizer.engine.loop import ExperimentEngine
 from causal_optimizer.optimizer.suggest import (
     _causal_alignment_score,
     _get_targeted_ratio,
+    _predict_objective_quality,
     _score_candidate_causal_exploration,
     _suggest_bayesian,
     _suggest_exploration,
@@ -761,4 +762,70 @@ def test_bayesian_balanced_score_differentiates_candidates() -> None:
     assert differ, (
         "Balanced scoring: softness=0 (objective-only) and softness=100 "
         "(alignment-dominated) should pick different candidates"
+    )
+
+
+# ---- Regression: _predict_objective_quality with crash rows ----
+
+
+def test_predict_objective_quality_with_crash_rows() -> None:
+    """RF quality prediction must handle logs containing crash/missing-objective rows.
+
+    Regression test: a CRASH row with empty metrics must be filtered out
+    before RF training, not cause a fallback to uniform [1.0, ...] scores.
+    """
+    ss = _make_search_space_5d()
+    log = ExperimentLog()
+
+    # Add 5 valid results with a clear pattern: low X1 -> low objective
+    rng = np.random.default_rng(42)
+    for i in range(5):
+        params = {v.name: float(rng.uniform(v.lower, v.upper)) for v in ss.variables}
+        params["X1"] = float(i) * 0.25  # X1 ranges 0.0 to 1.0
+        objective = params["X1"] ** 2 + 0.1  # clear monotone signal
+        log.results.append(
+            ExperimentResult(
+                experiment_id=str(i),
+                parameters=params,
+                metrics={"objective": objective},
+                status=ExperimentStatus.KEEP,
+            )
+        )
+
+    # Add 2 CRASH rows with empty metrics (no objective value)
+    for j in range(2):
+        params = {v.name: float(rng.uniform(v.lower, v.upper)) for v in ss.variables}
+        log.results.append(
+            ExperimentResult(
+                experiment_id=f"crash_{j}",
+                parameters=params,
+                metrics={},
+                status=ExperimentStatus.CRASH,
+            )
+        )
+
+    # Candidates: one with low X1 (should predict low objective) and one with high X1
+    candidate_low = {v.name: 0.5 for v in ss.variables}
+    candidate_low["X1"] = 0.1
+    candidate_high = {v.name: 0.5 for v in ss.variables}
+    candidate_high["X1"] = 0.9
+
+    scores = _predict_objective_quality(
+        candidates=[candidate_low, candidate_high],
+        experiment_log=log,
+        objective_name="objective",
+        search_space=ss,
+        minimize=True,
+    )
+
+    # Scores must NOT be uniform — the RF should differentiate candidates
+    assert len(scores) == 2
+    assert scores[0] != pytest.approx(scores[1], abs=1e-6), (
+        f"Scores are uniform ({scores}) — crash rows likely poisoned RF training"
+    )
+    # For minimization, lower predicted objective -> higher quality score.
+    # candidate_low (X1=0.1) should have higher quality than candidate_high (X1=0.9).
+    assert scores[0] > scores[1], (
+        f"Expected candidate with X1=0.1 to score higher than X1=0.9 "
+        f"(minimize=True), got {scores}"
     )

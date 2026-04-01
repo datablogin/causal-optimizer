@@ -983,6 +983,17 @@ def _predict_objective_quality(
     if len(all_var_names) == 0 or len(df) < 3 or objective_name not in df.columns:
         return [1.0] * len(candidates)
 
+    # Filter to rows with a valid (non-null) objective value.  Crash or
+    # partial rows are expected in messy experiment logs and must not
+    # poison the RF fit or trigger a silent fallback to uniform scores.
+    import pandas as pd_rt  # runtime import; module-level is TYPE_CHECKING only
+
+    mask = pd_rt.notna(df[objective_name])
+    df = df[mask].reset_index(drop=True)
+
+    if len(df) < 3:
+        return [1.0] * len(candidates)
+
     try:
         from sklearn.ensemble import RandomForestRegressor
 
