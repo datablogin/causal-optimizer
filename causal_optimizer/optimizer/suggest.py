@@ -662,28 +662,30 @@ def _suggest_bayesian(
     if not ancestor_names or not best_params:
         return candidates[0]
 
-    # Re-rank candidates using predicted objective + causal alignment bonus
-    best_candidate = candidates[0]
-    best_score = float("inf") if minimize else float("-inf")
-
-    for candidate in candidates:
-        # Use the objective metric from the candidate's predicted value.
-        # Ax's GP prediction isn't directly accessible here, so we use the
-        # causal alignment to re-rank among equally-Ax-valid candidates.
-        # The "predicted" part is implicitly handled by Ax — all candidates
-        # are Ax-optimal; we break ties with causal alignment.
-        alignment = _causal_alignment_score(candidate, best_params, ancestor_names, search_space)
-        # For minimization: prefer lower objective, higher alignment
-        # For maximization: prefer higher objective, higher alignment
-        # Since all candidates come from the same Ax model, we rank purely
-        # by alignment bonus (Ax already optimized the objective).
-        adjusted = -causal_softness * alignment if minimize else causal_softness * alignment
-        is_better = adjusted < best_score if minimize else adjusted > best_score
-        if is_better:
-            best_score = adjusted
-            best_candidate = candidate
-
-    return best_candidate
+    # Re-rank candidates using a balanced composite of predicted objective
+    # quality and causal alignment.  Sprint 20: replaces the alignment-only
+    # re-ranking from Sprint 19 with a genuine soft trade-off.
+    #
+    # Scoring formula (higher = better):
+    #   composite = (1 - w) * objective_quality + w * alignment
+    # where:
+    #   w = causal_softness / (1 + causal_softness)   maps [0, inf) -> [0, 1)
+    #   objective_quality = normalized RF prediction (0=worst, 1=best among candidates)
+    #   alignment = causal alignment score from _causal_alignment_score
+    #
+    # When w=0 (causal_softness=0): pure objective quality (no causal influence).
+    # When w->1 (causal_softness->inf): pure alignment (approximates hard focus).
+    # When w=0.33 (causal_softness=0.5, default): balanced trade-off.
+    return _rerank_candidates_balanced(
+        candidates=candidates,
+        best_params=best_params,
+        ancestor_names=ancestor_names,
+        search_space=search_space,
+        experiment_log=experiment_log,
+        objective_name=objective_name,
+        minimize=minimize,
+        causal_softness=causal_softness,
+    )
 
 
 def _suggest_surrogate(
@@ -862,6 +864,174 @@ def _causal_alignment_score(
         diffs.append(abs(c_norm - b_norm))
 
     return float(np.mean(diffs)) if diffs else 0.0
+
+
+def _rerank_candidates_balanced(
+    candidates: list[dict[str, Any]],
+    best_params: dict[str, Any],
+    ancestor_names: set[str],
+    search_space: SearchSpace,
+    experiment_log: ExperimentLog,
+    objective_name: str,
+    minimize: bool,
+    causal_softness: float,
+) -> dict[str, Any]:
+    """Re-rank Ax candidates using a balanced composite of objective quality and
+    causal alignment.
+
+    Sprint 20: replaces the alignment-only re-ranking from Sprint 19.
+
+    The composite score blends two normalized signals:
+
+    - **Objective quality**: a lightweight RF surrogate (trained on the experiment
+      log) predicts the objective for each candidate.  Predictions are min-max
+      normalized across the candidate set so the best-predicted candidate scores
+      1.0 and the worst scores 0.0.
+
+    - **Causal alignment**: measures how much the candidate varies ancestor
+      variables relative to the current best (from :func:`_causal_alignment_score`).
+      Also min-max normalized across candidates.
+
+    The blending weight ``w`` is derived from ``causal_softness`` via a sigmoid-like
+    transform: ``w = causal_softness / (1 + causal_softness)``.  This maps the
+    ``[0, inf)`` softness range to ``[0, 1)`` continuously:
+
+    - ``causal_softness=0.0``  =>  ``w=0.0``  =>  pure objective quality
+    - ``causal_softness=0.5``  =>  ``w=0.33`` =>  2:1 objective-to-alignment
+    - ``causal_softness=1.0``  =>  ``w=0.50`` =>  equal weight
+    - ``causal_softness=inf``  =>  ``w=1.0``  =>  pure alignment (hard focus)
+
+    Final composite: ``score = (1 - w) * objective_quality + w * alignment``.
+    The candidate with the highest composite score is selected.
+
+    Falls back to the first candidate if the RF cannot be trained (too few data
+    points or missing features).
+
+    Args:
+        candidates: List of Ax-generated candidate dicts.
+        best_params: Best-known parameter dict (for alignment baseline).
+        ancestor_names: Names of causal ancestor variables.
+        search_space: Search space for normalization and RF encoding.
+        experiment_log: Experiment history for RF training.
+        objective_name: Name of the objective metric.
+        minimize: Whether to minimize the objective.
+        causal_softness: Controls the alignment vs objective trade-off.
+
+    Returns:
+        The candidate with the highest balanced composite score.
+    """
+    if len(candidates) <= 1:
+        return candidates[0]
+
+    # --- 1. Compute causal alignment scores ---
+    alignments = [
+        _causal_alignment_score(c, best_params, ancestor_names, search_space)
+        for c in candidates
+    ]
+
+    # --- 2. Compute objective quality scores via lightweight RF ---
+    obj_qualities = _predict_objective_quality(
+        candidates, experiment_log, objective_name, search_space, minimize
+    )
+
+    # --- 3. Min-max normalize both signals across candidates ---
+    norm_align = _min_max_normalize(alignments)
+    norm_obj = _min_max_normalize(obj_qualities)
+
+    # --- 4. Compute blending weight from causal_softness ---
+    w = causal_softness / (1.0 + causal_softness)
+
+    # --- 5. Select candidate with highest composite score ---
+    best_idx = 0
+    best_composite = -float("inf")
+    for i in range(len(candidates)):
+        composite = (1.0 - w) * norm_obj[i] + w * norm_align[i]
+        if composite > best_composite:
+            best_composite = composite
+            best_idx = i
+
+    logger.debug(
+        "Balanced re-ranking: w=%.3f, selected candidate %d/%d "
+        "(obj_q=%.3f, align=%.3f, composite=%.3f)",
+        w,
+        best_idx + 1,
+        len(candidates),
+        norm_obj[best_idx],
+        norm_align[best_idx],
+        best_composite,
+    )
+
+    return candidates[best_idx]
+
+
+def _predict_objective_quality(
+    candidates: list[dict[str, Any]],
+    experiment_log: ExperimentLog,
+    objective_name: str,
+    search_space: SearchSpace,
+    minimize: bool,
+) -> list[float]:
+    """Predict objective quality for each candidate using a lightweight RF.
+
+    Trains a small RF on the experiment log and predicts the objective for each
+    candidate.  Returns a list of quality scores where higher = better (for
+    minimization, predictions are negated so lower-predicted values get higher
+    quality scores).
+
+    Falls back to uniform scores (all 1.0) if the RF cannot be trained.
+
+    Args:
+        candidates: Candidate parameter dicts.
+        experiment_log: Experiment history.
+        objective_name: Objective metric name.
+        search_space: Search space for encoding.
+        minimize: Whether to minimize the objective.
+
+    Returns:
+        List of quality scores (higher = better), one per candidate.
+    """
+    df = experiment_log.to_dataframe()
+    all_var_names = [v.name for v in search_space.variables if v.name in df.columns]
+
+    if len(all_var_names) == 0 or len(df) < 3 or objective_name not in df.columns:
+        return [1.0] * len(candidates)
+
+    try:
+        from sklearn.ensemble import RandomForestRegressor
+
+        features = encode_dataframe_for_rf(df, all_var_names, search_space)
+        y = df[objective_name].values
+
+        rf = RandomForestRegressor(n_estimators=30, max_depth=5, random_state=42)
+        rf.fit(features, y)
+
+        predictions: list[float] = []
+        for candidate in candidates:
+            x = encode_params_for_rf(candidate, all_var_names, search_space)
+            pred = float(rf.predict(x)[0])
+            # Higher quality = better.  For minimization, negate so lower
+            # predicted values get higher quality scores.
+            predictions.append(-pred if minimize else pred)
+
+        return predictions
+    except Exception:
+        logger.debug("RF quality prediction failed, using uniform scores", exc_info=True)
+        return [1.0] * len(candidates)
+
+
+def _min_max_normalize(values: list[float]) -> list[float]:
+    """Min-max normalize a list of values to [0, 1].
+
+    If all values are identical, returns uniform 0.5 to avoid division by zero.
+    """
+    if not values:
+        return []
+    lo = min(values)
+    hi = max(values)
+    spread = hi - lo
+    if spread < 1e-12:
+        return [0.5] * len(values)
+    return [(v - lo) / spread for v in values]
 
 
 def _generate_targeted_candidates(
