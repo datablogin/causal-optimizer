@@ -25,7 +25,7 @@ seed sweep, or is it fragile?**
 | Label | Commit | Description |
 |-------|--------|-------------|
 | S18 baseline | `a0f8d5f` | Sprint 18 final (discovery trust scorecard) |
-| Current main | `52f7aef` | Sprint 19 final (includes Ax path fix `126d0d8`) |
+| Current main | `52f7aef` | Sprint 19 final (`126d0d8` Ax path fix is ancestor of this commit) |
 
 ### 2b. Benchmark Configuration
 
@@ -125,17 +125,17 @@ that table are not reproducible from the merged main.
 
 ### 4a. Summary Table
 
-| Strategy | Budget | S18 Mean | S18 Std | Main Mean | Main Std | Delta |
-|----------|--------|----------|---------|-----------|----------|-------|
-| causal | 20 | 24.68 | 7.91 | 15.59 | 9.29 | -9.09 |
-| causal | 40 | 24.60 | 7.85 | 15.51 | 9.01 | -9.09 |
-| causal | 80 | 4.58 | 4.64 | 11.10 | 10.19 | +6.52 |
-| random | 20 | 20.58 | 11.34 | 20.58 | 11.34 | +0.00 |
-| random | 40 | 12.75 | 9.27 | 12.75 | 9.27 | +0.00 |
-| random | 80 | 7.77 | 2.83 | 7.77 | 2.83 | +0.00 |
-| surrogate_only | 20 | 19.13 | 9.50 | 19.13 | 9.50 | +0.00 |
-| surrogate_only | 40 | 18.58 | 10.05 | 18.58 | 10.05 | +0.00 |
-| surrogate_only | 80 | 2.16 | 1.19 | 2.16 | 1.19 | +0.00 |
+| Strategy | Budget | S18 Mean | S18 Std | S18 Median | Main Mean | Main Std | Main Median | Delta |
+|----------|--------|----------|---------|------------|-----------|----------|-------------|-------|
+| causal | 20 | 24.68 | 7.91 | 26.11 | 15.59 | 9.29 | 14.08 | -9.09 |
+| causal | 40 | 24.60 | 7.85 | 26.06 | 15.51 | 9.01 | 13.67 | -9.09 |
+| causal | 80 | 4.58 | 4.64 | 2.76 | 11.10 | 10.19 | 12.53 | +6.52 |
+| random | 20 | 20.58 | 11.34 | 18.79 | 20.58 | 11.34 | 18.79 | +0.00 |
+| random | 40 | 12.75 | 9.27 | 9.40 | 12.75 | 9.27 | 9.40 | +0.00 |
+| random | 80 | 7.77 | 2.83 | 8.19 | 7.77 | 2.83 | 8.19 | +0.00 |
+| surrogate_only | 20 | 19.13 | 9.50 | 20.61 | 19.13 | 9.50 | 20.61 | +0.00 |
+| surrogate_only | 40 | 18.58 | 10.05 | 20.28 | 18.58 | 10.05 | 20.28 | +0.00 |
+| surrogate_only | 80 | 2.16 | 1.19 | 3.06 | 2.16 | 1.19 | 3.06 | +0.00 |
 
 ### 4b. Key Observations
 
@@ -145,9 +145,11 @@ that table are not reproducible from the merged main.
 2. **Causal improved at B20 and B40** (mean regret dropped from 24.68 to
    15.59 at B20, from 24.60 to 15.51 at B40).
 
-3. **Causal regressed at B80** (mean regret increased from 4.58 to 11.10).
-   This is the opposite of what the Sprint 19 scorecard reported (which
-   claimed improvement from 2.46 to 0.98 at B80).
+3. **Causal regressed at B80** (mean regret increased from 4.58 to 11.10,
+   median from 2.76 to 12.53). The median is higher than the mean on main,
+   indicating that the majority of seeds perform badly. This is the opposite
+   of what the Sprint 19 scorecard reported (which claimed improvement from
+   2.46 to 0.98 at B80).
 
 4. **The B80 causal distribution is bimodal.** Sorted regret values:
    `[0.36, 0.58, 1.04, 1.70, 10.16, 14.89, 14.99, 15.64, 17.57, 34.10]`.
@@ -375,6 +377,9 @@ Recommendations for the Ax re-ranking workstream:
 | `artifacts/stability_base_main.json` | Current main, base variant, 10 seeds |
 | `artifacts/stability_high_noise_main.json` | Current main, high-noise variant, 10 seeds |
 | `artifacts/stability_audit_summary.csv` | Summary CSV of mean/std/delta |
+
+Artifact files are stored locally under the `_local/` data directory
+(not committed to the repository) per project convention.
 
 ## 10. Summary
 
