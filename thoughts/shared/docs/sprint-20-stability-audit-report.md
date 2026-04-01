@@ -378,7 +378,8 @@ Recommendations for the Ax re-ranking workstream:
 | `artifacts/stability_high_noise_main.json` | Current main, high-noise variant, 10 seeds |
 | `artifacts/stability_audit_summary.csv` | Summary CSV of mean/std/delta |
 
-Artifact files are stored locally under the `_local/` data directory
+Artifact files are stored locally at
+`/Users/robertwelborn/Projects/_local/causal-optimizer/artifacts/`
 (not committed to the repository) per project convention.
 
 ## 10. Summary
