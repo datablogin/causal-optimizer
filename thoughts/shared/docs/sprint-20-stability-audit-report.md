@@ -30,7 +30,7 @@ seed sweep, or is it fragile?**
 ### 2b. Benchmark Configuration
 
 - **Benchmark**: Counterfactual demand-response (base variant)
-- **Data**: `ercot_north_c_dfw_2022_2024.parquet` (ERCOT NORTH_C + DFW weather, 2022-2024; local path used: `/Users/robertwelborn/Projects/_local/causal-optimizer/data/ercot_north_c_dfw_2022_2024.parquet`)
+- **Data**: `ercot_north_c_dfw_2022_2024.parquet` (ERCOT NORTH_C + DFW weather, 2022-2024; local path used: `/Users/robertwelborn/Projects/_local/causal-optimizer/data/ercot_north_c_dfw_2022_2024.parquet`) — *Note: This is a developer-specific local path. Users reproducing this audit should substitute their own path to the ERCOT NORTH_C + DFW weather Parquet file via the `--data-path` argument.*
 - **Seeds**: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 (10 seeds)
 - **Budgets**: 20, 40, 80
 - **Strategies**: random, surrogate_only, causal
@@ -277,8 +277,12 @@ cannot be run on S18 (variant was added in Sprint 19).
 | B80 | 6/10 | 40 | 0.4723 (ns) |
 
 *Note: The B80 p-value (0.4723) coincidentally matches the S18 base B80
-p-value in Section 4d, but from different U statistics (U=40 here vs
-U=60 there). This is a numerical coincidence, not a copy-paste error.*
+p-value in Section 4d. This is not a copy-paste error: U=40 here and
+U=60 there are symmetric around the midpoint (n1 x n2 / 2 = 50) of the
+Mann-Whitney U distribution with n1=n2=10, so they produce identical
+two-sided p-values. Both values were computed from the same 10-seed
+sweep; the match is a mathematical consequence of the symmetric U
+statistics.*
 
 No comparison reaches statistical significance. Causal has a slight
 edge in win frequency (6/10 at every budget), but the variance is too
@@ -384,7 +388,11 @@ Recommendations for the Ax re-ranking workstream:
 
 Artifact files are stored locally at
 `/Users/robertwelborn/Projects/_local/causal-optimizer/artifacts/`
-(not committed to the repository) per project convention.
+and are not committed to the repository. This is standard practice for
+this project: benchmark artifacts contain large JSON output (full
+per-seed, per-budget, per-strategy result arrays) that would bloat the
+repo. They are retained locally for auditability and can be regenerated
+using the commands in Section 2c.
 
 ## 10. Summary
 
