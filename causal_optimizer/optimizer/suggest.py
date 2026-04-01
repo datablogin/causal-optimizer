@@ -662,20 +662,7 @@ def _suggest_bayesian(
     if not ancestor_names or not best_params:
         return candidates[0]
 
-    # Re-rank candidates using a balanced composite of predicted objective
-    # quality and causal alignment.  Sprint 20: replaces the alignment-only
-    # re-ranking from Sprint 19 with a genuine soft trade-off.
-    #
-    # Scoring formula (higher = better):
-    #   composite = (1 - w) * objective_quality + w * alignment
-    # where:
-    #   w = causal_softness / (1 + causal_softness)   maps [0, inf) -> [0, 1)
-    #   objective_quality = normalized RF prediction (0=worst, 1=best among candidates)
-    #   alignment = causal alignment score from _causal_alignment_score
-    #
-    # When w=0 (causal_softness=0): pure objective quality (no causal influence).
-    # When w->1 (causal_softness->inf): pure alignment (approximates hard focus).
-    # When w=0.33 (causal_softness=0.5, default): balanced trade-off.
+    # Sprint 20: balanced composite re-ranking (see _rerank_candidates_balanced).
     return _rerank_candidates_balanced(
         candidates=candidates,
         best_params=best_params,
@@ -925,8 +912,7 @@ def _rerank_candidates_balanced(
 
     # --- 1. Compute causal alignment scores ---
     alignments = [
-        _causal_alignment_score(c, best_params, ancestor_names, search_space)
-        for c in candidates
+        _causal_alignment_score(c, best_params, ancestor_names, search_space) for c in candidates
     ]
 
     # --- 2. Compute objective quality scores via lightweight RF ---

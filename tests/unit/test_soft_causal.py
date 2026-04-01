@@ -568,8 +568,6 @@ def test_bayesian_balanced_reranking_uses_objective_quality() -> None:
 
     ss = _make_search_space_5d()
     graph = _make_causal_graph()
-    # Use a larger log so the RF has enough signal to differentiate candidates.
-    log = _make_experiment_log(n=20)
 
     # With causal_softness=0.0, the result should be driven by objective quality,
     # not alignment.  Run multiple seeds and collect results.
@@ -604,7 +602,7 @@ def test_bayesian_balanced_reranking_uses_objective_quality() -> None:
     # (pure objective) and softness=0.8 (blended) -- if the implementation
     # actually uses both terms.
     any_differ = False
-    for r0, rm in zip(results_softness_zero, results_softness_mid):
+    for r0, rm in zip(results_softness_zero, results_softness_mid, strict=True):
         for v in ss.variable_names:
             if abs(r0[v] - rm[v]) > 0.01:
                 any_differ = True
@@ -694,8 +692,7 @@ def test_bayesian_no_graph_unchanged_by_softness() -> None:
     # Both should be identical -- no graph means no soft mode activation
     for v in ss.variable_names:
         assert result_low[v] == pytest.approx(result_high[v], abs=1e-6), (
-            f"Without a graph, softness should not matter. "
-            f"{v}: {result_low[v]} vs {result_high[v]}"
+            f"Without a graph, softness should not matter. {v}: {result_low[v]} vs {result_high[v]}"
         )
 
 
@@ -707,10 +704,7 @@ def test_bayesian_balanced_score_differentiates_candidates() -> None:
     given fixed candidates with varying quality and alignment, different
     causal_softness values should pick different winners.
     """
-    from causal_optimizer.optimizer.suggest import (
-        _min_max_normalize,
-        _rerank_candidates_balanced,
-    )
+    from causal_optimizer.optimizer.suggest import _rerank_candidates_balanced
 
     ss = _make_search_space_5d()
     graph = _make_causal_graph()
@@ -763,9 +757,7 @@ def test_bayesian_balanced_score_differentiates_candidates() -> None:
     )
 
     # The two selections should differ
-    differ = any(
-        abs(result_obj[v] - result_align[v]) > 0.01 for v in ss.variable_names
-    )
+    differ = any(abs(result_obj[v] - result_align[v]) > 0.01 for v in ss.variable_names)
     assert differ, (
         "Balanced scoring: softness=0 (objective-only) and softness=100 "
         "(alignment-dominated) should pick different candidates"
