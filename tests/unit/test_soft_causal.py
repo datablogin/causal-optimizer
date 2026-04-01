@@ -826,6 +826,5 @@ def test_predict_objective_quality_with_crash_rows() -> None:
     # For minimization, lower predicted objective -> higher quality score.
     # candidate_low (X1=0.1) should have higher quality than candidate_high (X1=0.9).
     assert scores[0] > scores[1], (
-        f"Expected candidate with X1=0.1 to score higher than X1=0.9 "
-        f"(minimize=True), got {scores}"
+        f"Expected candidate with X1=0.1 to score higher than X1=0.9 (minimize=True), got {scores}"
     )
