@@ -886,13 +886,14 @@ def _rerank_candidates_balanced(
     - ``causal_softness=0.0``  =>  ``w=0.0``  =>  pure objective quality
     - ``causal_softness=0.5``  =>  ``w=0.33`` =>  2:1 objective-to-alignment
     - ``causal_softness=1.0``  =>  ``w=0.50`` =>  equal weight
-    - ``causal_softness=inf``  =>  ``w=1.0``  =>  pure alignment (hard focus)
+    - ``causal_softness>=1e5`` =>  hard mode (bypasses this function entirely)
 
     Final composite: ``score = (1 - w) * objective_quality + w * alignment``.
     The candidate with the highest composite score is selected.
 
-    Falls back to the first candidate if the RF cannot be trained (too few data
-    points or missing features).
+    Falls back to ranking purely by causal alignment if the RF cannot be
+    trained (too few data points or missing features).  When ``causal_softness``
+    is 0.0 this degenerates to returning the first candidate.
 
     Args:
         candidates: List of Ax-generated candidate dicts.
