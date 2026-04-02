@@ -98,7 +98,7 @@ into the analysis.
 |----------|--------|-------------|------------|--------------|-------------|-------|
 | causal | 20 | 15.59 | 9.29 | 13.84 | 10.77 | -1.75 |
 | causal | 40 | 15.51 | 9.01 | 7.44 | 7.32 | -8.07 |
-| causal | 80 | 11.10 | 10.19 | 3.85 | 5.59 | -7.26 |
+| causal | 80 | 11.10 | 10.19 | 3.85 | 5.59 | -7.25 |
 | random | 20 | 20.58 | 11.34 | 20.58 | 11.34 | +0.00 |
 | random | 40 | 12.75 | 9.27 | 12.75 | 9.27 | +0.00 |
 | random | 80 | 7.77 | 2.83 | 7.77 | 2.83 | +0.00 |
@@ -112,7 +112,7 @@ Causal mean regret improved at all three budget levels:
 
 - **B20**: 15.59 to 13.84 (delta -1.75)
 - **B40**: 15.51 to 7.44 (delta -8.07, a 52% reduction)
-- **B80**: 11.10 to 3.85 (delta -7.26, a 65% reduction)
+- **B80**: 11.10 to 3.85 (delta -7.25, a 65% reduction)
 
 ### 3c. Bimodal Failure Mode: Resolved
 
@@ -130,8 +130,8 @@ substantially resolves this:
 
 The distribution shifted from 4 good / 6 catastrophic to 6 near-oracle /
 2 moderate / 2 still-high. The worst-case regret dropped from 34.10 to
-14.85. The std dropped from 10.19 to 5.59, meeting the stability
-audit's intermediate target of std < 5.0 (close but not quite at 5.59).
+14.85. The std dropped from 10.19 to 5.59, approaching but not quite meeting
+the stability audit's intermediate target of std < 5.0.
 
 ### 3d. Win Rates
 
@@ -292,7 +292,7 @@ made to skip logic in the Ax re-ranking PR.
 
 ### Q1: Did B80 causal mean regret improve?
 
-**Yes, substantially.** Base: 11.10 to 3.85 (delta -7.26, -65%).
+**Yes, substantially.** Base: 11.10 to 3.85 (delta -7.25, -65%).
 High-noise: 10.49 to 2.64 (delta -7.84, -75%).
 
 ### Q2: Did B80 causal variance improve?
@@ -393,9 +393,10 @@ strategy across both benchmark families:
 | `stability_high_noise_main.json` | Pre-Ax baseline (stability audit) |
 | `null_sprint19_final.json` | Pre-Ax null baseline (Sprint 19) |
 
-Artifact files are stored locally at
-`/Users/robertwelborn/Projects/_local/causal-optimizer/artifacts/`
-and are not committed to the repository.
+Artifact files are stored in a machine-local directory (not committed
+to the repository).  The path used for this run was
+`/Users/robertwelborn/Projects/_local/causal-optimizer/artifacts/`.
+Other contributors should substitute their own local artifacts path.
 
 ## 11. Sprint-Over-Sprint Scorecard
 
