@@ -23,13 +23,21 @@ _ALL_TRACKED_PACKAGES: list[str] = _CORE_PACKAGES + _OPTIONAL_PACKAGES
 
 
 def _get_git_sha() -> str:
-    """Return the current git commit SHA, or ``"unknown"`` if unavailable."""
+    """Return the current git commit SHA, or ``"unknown"`` if unavailable.
+
+    Runs ``git rev-parse HEAD`` from the directory containing this module
+    so the result reflects the checkout that *this code* belongs to,
+    regardless of the caller's working directory.
+    """
+    # Anchor to the repo containing this source file, not process cwd.
+    repo_dir = str(Path(__file__).resolve().parent)
     try:
         result = subprocess.run(  # noqa: S603, S607
             ["git", "rev-parse", "HEAD"],
             capture_output=True,
             text=True,
             timeout=5,
+            cwd=repo_dir,
         )
         if result.returncode == 0:
             return result.stdout.strip()

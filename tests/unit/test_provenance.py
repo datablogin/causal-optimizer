@@ -54,6 +54,21 @@ class TestCollectProvenanceKeys:
         # Should be a hex SHA or "unknown" if not in a repo
         assert len(prov["git_sha"]) >= 1
 
+    def test_git_sha_from_outside_repo(self, tmp_path: Path) -> None:
+        """git SHA must resolve even when cwd is outside the repo."""
+        import os
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            prov = collect_provenance(seeds=[0], budgets=[10], strategies=["random"])
+            sha = prov["git_sha"]
+            assert isinstance(sha, str)
+            assert sha != "unknown", "git_sha should resolve from the module's repo, not cwd"
+            assert len(sha) == 40, f"Expected 40-char hex SHA, got {sha!r}"
+        finally:
+            os.chdir(original_cwd)
+
     def test_python_version_matches_runtime(self) -> None:
         prov = collect_provenance(seeds=[0], budgets=[10], strategies=["random"])
         expected = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
