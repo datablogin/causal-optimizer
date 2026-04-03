@@ -35,6 +35,7 @@ from causal_optimizer.benchmarks.predictive_energy import (
     load_energy_frame,
     split_time_frame,
 )
+from causal_optimizer.benchmarks.provenance import collect_provenance
 from causal_optimizer.benchmarks.runner import sample_random_params
 from causal_optimizer.domain_adapters.energy_load import EnergyLoadAdapter
 from causal_optimizer.engine.loop import ExperimentEngine
@@ -392,8 +393,17 @@ def main() -> None:
                     )
 
     # Write JSON output — replace inf/nan with None for RFC 8259 compliance
-    output_data = [dataclasses.asdict(r) for r in results]
-    output_data = [_sanitize_for_json(d) for d in output_data]
+    result_dicts = [_sanitize_for_json(dataclasses.asdict(r)) for r in results]
+    output_data = {
+        "benchmark": "energy_predictive",
+        "results": result_dicts,
+        "provenance": collect_provenance(
+            seeds=seeds,
+            budgets=budgets,
+            strategies=strategies,
+            dataset_path=str(args.data_path),
+        ),
+    }
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(output_data, f, indent=2, allow_nan=False)
     logger.info("Wrote %d results to %s", len(results), output_path)
