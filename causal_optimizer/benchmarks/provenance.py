@@ -114,9 +114,9 @@ def collect_provenance(
         "package_versions": _get_package_versions(),
         "command_line": sys.argv[:],
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "seeds": seeds,
-        "budgets": budgets,
-        "strategies": strategies,
+        "seeds": list(seeds),
+        "budgets": list(budgets),
+        "strategies": list(strategies),
         "dataset_path": None,
         "dataset_hash": None,
     }

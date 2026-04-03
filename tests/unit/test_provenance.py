@@ -105,10 +105,24 @@ class TestPackageVersions:
 
     def test_missing_optional_package_records_not_installed(self) -> None:
         """Simulate a missing optional package -- should not crash."""
-        with patch.dict(sys.modules, {"ax": None, "ax.version": None}):
+        from importlib.metadata import PackageNotFoundError
+
+        original_version = __import__("importlib.metadata", fromlist=["version"]).version
+
+        def fake_version(pkg: str) -> str:
+            if pkg == "ax-platform":
+                raise PackageNotFoundError(pkg)
+            return original_version(pkg)
+
+        with patch(
+            "causal_optimizer.benchmarks.provenance.version", side_effect=fake_version
+        ):
             prov = collect_provenance(seeds=[0], budgets=[10], strategies=["random"])
-            # Should still succeed (not crash)
-            assert isinstance(prov["package_versions"], dict)
+            versions = prov["package_versions"]
+            assert isinstance(versions, dict)
+            assert versions["ax-platform"] == "not installed"
+            # Core packages should still resolve
+            assert versions["numpy"] != "not installed"
 
     def test_optional_packages_listed(self) -> None:
         """All tracked optional packages appear in the dict."""
