@@ -17,8 +17,8 @@ audit (PR #107) found that pre-#108 code exhibited a bimodal failure
 mode at B80: 4/10 seeds achieved near-oracle performance while 6/10
 had catastrophic regret (10--34).
 
-This rerun answers: **did the balanced Ax re-ranking fix the bimodal
-B80 failure mode and improve the benchmark picture?**
+This rerun answers: **does the post-#108 merged main resolve the
+bimodal B80 failure mode and improve the benchmark picture?**
 
 ## 2. Methodology
 
@@ -117,8 +117,8 @@ Causal mean regret improved at all three budget levels:
 ### 3c. Bimodal Failure Mode: Resolved
 
 The stability audit's primary finding was a bimodal failure at B80
-where 6/10 seeds had catastrophic regret. The balanced Ax re-ranking
-substantially resolves this:
+where 6/10 seeds had catastrophic regret. The post-#108 merged main
+substantially improves this picture:
 
 | Metric | Pre-Ax | Post-Ax |
 |--------|--------|---------|
@@ -170,8 +170,11 @@ different Ax environment). The comparison is still valid for answering
 "does causal beat surrogate_only on this code?" but the surrogate_only
 baseline is not directly comparable to the stability audit baseline.
 
-To isolate the re-ranking effect on causal alone (holding surrogate_only
-constant), we compare causal across runs:
+To assess whether the causal strategy itself improved (independent of
+the surrogate_only shift), we compare causal across pre- and post-merge
+runs.  Note: this comparison is **consistent with** the re-ranking fix
+being beneficial, but does not cleanly isolate it from environment drift
+(the same resolved Ax/BoTorch/PyTorch versions affect all strategies):
 
 | Budget | Pre-Ax Causal | Post-Ax Causal | Improvement? |
 |--------|---------------|----------------|-------------|
@@ -179,8 +182,9 @@ constant), we compare causal across runs:
 | B40 | 15.51 | 7.44 | Yes (-52%) |
 | B80 | 11.10 | 3.85 | Yes (-65%) |
 
-Causal improved substantially at all budgets, independent of the
-surrogate_only shift.
+Causal improved at all budgets in the post-merge run.  The improvement
+is consistent with the balanced re-ranking fix but cannot be fully
+separated from environment drift.
 
 ### 3g. Per-Seed B80 Comparison
 
@@ -346,8 +350,10 @@ Verdict: PASS.
 
 **BETTER.**
 
-The balanced Ax re-ranking (PR #108) materially improved the causal
-strategy across both benchmark families:
+The post-#108 merged main produced materially better causal benchmark
+results across both families.  The improvement is consistent with the
+balanced Ax re-ranking fix, though it cannot be fully isolated from
+Ax/BoTorch environment drift (see Section 3e):
 
 1. **The bimodal B80 failure mode is substantially resolved.** On base,
    catastrophic seeds (regret > 10) dropped from 6/10 to 2/10. On
@@ -405,4 +411,4 @@ Other contributors should substitute their own local artifacts path.
 | 18 | PASS (infrastructure) | Null control clean, causal does not beat surrogate_only |
 | 19 | PROGRESS | Soft causal influence improves low-budget performance |
 | 20 (stability) | FRAGILE | Bimodal B80 failure, no stat sig, 5-seed scorecard misleading |
-| 20 (post-Ax) | BETTER | Balanced re-ranking fixes bimodal B80, stat sig at B40/B80 on high-noise |
+| 20 (post-Ax) | BETTER | Post-merge main resolves bimodal B80, stat sig at B40/B80 on high-noise |
