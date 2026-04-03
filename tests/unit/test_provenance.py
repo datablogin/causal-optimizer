@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import json
 import sys
-import tempfile
-from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
-import pytest
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from causal_optimizer.benchmarks.provenance import (
     collect_provenance,
