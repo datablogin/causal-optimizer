@@ -54,6 +54,16 @@ class TestCollectProvenanceKeys:
         # Should be a hex SHA or "unknown" if not in a repo
         assert len(prov["git_sha"]) >= 1
 
+    def test_git_sha_returns_unknown_when_git_unavailable(self) -> None:
+        """If git is not found, SHA should be 'unknown' (not crash)."""
+        with patch(
+            "causal_optimizer.benchmarks.provenance.subprocess.run",
+            side_effect=FileNotFoundError("git not found"),
+        ):
+            from causal_optimizer.benchmarks.provenance import _get_git_sha
+
+            assert _get_git_sha() == "unknown"
+
     def test_git_sha_from_outside_repo(self, tmp_path: Path) -> None:
         """git SHA must resolve even when cwd is outside the repo."""
         import os
@@ -181,6 +191,14 @@ class TestDatasetHash:
         """Non-existent file path should return None, not crash."""
         result = dataset_hash("/nonexistent/path/to/data.csv")
         assert result is None
+
+    def test_unreadable_file_returns_none(self, tmp_path: Path) -> None:
+        """File that exists but cannot be read should return None."""
+        f = tmp_path / "unreadable.bin"
+        f.write_bytes(b"data")
+        with patch("builtins.open", side_effect=OSError("permission denied")):
+            result = dataset_hash(str(f))
+            assert result is None
 
     def test_hash_with_dataset_path_in_provenance(self, tmp_path: Path) -> None:
         """When dataset_path is provided, provenance includes dataset info."""
