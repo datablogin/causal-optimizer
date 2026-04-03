@@ -16,25 +16,31 @@ cleanly attribute the improvement to the re-ranking change because
 surrogate_only shifted between runs due to a fresh `.venv` with
 potentially different Ax/BoTorch/PyTorch resolved versions.
 
-This report answers: **in a locked environment where the only variable
-is the re-ranking algorithm, does balanced re-ranking improve
-benchmark outcomes?**
+This report answers: **in a locked environment where dependencies,
+dataset, seeds, and machine are held constant, does balanced
+re-ranking improve benchmark outcomes?**
 
 ## 2. Methodology
 
 ### 2a. Comparator Design
 
-A module-level flag `_USE_BALANCED_RERANKING` was added to
-`causal_optimizer/optimizer/suggest.py`.  When True (default), the
-Ax candidate re-ranking uses the Sprint 20 balanced composite score
-(objective quality + causal alignment via `_rerank_candidates_balanced`).
-When False, it falls back to the Sprint 19 alignment-only re-ranking
-via `_rerank_candidates_alignment_only`.
+The A/B toggle uses an environment variable
+`CAUSAL_OPT_RERANKING_MODE=alignment_only`, checked inside
+`_suggest_bayesian()` in `causal_optimizer/optimizer/suggest.py`.
+When unset (default / A-side), Ax candidate re-ranking uses the
+Sprint 20 balanced composite score.  When set to `alignment_only`
+(B-side), it falls back to Sprint 19 alignment-only re-ranking via
+`_rerank_alignment_only()`.
 
-The flag affects only the `_suggest_bayesian` function and only when
-soft-causal mode is active (i.e., `causal_graph is not None` and
-`causal_softness < _HARD_FOCUS_THRESHOLD`).  This is the narrowest
-possible comparator: one branch point, one function, one code path.
+The toggle is exercised through `scripts/ab_reranking_harness.py`,
+which runs A-side and B-side benchmarks back-to-back as subprocesses
+with the env var controlling the switch.  No production code flags
+are committed — the env var is inert when unset.
+
+The toggle affects only `_suggest_bayesian` and only when soft-causal
+mode is active (`causal_graph is not None` and
+`causal_softness < _HARD_FOCUS_THRESHOLD`).  This is a narrow
+comparator: one branch point, one function, one code path.
 
 ### 2b. Environment Lock
 
@@ -53,8 +59,12 @@ possible comparator: one branch point, one function, one code path.
 | Machine | same host | same host | Yes |
 
 The random strategy produces identical results on both sides at all
-budgets and seeds, confirming that the environment is genuinely locked
-and the only difference is the re-ranking flag.
+budgets and seeds, confirming that the base environment is locked.
+Note: residual Ax/BoTorch process-level non-determinism (floating-point
+thread scheduling, GPU vs CPU paths) means `surrogate_only` can still
+drift slightly between A and B subprocess runs even with identical
+dependencies and seeds.  The drift is small but observable (see
+Section 3e).
 
 ### 2c. Benchmark Configuration
 
@@ -71,22 +81,22 @@ surrogate converges to the same ridge regardless of re-ranking mode.
 
 ### 2d. Commands
 
-**A-side (balanced, `_USE_BALANCED_RERANKING = True`):**
+**Both sides via the A/B harness:**
 
 ```bash
-uv run python scripts/counterfactual_benchmark.py \
+uv run python scripts/ab_reranking_harness.py \
     --data-path .../ercot_north_c_dfw_2022_2024.parquet \
     --variant base --budgets 20,40,80 --seeds 0,1,2,3,4,5,6,7,8,9 \
     --strategies random,surrogate_only,causal \
-    --output artifacts/ab_base_balanced.json
+    --output-a artifacts/ab_base_balanced.json \
+    --output-b artifacts/ab_base_alignment_only.json
 ```
 
-**B-side (alignment-only, `_USE_BALANCED_RERANKING = False`):**
+The harness runs A-side (no env override, balanced re-ranking) then
+B-side (`CAUSAL_OPT_RERANKING_MODE=alignment_only`) back-to-back as
+subprocesses.
 
-Same command with output `artifacts/ab_base_alignment_only.json`.
-
-High-noise variants used `--variant high_noise` with corresponding
-output names.
+High-noise used `--variant high_noise`; null used `--null --budgets 20,40 --seeds 0,1,2`.
 
 ### 2e. Runtime
 
