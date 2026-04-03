@@ -828,3 +828,50 @@ def test_predict_objective_quality_with_crash_rows() -> None:
     assert scores[0] > scores[1], (
         f"Expected candidate with X1=0.1 to score higher than X1=0.9 (minimize=True), got {scores}"
     )
+
+
+# ---- Alignment-only re-ranking (Sprint 21 A/B comparator) ----
+
+
+def test_alignment_only_reranking_picks_ancestor_variation() -> None:
+    """Alignment-only re-ranking should prefer candidates that vary ancestors."""
+    from causal_optimizer.optimizer.suggest import _rerank_candidates_alignment_only
+
+    ss = _make_search_space_5d()
+    graph = _make_causal_graph()
+    ancestor_names = graph.ancestors("objective")
+
+    best_params = {"X1": 0.5, "X2": 0.5, "X3": 0.5, "X4": 0.5, "X5": 0.5}
+
+    # Candidate A: varies ancestors (X1, X2, X3)
+    candidate_a = {"X1": 0.9, "X2": 0.9, "X3": 0.9, "X4": 0.5, "X5": 0.5}
+    # Candidate B: varies only non-ancestors (X4, X5)
+    candidate_b = {"X1": 0.5, "X2": 0.5, "X3": 0.5, "X4": 0.9, "X5": 0.9}
+
+    result = _rerank_candidates_alignment_only(
+        candidates=[candidate_b, candidate_a],
+        best_params=best_params,
+        ancestor_names=ancestor_names,
+        search_space=ss,
+        causal_softness=0.5,
+    )
+    assert result["X1"] == pytest.approx(0.9), "Should pick candidate A (ancestor variation)"
+
+
+def test_alignment_only_single_candidate() -> None:
+    """Alignment-only re-ranking with one candidate returns it directly."""
+    from causal_optimizer.optimizer.suggest import _rerank_candidates_alignment_only
+
+    ss = _make_search_space_5d()
+    graph = _make_causal_graph()
+    ancestor_names = graph.ancestors("objective")
+    candidate = {"X1": 0.5, "X2": 0.5, "X3": 0.5, "X4": 0.5, "X5": 0.5}
+
+    result = _rerank_candidates_alignment_only(
+        candidates=[candidate],
+        best_params=candidate,
+        ancestor_names=ancestor_names,
+        search_space=ss,
+        causal_softness=0.5,
+    )
+    assert result is candidate

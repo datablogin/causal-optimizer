@@ -76,6 +76,9 @@ _NUMERIC_TYPES = frozenset({VariableType.CONTINUOUS, VariableType.INTEGER})
 #:
 #: This flag exists solely for the controlled A/B benchmark comparison in
 #: Sprint 21.  It is NOT a production feature toggle.
+#: TODO(sprint-21): Remove this flag after the attribution scorecard (#111)
+#: is merged.  The A/B results show alignment-only outperforms balanced,
+#: so the flag should be removed and balanced reranking reverted or reworked.
 _USE_BALANCED_RERANKING: bool = True
 
 
@@ -692,7 +695,6 @@ def _suggest_bayesian(
         best_params=best_params,
         ancestor_names=ancestor_names,
         search_space=search_space,
-        minimize=minimize,
         causal_softness=causal_softness,
     )
 
@@ -978,7 +980,6 @@ def _rerank_candidates_alignment_only(
     best_params: dict[str, Any],
     ancestor_names: set[str],
     search_space: SearchSpace,
-    minimize: bool,
     causal_softness: float,
 ) -> dict[str, Any]:
     """Sprint 19 alignment-only re-ranking (B-side comparator for Sprint 21 A/B test).
@@ -1007,7 +1008,7 @@ def _rerank_candidates_alignment_only(
             best_candidate = candidate
 
     logger.debug(
-        "Alignment-only re-ranking: selected candidate with alignment=%.3f",
+        "Alignment-only re-ranking: selected candidate with adjusted_score=%.3f",
         best_score,
     )
 
