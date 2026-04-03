@@ -114,9 +114,7 @@ class TestPackageVersions:
                 raise PackageNotFoundError(pkg)
             return original_version(pkg)
 
-        with patch(
-            "causal_optimizer.benchmarks.provenance.version", side_effect=fake_version
-        ):
+        with patch("causal_optimizer.benchmarks.provenance.version", side_effect=fake_version):
             prov = collect_provenance(seeds=[0], budgets=[10], strategies=["random"])
             versions = prov["package_versions"]
             assert isinstance(versions, dict)
