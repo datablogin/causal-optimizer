@@ -37,6 +37,7 @@ from causal_optimizer.benchmarks.predictive_energy import (
     load_energy_frame,
     split_time_frame,
 )
+from causal_optimizer.benchmarks.provenance import collect_provenance
 
 logger = logging.getLogger(__name__)
 
@@ -515,8 +516,17 @@ def run_single_benchmark(
 
     # Write per-benchmark JSON
     json_path = output_dir / f"{dataset_id}_results.json"
-    output_data = [dataclasses.asdict(r) for r in results]
-    output_data = [_sanitize_for_json(d) for d in output_data]
+    result_dicts = [_sanitize_for_json(dataclasses.asdict(r)) for r in results]
+    output_data = {
+        "benchmark": f"energy_predictive_{dataset_id}",
+        "results": result_dicts,
+        "provenance": collect_provenance(
+            seeds=seeds,
+            budgets=budgets,
+            strategies=strategies,
+            dataset_path=data_path,
+        ),
+    }
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(output_data, f, indent=2, allow_nan=False)
     logger.info("Wrote %d results to %s", len(results), json_path)
@@ -1040,6 +1050,11 @@ def main() -> None:
     # Build and write suite summary
     suite_summary = build_suite_summary(all_results, strategies, budgets, seeds=seeds)
     suite_summary["suite_runtime_seconds"] = suite_runtime
+    suite_summary["provenance"] = collect_provenance(
+        seeds=seeds,
+        budgets=budgets,
+        strategies=strategies,
+    )
 
     summary_path = output_dir / "suite_summary.json"
     sanitized_summary = _sanitize_for_json(suite_summary)

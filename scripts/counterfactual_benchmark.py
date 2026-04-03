@@ -45,6 +45,7 @@ from causal_optimizer.benchmarks.counterfactual_variants import (
     HighNoiseDemandResponse,
 )
 from causal_optimizer.benchmarks.predictive_energy import load_energy_frame
+from causal_optimizer.benchmarks.provenance import collect_provenance
 
 logger = logging.getLogger(__name__)
 
@@ -323,6 +324,12 @@ def main() -> None:
         "n_covariates": len(covariates),
         "suite_runtime_seconds": suite_runtime,
         "results": [_sanitize_for_json(dataclasses.asdict(r)) for r in results],
+        "provenance": collect_provenance(
+            seeds=seeds,
+            budgets=budgets,
+            strategies=strategies,
+            dataset_path=str(args.data_path),
+        ),
     }
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(output_data, f, indent=2, allow_nan=False)
