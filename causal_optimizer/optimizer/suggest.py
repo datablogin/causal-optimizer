@@ -69,6 +69,15 @@ _HARD_FOCUS_THRESHOLD = 1e5
 #: Variable types eligible for normalized diversity scoring.
 _NUMERIC_TYPES = frozenset({VariableType.CONTINUOUS, VariableType.INTEGER})
 
+# ── A/B test harness flag (Sprint 21) ──────────────────────────────────
+#: When True (default), Ax candidate re-ranking uses the Sprint 20 balanced
+#: composite score (objective quality + causal alignment).  When False,
+#: falls back to the Sprint 19 alignment-only re-ranking.
+#:
+#: This flag exists solely for the controlled A/B benchmark comparison in
+#: Sprint 21.  It is NOT a production feature toggle.
+_USE_BALANCED_RERANKING: bool = True
+
 
 def _normalize_value(var: Variable, value: float) -> float:
     """Normalize *value* to [0, 1] using the variable's bounds.
@@ -662,14 +671,27 @@ def _suggest_bayesian(
     if not ancestor_names or not best_params:
         return candidates[0]
 
-    # Sprint 20: balanced composite re-ranking (see _rerank_candidates_balanced).
-    return _rerank_candidates_balanced(
+    # Sprint 21 A/B flag: choose between balanced (Sprint 20) and alignment-only
+    # (Sprint 19) re-ranking.
+    if _USE_BALANCED_RERANKING:
+        # Sprint 20: balanced composite re-ranking (objective quality + alignment).
+        return _rerank_candidates_balanced(
+            candidates=candidates,
+            best_params=best_params,
+            ancestor_names=ancestor_names,
+            search_space=search_space,
+            experiment_log=experiment_log,
+            objective_name=objective_name,
+            minimize=minimize,
+            causal_softness=causal_softness,
+        )
+
+    # Sprint 19 alignment-only re-ranking: rank purely by causal alignment score.
+    return _rerank_candidates_alignment_only(
         candidates=candidates,
         best_params=best_params,
         ancestor_names=ancestor_names,
         search_space=search_space,
-        experiment_log=experiment_log,
-        objective_name=objective_name,
         minimize=minimize,
         causal_softness=causal_softness,
     )
@@ -949,6 +971,47 @@ def _rerank_candidates_balanced(
     )
 
     return candidates[best_idx]
+
+
+def _rerank_candidates_alignment_only(
+    candidates: list[dict[str, Any]],
+    best_params: dict[str, Any],
+    ancestor_names: set[str],
+    search_space: SearchSpace,
+    minimize: bool,
+    causal_softness: float,
+) -> dict[str, Any]:
+    """Sprint 19 alignment-only re-ranking (B-side comparator for Sprint 21 A/B test).
+
+    Ranks candidates purely by causal alignment score, ignoring predicted
+    objective quality.  This reproduces the Sprint 19 behavior that was
+    replaced by :func:`_rerank_candidates_balanced` in Sprint 20.
+
+    The logic is a faithful reproduction of the pre-#108 code: for each
+    candidate, compute ``causal_softness * alignment``, then pick the
+    candidate with the highest adjusted score.
+
+    This function exists solely for the Sprint 21 controlled A/B comparison.
+    """
+    if len(candidates) <= 1:
+        return candidates[0]
+
+    best_candidate = candidates[0]
+    best_score = float("-inf")
+
+    for candidate in candidates:
+        alignment = _causal_alignment_score(candidate, best_params, ancestor_names, search_space)
+        adjusted = causal_softness * alignment
+        if adjusted > best_score:
+            best_score = adjusted
+            best_candidate = candidate
+
+    logger.debug(
+        "Alignment-only re-ranking: selected candidate with alignment=%.3f",
+        best_score,
+    )
+
+    return best_candidate
 
 
 def _predict_objective_quality(
