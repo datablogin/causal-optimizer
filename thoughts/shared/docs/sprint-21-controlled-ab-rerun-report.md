@@ -63,11 +63,11 @@ and the only difference is the re-ranking flag.
 | Base counterfactual | 10 (0-9) | 20, 40, 80 | random, surrogate_only, causal | 90 |
 | High-noise counterfactual | 10 (0-9) | 20, 40, 80 | random, surrogate_only, causal | 90 |
 
-Null control runs were started but had not completed by report time
-due to the long per-run duration of the null benchmark (~45 min for
-18 runs).  The null control is less relevant for this A/B comparison
-because the re-ranking flag only affects the causal strategy path, and
-on null (permuted) data the causal alignment signal is noise.
+| Null control | 3 (0-2) | 20, 40 | random, surrogate_only, causal | 18 |
+
+Null control completed on both A and B sides.  Results are identical
+because on permuted data the causal alignment signal is noise and the
+surrogate converges to the same ridge regardless of re-ranking mode.
 
 ### 2d. Commands
 
@@ -248,11 +248,21 @@ B80 while balanced achieves 8/10.  On high-noise, both achieve 8/10.
 
 ### Q4: Does it preserve null-control safety?
 
-**Not evaluated.**  The null control runs had not completed by report
-time.  However, the re-ranking flag only affects the causal strategy
-path when a causal graph is provided, so the null control (which uses
-permuted data with no real signal) is expected to show no difference
-between A and B sides.
+**Yes — null control is safe and identical on both sides.**
+
+| Strategy | Budget | A (balanced) MAE | B (alignment-only) MAE |
+|----------|--------|------------------|------------------------|
+| random | 20 | 3260.48 | 3260.48 |
+| random | 40 | 3261.58 | 3261.58 |
+| surrogate_only | 20 | 3255.76 | 3255.76 |
+| surrogate_only | 40 | 3256.31 | 3256.31 |
+| causal | 20 | 3259.11 | 3259.11 |
+| causal | 40 | 3259.11 | 3259.11 |
+
+Max strategy difference: 0.15% on both sides (well within the 2%
+threshold).  Results are numerically identical between A and B because
+on permuted data with no real signal, the surrogate converges to the
+same ridge predictor regardless of re-ranking mode.
 
 ### Q5: Is the effect large enough to survive the locked comparison?
 
@@ -323,6 +333,8 @@ re-ranking and produces more stable results on the base benchmark.
 | `ab_base_alignment_only.json` | B-side (alignment-only) base counterfactual, 10 seeds |
 | `ab_high_noise_balanced.json` | A-side (balanced) high-noise counterfactual, 10 seeds |
 | `ab_high_noise_alignment_only.json` | B-side (alignment-only) high-noise counterfactual, 10 seeds |
+| `ab_null_balanced.json` | A-side (balanced) null control, 3 seeds |
+| `ab_null_alignment_only.json` | B-side (alignment-only) null control, 3 seeds |
 
 Artifact files are stored in a machine-local directory (not committed
 to the repository):
@@ -335,7 +347,7 @@ to the repository):
 | Does balanced re-ranking improve B80 mean regret? | **No.** Worsens it on base (0.52 to 3.57). |
 | Does it improve B80 variance? | **No.** Worsens it on base (0.16 to 5.69). |
 | Does it improve win rate vs surrogate_only? | **No.** Reduces B80 win rate from 10/10 to 8/10. |
-| Does it preserve null-control safety? | **Not evaluated** (runs in progress). |
+| Does it preserve null-control safety? | **Yes.** Identical on both sides (0.15% max diff). |
 | Does balanced re-ranking survive the locked A/B test? | **No.** Alignment-only is equal or better. |
 | What caused Sprint 20's post-merge improvement? | Environment non-determinism + Sprint 19 soft-causal mode. |
 | Should balanced re-ranking be kept? | **No.** Consider reverting to alignment-only. |
