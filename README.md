@@ -107,7 +107,7 @@ If you want the shortest honest summary:
 2. [Sprint 19 Differentiation Scorecard](thoughts/shared/docs/sprint-19-differentiation-scorecard.md)
 3. [Sprint 20 Post-Ax Controlled Rerun Report](thoughts/shared/docs/sprint-20-post-ax-rerun-report.md)
 4. [Sprint 21 Controlled A/B Rerun Report](thoughts/shared/docs/sprint-21-controlled-ab-rerun-report.md)
-5. [Sprint 21 Attribution Scorecard](thoughts/shared/docs/sprint-21-attribution-scorecard.md)
+5. Sprint 21 Attribution Scorecard (PR #116, pending merge)
 6. [Benchmark State](thoughts/shared/plans/07-benchmark-state.md)
 
 ## Install

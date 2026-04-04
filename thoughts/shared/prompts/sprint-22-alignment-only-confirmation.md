@@ -57,9 +57,11 @@ If runtime permits, include one small ERCOT smoke/regression check to ensure the
 
 ## Artifact Expectations
 
-Write machine-local artifacts with clear names under:
+Write machine-local artifacts with clear names under your local artifacts
+directory (not committed to the repo).  The default convention used in
+prior sprints is:
 
-- `/Users/robertwelborn/Projects/_local/causal-optimizer/artifacts/`
+- `<LOCAL_ARTIFACTS_DIR>/` (e.g., `/Users/<you>/Projects/_local/causal-optimizer/artifacts/`)
 
 Use names that clearly identify:
 
