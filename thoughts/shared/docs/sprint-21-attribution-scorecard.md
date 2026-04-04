@@ -239,16 +239,25 @@ correctly scoped to the Ax path only.
 Sprint 20 compared code versions across sessions with different `.venv`
 builds. The causal strategy improved in absolute terms (B80 mean regret
 11.10 to 3.85), and the benchmark picture was genuinely better. But the
-locked A/B comparison shows that alignment-only re-ranking (the Sprint 19
-approach) produces equal or better results. The improvement seen in
-Sprint 20 was caused by:
+locked A/B comparison rules out balanced re-ranking as the source of
+that improvement: alignment-only re-ranking (the Sprint 19 approach)
+produces equal or better results in the same locked environment.
 
-1. **Sprint 19 soft-causal mode changes** (weighted exploration, soft
-   ranking, adaptive targeting), present in both pre- and post-merge code.
-2. **Ax/BoTorch process-level non-determinism** across sessions, which
-   shuffled which seeds succeeded vs failed.
-3. **A favorable draw** in the post-merge session where most seeds
-   landed in the "good" mode of the bimodal distribution.
+The Sprint 20 delta most likely reflects:
+
+1. **Session-level Ax/BoTorch non-determinism** across the pre- and
+   post-merge runs (different `.venv` builds, floating-point scheduling),
+   which shifted which seeds landed in the "good" vs "catastrophic" mode
+   of the bimodal B80 distribution.
+2. **A favorable draw** in the post-merge session where most seeds
+   happened to avoid catastrophic regret.
+
+The underlying causal strategy strength comes from Sprint 19's
+soft-causal mode changes (weighted exploration, soft ranking, adaptive
+targeting), which were already present in both the pre- and post-merge
+code.  Those changes explain why causal is strong in general, but they
+do not explain the Sprint 20 delta since they were constant across the
+comparison.
 
 ### 6b. Why Alignment-Only Works Better on the Base Benchmark
 
