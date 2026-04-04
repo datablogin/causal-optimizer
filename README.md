@@ -32,6 +32,8 @@ Current recommendation:
 
 The goal is not just to find a good next experiment. The goal is to make claims that survive controlled re-evaluation.
 
+For system architecture details (7-stage pipeline, graceful degradation, MAP-Elites, POMIS, observation-intervention tradeoff), see [Architecture](docs/architecture.md).
+
 ## What We Have Learned So Far
 
 ### 1. Benchmark discipline matters as much as optimizer cleverness
@@ -142,18 +144,21 @@ uv sync --extra all
 from causal_optimizer.engine import ExperimentEngine
 from causal_optimizer.types import SearchSpace, Variable, VariableType
 
+# Define what you're optimizing
 search_space = SearchSpace(variables=[
     Variable(name="learning_rate", variable_type=VariableType.CONTINUOUS, lower=1e-5, upper=1e-1),
     Variable(name="batch_size", variable_type=VariableType.INTEGER, lower=8, upper=512),
 ])
 
+# Define how to run an experiment
 class MyRunner:
     def run(self, parameters):
         return {"objective": some_metric}
 
+# Run the optimization loop
 engine = ExperimentEngine(search_space=search_space, runner=MyRunner())
 log = engine.run_loop(n_experiments=50)
-print(log.best_result().metrics)
+print(f"Best: {log.best_result().metrics}")
 ```
 
 See [examples/quickstart.py](examples/quickstart.py) for a full runnable example.
@@ -162,15 +167,24 @@ See [examples/quickstart.py](examples/quickstart.py) for a full runnable example
 
 ```text
 causal_optimizer/
-  engine/          Experiment loop orchestrator
-  optimizer/       Candidate suggestion and reranking
-  predictor/       Off-policy estimation and skip logic
-  validator/       Robustness and sensitivity checks
-  benchmarks/      Predictive, counterfactual, and null-control benchmark support
-  diagnostics/     Profiler and calibration diagnostics
-thoughts/          Plans, prompts, reports, and research notes
-examples/          Small runnable demos
-tests/             Unit and integration coverage
+  types.py           Core data models (SearchSpace, CausalGraph, ExperimentLog)
+  engine/            Experiment loop orchestrator
+  discovery/         Causal graph learning (correlation, PC, NOTEARS)
+  designer/          DoE: full/fractional factorial, LHS, screening
+  estimator/         Treatment effect estimation (difference, bootstrap, AIPW)
+  optimizer/         Candidate suggestion, surrogate/Bayesian, reranking
+  evolution/         MAP-Elites population diversity
+  predictor/         Off-policy evaluation and skip logic
+  validator/         Sensitivity analysis (E-values, SNR, robustness)
+  benchmarks/        Predictive, counterfactual, null-control, provenance
+  diagnostics/       Profiler, skip calibration, anytime metrics
+  domain_adapters/   Marketing, ML training, energy load (extensible)
+  storage/           SQLite persistence
+thoughts/            Plans, prompts, reports, and research notes
+scripts/             Benchmark runners, A/B harness, CLI tools
+examples/            Small runnable demos
+tests/               Unit and integration coverage
+docs/                Architecture and design documentation
 ```
 
 ## License
