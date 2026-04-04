@@ -662,7 +662,21 @@ def _suggest_bayesian(
     if not ancestor_names or not best_params:
         return candidates[0]
 
-    # Sprint 20: balanced composite re-ranking (see _rerank_candidates_balanced).
+    # Sprint 20: balanced composite re-ranking (default production path).
+    # The CAUSAL_OPT_RERANKING_MODE env var allows A/B benchmark harnesses
+    # to switch to alignment-only mode without modifying library code.
+    # When unset (the normal case), balanced re-ranking is always used.
+    import os
+
+    if os.environ.get("CAUSAL_OPT_RERANKING_MODE") == "alignment_only":
+        return _rerank_alignment_only(
+            candidates,
+            best_params,
+            ancestor_names,
+            search_space,
+            causal_softness,
+        )
+
     return _rerank_candidates_balanced(
         candidates=candidates,
         best_params=best_params,
@@ -673,6 +687,33 @@ def _suggest_bayesian(
         minimize=minimize,
         causal_softness=causal_softness,
     )
+
+
+def _rerank_alignment_only(
+    candidates: list[dict[str, Any]],
+    best_params: dict[str, Any],
+    ancestor_names: set[str],
+    search_space: SearchSpace,
+    causal_softness: float,
+) -> dict[str, Any]:
+    """Alignment-only re-ranking for A/B benchmark harnesses.
+
+    Ranks candidates purely by ``causal_softness * alignment``, ignoring
+    predicted objective quality.  This reproduces the Sprint 19 behavior
+    and is only reachable when ``CAUSAL_OPT_RERANKING_MODE=alignment_only``
+    is set in the environment.
+    """
+    if len(candidates) <= 1:
+        return candidates[0]
+    best_candidate = candidates[0]
+    best_score = float("-inf")
+    for candidate in candidates:
+        alignment = _causal_alignment_score(candidate, best_params, ancestor_names, search_space)
+        adjusted = causal_softness * alignment
+        if adjusted > best_score:
+            best_score = adjusted
+            best_candidate = candidate
+    return best_candidate
 
 
 def _suggest_surrogate(

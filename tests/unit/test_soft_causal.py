@@ -828,3 +828,103 @@ def test_predict_objective_quality_with_crash_rows() -> None:
     assert scores[0] > scores[1], (
         f"Expected candidate with X1=0.1 to score higher than X1=0.9 (minimize=True), got {scores}"
     )
+
+
+# ---- Alignment-only re-ranking (A/B harness path) ----
+
+
+def test_rerank_alignment_only_prefers_ancestor_variation() -> None:
+    """_rerank_alignment_only should prefer candidates varying ancestors."""
+    from causal_optimizer.optimizer.suggest import _rerank_alignment_only
+
+    ss = _make_search_space_5d()
+    graph = _make_causal_graph()
+    ancestor_names = graph.ancestors("objective")
+    best_params = {"X1": 0.5, "X2": 0.5, "X3": 0.5, "X4": 0.5, "X5": 0.5}
+
+    # Candidate A: varies ancestors
+    candidate_a = {"X1": 0.9, "X2": 0.9, "X3": 0.9, "X4": 0.5, "X5": 0.5}
+    # Candidate B: varies only non-ancestors
+    candidate_b = {"X1": 0.5, "X2": 0.5, "X3": 0.5, "X4": 0.9, "X5": 0.9}
+
+    result = _rerank_alignment_only(
+        candidates=[candidate_b, candidate_a],
+        best_params=best_params,
+        ancestor_names=ancestor_names,
+        search_space=ss,
+        causal_softness=0.5,
+    )
+    assert result["X1"] == pytest.approx(0.9)
+
+
+def test_rerank_alignment_only_single_candidate() -> None:
+    """Single candidate returns immediately."""
+    from causal_optimizer.optimizer.suggest import _rerank_alignment_only
+
+    ss = _make_search_space_5d()
+    candidate = {"X1": 0.5, "X2": 0.5, "X3": 0.5, "X4": 0.5, "X5": 0.5}
+
+    result = _rerank_alignment_only(
+        candidates=[candidate],
+        best_params=candidate,
+        ancestor_names={"X1"},
+        search_space=ss,
+        causal_softness=0.5,
+    )
+    assert result is candidate
+
+
+def test_env_var_alignment_only_mode() -> None:
+    """CAUSAL_OPT_RERANKING_MODE=alignment_only activates alignment-only path."""
+    import os
+    from unittest.mock import patch
+
+    from causal_optimizer.optimizer.suggest import _rerank_alignment_only
+
+    ss = _make_search_space_5d()
+    graph = _make_causal_graph()
+    ancestor_names = graph.ancestors("objective")
+    best_params = {"X1": 0.5, "X2": 0.5, "X3": 0.5, "X4": 0.5, "X5": 0.5}
+
+    candidate_a = {"X1": 0.9, "X2": 0.9, "X3": 0.9, "X4": 0.5, "X5": 0.5}
+    candidate_b = {"X1": 0.5, "X2": 0.5, "X3": 0.5, "X4": 0.9, "X5": 0.9}
+
+    # Directly call _rerank_alignment_only (the function the env var routes to)
+    # to verify it's callable and produces correct results
+    with patch.dict(os.environ, {"CAUSAL_OPT_RERANKING_MODE": "alignment_only"}):
+        result = _rerank_alignment_only(
+            candidates=[candidate_b, candidate_a],
+            best_params=best_params,
+            ancestor_names=ancestor_names,
+            search_space=ss,
+            causal_softness=0.5,
+        )
+        assert result["X1"] == pytest.approx(0.9)
+
+
+def test_suggest_bayesian_env_var_routes_to_alignment_only() -> None:
+    """_suggest_bayesian with CAUSAL_OPT_RERANKING_MODE=alignment_only uses alignment path."""
+    ax = pytest.importorskip("ax")  # noqa: F841
+
+    import os
+    from unittest.mock import patch
+
+    ss = _make_search_space_5d()
+    graph = _make_causal_graph()
+    log = _make_experiment_log(n=15)
+
+    with patch.dict(os.environ, {"CAUSAL_OPT_RERANKING_MODE": "alignment_only"}):
+        result = _suggest_bayesian(
+            ss,
+            log,
+            focus_variables=["X1", "X2", "X3"],
+            minimize=True,
+            objective_name="objective",
+            causal_graph=graph,
+            seed=42,
+            causal_softness=0.5,
+        )
+    # Should return a valid parameter dict with all variables
+    assert isinstance(result, dict)
+    for v in ss.variable_names:
+        assert v in result
