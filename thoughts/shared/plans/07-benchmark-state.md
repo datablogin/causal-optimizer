@@ -1,303 +1,208 @@
 # Benchmark State
 
-Updated: 2026-03-28 (Sprint 17 complete)
+Updated: 2026-04-04 (Sprint 21 attribution complete, Sprint 22 framed)
 
 ## Purpose
 
-This file is the current restart point for the real predictive-model benchmark work in `causal-optimizer`.
+This file is the restart point for the benchmark and discovery-trust work in `causal-optimizer`.
 
 Use it when:
 
 1. starting a new chat
 2. handing context to another reviewer or agent
-3. checking what is merge-ready vs still pending
+3. checking what is merged vs still pending
+4. recovering after an interruption or crash
+
+## Current Position
+
+The project is now strongest as a **research and attribution system**.
+
+What is true today:
+
+1. the benchmark stack is disciplined and reusable
+2. positive controls, negative controls, provenance, and locked A/B reruns are all in place
+3. the project can demonstrate causal advantage on controlled benchmark tasks
+4. the project has **not** yet demonstrated a reliable real-world causal advantage on the ERCOT forecasting benchmarks
+5. Sprint 21 concluded that Sprint 20's observed post-merge improvement was **not attributable** to balanced Ax reranking
 
 ## Current Goal
 
-Use the first real predictive benchmark to answer:
+The immediate goal is no longer to add another optimizer idea quickly.
 
-1. Can `causal-optimizer` improve a real predictive model on unseen data under a fixed experiment budget?
+It is to:
 
-The current benchmark target is:
+1. act on the Sprint 21 attribution result
+2. revert or disable balanced reranking back to alignment-only
+3. confirm that the reverted path still preserves the strong positive-control behavior
+4. only then decide whether the system is ready for broader benchmark expansion
 
-1. day-ahead energy load forecasting
-2. local CSV or Parquet data
-3. locked chronological `train` / `validation` / `test` split
-4. strategy comparison across `random`, `surrogate_only`, and `causal`
-5. one real benchmark report that is strong enough to guide the next optimizer iteration
+## Canonical Docs
 
-## Canonical Planning Docs
+Core references:
 
-Primary references:
+1. `README.md`
+2. `thoughts/shared/docs/ercot-north-c-dfw-2022-2024-benchmark-report.md`
+3. `thoughts/shared/docs/ercot-coast-houston-2022-2024-benchmark-report.md`
+4. `thoughts/shared/docs/sprint-18-discovery-trust-scorecard.md`
+5. `thoughts/shared/docs/sprint-19-differentiation-scorecard.md`
+6. `thoughts/shared/docs/sprint-20-differentiation-scorecard.md`
+7. `thoughts/shared/docs/sprint-20-post-ax-rerun-report.md`
+8. `thoughts/shared/docs/sprint-21-controlled-ab-rerun-report.md`
+9. `thoughts/shared/docs/sprint-21-attribution-scorecard.md`
+10. `thoughts/shared/prompts/sprint-22-alignment-only-confirmation.md`
 
-1. `thoughts/shared/plans/05-real-predictive-model-benchmark.md`
-2. `thoughts/shared/plans/06-energy-predictive-benchmark-handoff.md`
-3. `thoughts/shared/prompts/sprint-14-energy-benchmark.md`
-4. `thoughts/shared/prompts/sprint-15-real-energy-benchmark-run.md`
-5. `thoughts/shared/docs/ercot-north-c-dfw-2022-2024-benchmark-report.md`
-6. `thoughts/shared/plans/08-optimizer-improvement-briefs.md`
-7. `thoughts/shared/prompts/sprint-16-causal-differentiation-suite.md`
+## Benchmark / Evidence Rules
 
-PR 63 review handoff reference:
+These should not drift:
 
-1. `thoughts/shared/prompts/sprint-14-pr63-verification.md`
+1. held-out evaluation must remain genuinely held out
+2. time-series semantics must be handled explicitly when relevant
+3. null-signal controls must stay clean before we trust optimizer wins
+4. provenance must be captured whenever attribution claims matter
+5. benchmark reports must separate:
+   - observed performance improvement
+   - attribution to a code change
+6. attractive optimizer stories do not count if they fail the locked comparison
 
-## Benchmark Contract
+## What We Learned By Sprint
 
-These are the important design decisions that should not drift:
+### Sprint 18
 
-1. Dataset split is locked and chronological: `60 / 20 / 20`
-2. Optimization sees only `train` and `validation`
-3. Test is evaluated once after selecting the best validation configuration
-4. Lag features must use only past data
-5. After feature generation and any row dropping, the effective training window must remain strictly earlier than the effective validation/test window
-6. If preprocessing makes that impossible, the run must fail rather than leak held-out rows into training
-7. The first pass is single-series and local-data only
+Merged PRs:
 
-## Benchmark Outcome
+1. `#86` time-series calendar profiler
+2. `#87` counterfactual benchmark repair
+3. `#88` null-signal control benchmark
+4. `#91` discovery trust scorecard
 
-### First Real Benchmark Run
+What we learned:
 
-Dataset:
+1. time-series semantics are a first-class source of false signal
+2. repaired counterfactual benchmarks can serve as real positive controls
+3. null controls are essential and the project can pass them
+4. the system can now distinguish “real signal exists here” from “this is noise” much more reliably
 
-1. `ERCOT NCENT/NORTH_C` hourly load
-2. NOAA station `USW00003927`
-3. saved as UTC single-series Parquet at:
-   `/Users/robertwelborn/Projects/_local/causal-optimizer/data/ercot_north_c_dfw_2022_2024.parquet`
+### Sprint 19
 
-Key verified dataset properties:
+Merged PRs:
 
-1. `26,291` rows
-2. no duplicate timestamps
-3. no missing `target_load`
-4. no missing `temperature`
-5. calendar features now derived from ERCOT local market time before UTC storage
+1. `#98` harder counterfactual variants
+2. `#99` earlier / softer causal influence
+3. `#101` skip calibration under controls
+4. `#103` differentiation scorecard
 
-Locked split boundaries:
+What we learned:
 
-1. train: `2022-01-01 06:00:00 UTC` to `2023-10-20 11:00:00 UTC`
-2. validation: `2023-10-20 12:00:00 UTC` to `2024-05-26 13:00:00 UTC`
-3. test: `2024-05-26 14:00:00 UTC` to `2024-12-31 23:00:00 UTC`
+1. soft-causal optimizer changes produced the first meaningful causal progress
+2. causal improved on base and high-noise positive controls
+3. confounded variants remained hard / negative
+4. skip calibration became measurable
+5. final Sprint 19 verdict: `PROGRESS`
 
-Benchmark result:
+### Sprint 20
 
-1. outcome: **inconclusive / negative for causal advantage**
-2. `random` was marginally better on test MAE at all budgets
-3. `causal` and `surrogate_only` were effectively identical
-4. all strategies converged to `ridge`
-5. benchmark behavior was highly stable across seeds
+Merged PRs:
+
+1. `#107` stability audit
+2. `#108` balanced Ax reranking
+3. `#109` differentiation scorecard
+4. `#110` post-Ax controlled rerun report
+
+What we learned:
+
+1. the Sprint 19 gains were more fragile than the early read suggested
+2. balanced Ax reranking looked promising in an observed rerun
+3. null control stayed clean
+4. but attribution remained unresolved because the comparison was not locked tightly enough
+5. final Sprint 20 read: observed picture `BETTER`, attribution unresolved
+
+### Sprint 21
+
+Merged PRs:
+
+1. `#114` provenance hardening
+2. `#115` controlled A/B rerun
+3. `#116` attribution scorecard
+
+What we learned:
+
+1. provenance now records enough information to support real attribution claims
+2. a locked A/B rerun compared balanced reranking to alignment-only in the same environment
+3. on the base counterfactual at B80, alignment-only was clearly better
+4. on high-noise, the two approaches were mostly indistinguishable
+5. null control was identical on both sides
+6. Sprint 20's observed improvement was real as a benchmark snapshot, but **not attributable** to balanced reranking
+
+## Current Best Evidence
+
+### Real Predictive Benchmarks
+
+ERCOT NORTH_C and COAST both show:
+
+1. `random` marginally better than engine-based strategies
+2. `causal` effectively identical to `surrogate_only`
+3. all strategies converging to `ridge`
+4. highly stable results across seeds
 
 Interpretation:
 
-1. The benchmark harness is functioning correctly.
-2. The current causal path is not meaningfully differentiated under the RF-surrogate fallback.
-3. The benchmark currently provides stronger evidence about optimizer limitations than about causal benefit.
+1. the real-task harness is functioning correctly
+2. but the project still lacks a convincing real-world causal advantage on these forecasting tasks
 
-## Issue / PR State
+### Positive Controls
 
-### Issue #59 / PR #62
+Locked A/B, base counterfactual:
 
-Scope:
+1. balanced B80 causal mean/std: `3.57 / 5.69`
+2. alignment-only B80 causal mean/std: `0.52 / 0.16`
+3. balanced B80 wins vs `surrogate_only`: `8/10`
+4. alignment-only B80 wins vs `surrogate_only`: `10/10`
 
-1. split harness
-2. predictive energy benchmark data loading
-3. locked split helpers
-4. validation runner
-5. held-out test evaluation
+Locked A/B, high-noise:
 
-Key implementation details:
+1. balanced B80 causal mean/std: `2.58 / 4.29`
+2. alignment-only B80 causal mean/std: `3.27 / 4.21`
+3. differences are small relative to variance
+4. no clean attribution win for balanced reranking
 
-1. `causal_optimizer/benchmarks/predictive_energy.py`
-2. `EnergyLoadAdapter` gained `split_timestamp`
-3. degenerate post-preprocessing splits now raise instead of leaking held-out rows into training
+### Negative Control
 
-Review state:
+Locked A/B null control:
 
-1. merged
-2. no outstanding benchmark-contract blockers from review
+1. balanced and alignment-only artifacts are row-for-row identical
+2. max strategy difference remains `0.18%`
+3. null control remains safely below the `2%` threshold
 
-Important contract note:
+## Current Conclusion
 
-1. the split boundary must survive lag-induced row dropping
-2. forcing a held-out row back into training is not acceptable
+The project is succeeding at becoming a **trustworthy automated research harness**.
 
-### Issue #60 / PR #63
+It is not yet succeeding at becoming a **reliably winning causal researcher on real predictive tasks**.
 
-Scope:
+That distinction matters. It means:
 
-1. benchmark runner CLI
-2. strategy execution across budgets and seeds
-3. JSON artifact writing
-4. compact summary output
+1. the system is increasingly good at rejecting false wins
+2. the benchmark program is producing useful evidence
+3. more optimizer work should now be guided by attribution discipline, not just directional benchmark gains
 
-Local review context:
+## Sprint 22
 
-1. PR URL: `https://github.com/datablogin/causal-optimizer/pull/63`
-2. branch: `sprint-14/benchmark-runner`
-3. reviewed worktree: `/Users/robertwelborn/Projects/causal-optimizer/.claude/worktrees/agent-a16e6d3e`
-4. reviewed commit: `d075662`
+Primary prompt:
 
-Key fixes that were required and are now present:
+1. `thoughts/shared/prompts/sprint-22-alignment-only-confirmation.md`
 
-1. `runtime_seconds` now includes held-out test evaluation
-2. all-crash combinations are skipped instead of serialized as sentinel rows
+Sprint 22 should:
 
-Verification rerun on `d075662`:
+1. revert or disable balanced reranking back to alignment-only
+2. rerun base, high-noise, and null controls on the reverted path
+3. confirm whether the stronger alignment-only behavior is stable in production code
+4. only then decide whether to expand to new benchmark families or continue optimizer-core hardening
 
-1. `uv run pytest tests/unit/test_energy_predictive_benchmark_script.py tests/integration/test_predictive_energy_benchmark.py -q`
-   Result: `49 passed, 1 skipped`
-2. `uv run python scripts/energy_predictive_benchmark.py --data-path tests/fixtures/energy_load_fixture.csv --budgets 3 --seeds 0 --strategies random,surrogate_only,causal --output /tmp/predictive_energy_results_pr63_all.json`
-   Result: completed successfully and wrote 3 real result rows
+## Practical Next Step
 
-Review state:
+If resuming from here:
 
-1. merged
-2. no outstanding runner blockers from review
-
-Non-blocking follow-up idea:
-
-1. normalize random-strategy crash handling so it is as tolerant as engine-based strategies
-
-### Issue #61
-
-Scope:
-
-1. benchmark smoke tests
-2. reproducibility regression test
-3. benchmark documentation
-
-Review state:
-
-1. shipped via PR `#64`
-2. smoke tests, reproducibility test, and benchmark docs are in place
-
-### Issue / PR #65
-
-Scope:
-
-1. first real energy benchmark run
-2. dataset preparation
-3. benchmark artifact generation
-4. benchmark report
-
-Branch / review context:
-
-1. branch: `sprint-15/energy-benchmark-report`
-2. latest reviewed commit: `8ddf271`
-3. report path: `thoughts/shared/docs/ercot-north-c-dfw-2022-2024-benchmark-report.md`
-
-Important review outcome:
-
-1. local-time calendar feature bug was found and fixed
-2. split boundary reporting was corrected to actual timestamps
-3. the benchmark report is now review-ready
-4. the substantive result remains: `causal` is not outperforming `random` on this benchmark
-
-Local artifact paths:
-
-1. dataset: `/Users/robertwelborn/Projects/_local/causal-optimizer/data/ercot_north_c_dfw_2022_2024.parquet`
-2. smoke: `/Users/robertwelborn/Projects/_local/causal-optimizer/artifacts/ercot_north_c_dfw_2022_2024_smoke.json`
-3. full results: `/Users/robertwelborn/Projects/_local/causal-optimizer/artifacts/ercot_north_c_dfw_2022_2024_results.json`
-4. summary CSV: `/Users/robertwelborn/Projects/_local/causal-optimizer/artifacts/ercot_north_c_dfw_2022_2024_summary.csv`
-
-## Recommended Next Steps
-
-1. ~~merge PR `#65` if branch state still matches the reviewed benchmark-report state~~ — done (PR #67 merged)
-2. treat the first real benchmark result as a system-learning milestone, not a product win
-3. ~~prioritize optimizer improvements that differentiate `causal` from `surrogate_only` in a domain-general way~~ — Sprint 16 Step 1
-4. ~~re-run the benchmark only after one general optimizer improvement lands~~ — Sprint 16 Step 3
-5. ~~add at least one more real benchmark before making stronger predictive-model claims~~ — Sprint 16 Step 2
-
-## Sprint 16 Scope
-
-Sprint prompt: `thoughts/shared/prompts/sprint-16-causal-differentiation-suite.md`
-
-Three steps:
-
-1. **Causal Fallback Differentiation** — inject causal graph structure into
-   `_suggest_surrogate()` via targeted intervention candidates (50 LHS + 50
-   causal-targeted). Root cause: star graph makes `ancestors()` == all vars.
-   Fix: pass `causal_graph` to surrogate, generate candidates that perturb
-   only 1-2 direct parents of the objective.
-
-2. **Second Real Benchmark** — ERCOT COAST + Houston-area NOAA weather.
-   Same harness, same contract, different load/weather regime. Parquet at
-   `/Users/robertwelborn/Projects/_local/causal-optimizer/data/ercot_coast_houston_2022_2024.parquet`
-
-3. **Multi-Benchmark Suite** — suite runner across both datasets, combined
-   report with acceptance rules (improve >= 1, no regression, stable, differentiated).
-   Re-runs both benchmarks after the differentiation change lands.
-
-Steps 1 and 2 are parallel. Step 3 depends on both.
-
-## Sprint 17 Scope
-
-Sprint prompt: `thoughts/shared/prompts/sprint-17-skip-calibration-counterfactual-benchmark.md`
-
-Three steps (Steps 1 and 2 parallel, Step 3 depends on both):
-
-1. **Skip Calibration Diagnostics** (PR #77) — `SkipDiagnostics`, `AuditResult`,
-   `AnytimeMetrics` dataclasses. Engine instrumented with `_skip_log`,
-   `skip_diagnostics` property, `anytime_metrics()` method, `audit_skip_rate` param.
-   Benchmark suite report includes skip calibration section.
-
-2. **Semi-Synthetic Counterfactual Benchmark** (PR #76) — `DemandResponseScenario`
-   generates semi-synthetic data from real ERCOT covariates with known treatment
-   effects. Non-trivial causal graph with genuine non-parents (humidity, day_of_week).
-   `CounterfactualBenchmarkResult` with policy value, regret, decision error rate.
-
-3. **Suite Re-Run + Combined Report** (PR #79) — Full suite with skip diagnostics
-   + counterfactual benchmark. Combined report at
-   `thoughts/shared/docs/sprint-17-combined-report.md`.
-
-Sprint 17 results:
-
-- **Promotion verdict: INVESTIGATE**
-- Skip calibration: 33% false-skip rate (too high for production)
-- Counterfactual benchmark: degenerate (treatment cost 50.0 > benefit, oracle = never treat)
-- Causal vs surrogate_only: <0.1% difference at budget=80, below 0.1% threshold
-- Causal is 100x slower than surrogate_only on counterfactual benchmark (screening formula enumeration)
-- Plan 08 fully complete (all 5 agents delivered)
-
-## Priority Improvements
-
-These are the highest-value next changes suggested by Sprint 17:
-
-1. ~~Make causal guidance active under the RF-surrogate fallback instead of effectively no-op.~~ — done (Sprint 16)
-2. ~~Add a second real benchmark so optimizer changes are judged across tasks, not just on ERCOT.~~ — done (Sprint 16)
-3. ~~Add cross-benchmark acceptance rules.~~ — done (Sprint 16)
-4. ~~Add skip calibration diagnostics.~~ — done (Sprint 17)
-5. ~~Add semi-synthetic counterfactual benchmark.~~ — done (Sprint 17)
-6. Fix counterfactual benchmark: lower treatment cost or strengthen effects so oracle is non-trivial.
-7. Improve skip calibration: higher confidence thresholds, calibrated probabilities, or burn-in.
-8. Address causal differentiation at low budgets: causal == surrogate_only at budget 20/40.
-9. Performance: causal 100x slower than surrogate_only due to screening formula enumeration.
-
-## Review Workflow That Worked
-
-For future PR review handoffs, provide:
-
-1. PR URL
-2. branch name
-3. exact commit hash
-4. exact local worktree path
-5. a verification note with:
-   - `Changes since last review`
-   - exact commands run
-   - focused repro or smoke commands for the requested fixes
-
-The most effective review loop was:
-
-1. inspect the local worktree first
-2. rerun only the focused tests and smoke commands tied to the review findings
-3. post GitHub comments only for real contract, bug, or integration issues
-
-## Local Workspace Note
-
-The real benchmark artifacts and prep script live outside the repo under:
-
-1. `/Users/robertwelborn/Projects/_local/causal-optimizer/`
-
-That keeps large files out of git, but long-term reproducibility depends on
-preserving those local files or moving the prep logic into a durable tracked
-location.
+1. start Sprint 22 from the alignment-only confirmation prompt
+2. do not widen scope into new optimizer features first
+3. keep provenance and null-control checks as hard gates
+4. treat the Sprint 21 attribution result as the current project truth until new evidence overturns it

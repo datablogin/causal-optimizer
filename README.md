@@ -1,115 +1,125 @@
 # causal-optimizer
 
-**Causally-informed experiment optimization engine.** Decides *what to try next* using causal inference, Bayesian optimization, and evolutionary strategies.
+Causally informed experiment optimization for teams trying to learn from experiments without fooling themselves.
 
-## The Premise
+## Project Status
 
-Most optimization systems treat experiments as black boxes: try something, measure the result, try something else. This is how Bayesian optimization, random search, and greedy hill-climbing all work. They ask *"what happened?"* but never *"why did it happen?"*
+This project is now in a stronger place as a **research system** than as a proven **real-world optimizer win**.
 
-Causal inference asks a fundamentally different question: *"what would happen if I intervened?"* This distinction matters because:
+What we can say confidently today:
 
-1. **Correlation misleads.** A parameter may correlate with good performance because both are caused by a third factor. Optimizing that parameter directly wastes experiments.
-2. **Interactions are invisible to one-at-a-time testing.** Changes A and B may each hurt individually but help together. Greedy hill-climbing will never discover this.
-3. **Noise masquerades as signal.** Without statistical rigor, you keep changes that "improved" the metric by chance and discard changes that would have helped.
-4. **Not all experiments are equally informative.** Some candidate experiments can be evaluated cheaply from existing data (observational estimation); others require actual execution (intervention). Knowing when to observe vs. intervene saves enormous cost.
+1. The benchmark stack is real and trustworthy enough to catch false stories.
+2. The project can exploit signal on controlled positive benchmarks.
+3. The project can avoid claiming wins on null-signal controls.
+4. The project has **not yet** shown a reliable causal advantage on the real ERCOT forecasting tasks.
+5. Sprint 21's locked A/B rerun found that Sprint 20's apparent improvement was **not attributable** to balanced Ax reranking.
 
-This project bridges two fields that have developed largely in isolation:
-- **Causal inference** — a mature statistical framework for reasoning about cause and effect from data (propensity scores, doubly-robust estimation, structural causal models, do-calculus)
-- **Automated optimization** — systems that search for the best configuration of a function, model, or process (Bayesian optimization, evolutionary strategies, AutoML)
+Current recommendation:
 
-The result is an optimization engine that doesn't just search — it *reasons* about why experiments succeed or fail, and uses that reasoning to design better experiments.
+1. revert or disable balanced reranking back to alignment-only
+2. confirm that alignment-only still delivers the stronger positive-control behavior
+3. only then decide whether to expand to new benchmark families or resume optimizer-core tuning
 
-## Architectural Principles
+## What This Repo Is
 
-### 1. Separate "what to try" from "how to try it"
+`causal-optimizer` is an experiment loop that combines:
 
-The engine orchestrates the optimization loop. Domain adapters handle the specifics of running experiments. This means the same causal optimization logic works whether you're tuning marketing campaigns, ML hyperparameters, manufacturing processes, or drug candidates.
+1. search-space exploration
+2. surrogate or Bayesian optimization
+3. causal structure and screening signals
+4. off-policy skip logic
+5. benchmark, provenance, and audit tooling
 
-```
-Engine (domain-agnostic)          Domain Adapter (domain-specific)
-┌─────────────────────┐           ┌─────────────────────┐
-│ Discover → Screen → │           │ Marketing           │
-│ Estimate → Prioritize → ───────▶│ ML Training         │
-│ Evolve → Predict →  │           │ Manufacturing       │
-│ Validate             │           │ Drug Discovery      │
-└─────────────────────┘           └─────────────────────┘
-```
+The goal is not just to find a good next experiment. The goal is to make claims that survive controlled re-evaluation.
 
-### 2. Seven-stage optimization loop
+## What We Have Learned So Far
 
-Each iteration progresses through stages, any of which can be skipped if unnecessary:
+### 1. Benchmark discipline matters as much as optimizer cleverness
 
-| Stage | Module | Question Answered |
-|-------|--------|-------------------|
-| **Discover** | `discovery/` | What is the causal structure among variables? |
-| **Screen** | `designer/` | Which variables and interactions matter most? |
-| **Estimate** | `estimator/` | Did past changes truly help, or was it noise? |
-| **Prioritize** | `optimizer/` | What should the next experiment be? |
-| **Evolve** | `evolution/` | Are we maintaining diverse solutions, or stuck in a local optimum? |
-| **Predict** | `predictor/` | Can we estimate this experiment's outcome without running it? |
-| **Validate** | `validator/` | Is this finding robust to confounding and noise? |
+The project now has:
 
-### 3. Progressive sophistication
+1. locked chronological train/validation/test splits for real forecasting benchmarks
+2. positive controls
+3. negative/null controls
+4. provenance capture
+5. controlled A/B comparison infrastructure
 
-The system starts simple and adds complexity only when warranted:
+That has been a major success. It means failed ideas are now informative rather than ambiguous.
 
-- **Phase 1 — Exploration** (experiments 1–10): Space-filling designs (Latin Hypercube). No model needed. Goal: cover the search space.
-- **Phase 2 — Optimization** (experiments 11–50): Surrogate models guide search. Causal graph (if available) focuses attention on ancestors of the objective. Factorial screening identifies interactions.
-- **Phase 3 — Exploitation** (experiments 50+): Local perturbation around the best known configuration. Robust estimation confirms findings. Sensitivity analysis validates that improvements are real.
+### 2. Real predictive wins are still unproven
 
-### 4. Graceful degradation
+On the two real ERCOT forecasting benchmarks:
 
-Every module has a built-in fallback:
+1. `random` was marginally better than the engine-based strategies
+2. `causal` and `surrogate_only` were effectively identical
+3. all strategies converged to `ridge`
+4. the results were very stable across seeds
 
-| Full capability | Fallback (no optional deps) |
-|---|---|
-| AIPW/TMLE estimation | Bootstrap confidence intervals |
-| PC/NOTEARS causal discovery | Correlation-based graph |
-| Ax/BoTorch Bayesian optimization | Random forest surrogate |
-| pyDOE3 fractional factorial | Latin Hypercube sampling |
-| Causal forests (HTE) | Random forest feature importance |
+Those results matter. They tell us the original causal differentiation was too weak to matter on the real task.
 
-Core functionality works with only numpy, pandas, scipy, and scikit-learn. Optional extras unlock the full causal inference stack.
+### 3. Positive and negative controls changed the project
 
-### 5. The observation-intervention tradeoff
+Sprint 18 established a much better evidence standard:
 
-Inspired by Causal Bayesian Optimization (Aglietti et al., AISTATS 2020), the system balances two ways of learning:
+1. the repaired counterfactual benchmark became a valid positive control
+2. the null-signal benchmark passed
+3. the time-series profiler correctly surfaced calendar / timezone / DST issues
 
-- **Observation**: estimate the effect of a candidate experiment from existing data using do-calculus or surrogate models. Free, but uncertain.
-- **Intervention**: actually run the experiment. Expensive, but definitive.
+That is the point where this stopped being just “interesting optimizer ideas” and became a real research program.
 
-The `predictor/` module fits a surrogate model to experiment history and estimates uncertainty. When uncertainty is low and the model is reliable, the experiment is skipped. When uncertainty is high, the experiment runs. This can dramatically reduce the number of expensive experiments needed.
+### 4. Sprint 19 produced the first meaningful causal progress
 
-### 6. Diversity preservation via MAP-Elites
+The first convincing gains came from the soft-causal optimizer changes:
 
-Greedy optimization converges to a single solution — often a local optimum. MAP-Elites (Mouret & Clune, 2015) maintains an archive of diverse high-quality solutions indexed by behavioral descriptors. For example, in ML training optimization, solutions might be indexed by (model_size, memory_usage), ensuring the archive contains good solutions across different size/memory tradeoffs. This prevents premature convergence and enables discovering solutions that combine strategies from different regions of the search space.
+1. causal improved on the base counterfactual
+2. causal improved on the high-noise counterfactual
+3. the null control stayed clean
 
-### 7. Causal graphs as first-class citizens
+This is the strongest evidence so far that the optimizer can use causal structure in benchmark settings where it should matter.
 
-The system can accept, learn, or operate without causal graphs:
+### 5. Sprint 20 looked better, but Sprint 21 forced attribution
 
-- **Prior knowledge**: domain adapters can supply a causal DAG based on expert knowledge
-- **Data-driven**: the discovery module learns graphs from experiment logs (PC, GES, NOTEARS)
-- **No graph**: the system works without one, falling back to correlation-based importance
+Sprint 20's post-merge rerun looked materially better. Sprint 21 then asked the harder question: **what actually caused the improvement?**
 
-When a causal graph is available, it enables:
-- **POMIS** (Possibly-Optimal Minimum Intervention Sets): identifies which variable subsets are worth experimenting with, pruning the search space
-- **Ancestor identification**: focuses optimization on variables that causally affect the objective, ignoring downstream effects
-- **Counterfactual reasoning**: estimates "what would have happened if we changed X instead of Y?" without running the experiment
+The locked A/B rerun found:
+
+1. alignment-only reranking matched or beat balanced reranking everywhere that mattered
+2. on base B80, alignment-only was much better
+3. on high-noise, the two were mostly indistinguishable
+4. the null control was identical on both sides
+
+That is why Sprint 21's final verdict is: **NOT ATTRIBUTED**.
+
+This was a good outcome for the project even though it was a negative outcome for the balanced reranking idea. The system is getting better at rejecting attractive but unsupported explanations.
+
+## Current Read
+
+If you want the shortest honest summary:
+
+1. we have a much better **automated research harness** than we did at the start
+2. we have some evidence of causal advantage on controlled benchmarks
+3. we do **not** yet have strong evidence of causal advantage on the real forecasting tasks
+4. we now have enough rigor to reject optimizer stories that do not survive attribution
+
+## Key Documents
+
+1. [Sprint 18 Discovery Trust Scorecard](thoughts/shared/docs/sprint-18-discovery-trust-scorecard.md)
+2. [Sprint 19 Differentiation Scorecard](thoughts/shared/docs/sprint-19-differentiation-scorecard.md)
+3. [Sprint 20 Post-Ax Controlled Rerun Report](thoughts/shared/docs/sprint-20-post-ax-rerun-report.md)
+4. [Sprint 21 Controlled A/B Rerun Report](thoughts/shared/docs/sprint-21-controlled-ab-rerun-report.md)
+5. [Sprint 21 Attribution Scorecard](thoughts/shared/docs/sprint-21-attribution-scorecard.md)
+6. [Benchmark State](thoughts/shared/plans/07-benchmark-state.md)
 
 ## Install
 
 ### From PyPI
 
 ```bash
-pip install causal-optimizer                    # core only
-pip install causal-optimizer[bayesian]          # + Ax/BoTorch
-pip install causal-optimizer[doe]               # + pyDOE3 for factorial designs
-pip install causal-optimizer[causal]            # + DoWhy
-pip install causal-optimizer[all]               # everything
+pip install causal-optimizer
+pip install causal-optimizer[all]
 ```
 
-### From source (development)
+### From source
 
 ```bash
 git clone https://github.com/datablogin/causal-optimizer.git
@@ -117,80 +127,51 @@ cd causal-optimizer
 uv sync --extra dev
 ```
 
-With optional dependencies:
+Optional extras:
 
 ```bash
-uv sync --extra bayesian   # Ax/BoTorch for Bayesian optimization
-uv sync --extra doe         # pyDOE3 for factorial designs
-uv sync --extra causal      # DoWhy for causal inference
-uv sync --extra all         # everything
+uv sync --extra bayesian
+uv sync --extra doe
+uv sync --extra causal
+uv sync --extra all
 ```
 
-## Quick start
+## Quick Start
 
 ```python
 from causal_optimizer.engine import ExperimentEngine
 from causal_optimizer.types import SearchSpace, Variable, VariableType
 
-# Define what you're optimizing
 search_space = SearchSpace(variables=[
     Variable(name="learning_rate", variable_type=VariableType.CONTINUOUS, lower=1e-5, upper=1e-1),
     Variable(name="batch_size", variable_type=VariableType.INTEGER, lower=8, upper=512),
 ])
 
-# Define how to run an experiment
 class MyRunner:
     def run(self, parameters):
-        # Your experiment logic here
         return {"objective": some_metric}
 
-# Run the optimization loop
 engine = ExperimentEngine(search_space=search_space, runner=MyRunner())
 log = engine.run_loop(n_experiments=50)
-print(f"Best: {log.best_result().metrics}")
+print(log.best_result().metrics)
 ```
 
-See [examples/quickstart.py](examples/quickstart.py) for a complete working example using the Branin benchmark function.
+See [examples/quickstart.py](examples/quickstart.py) for a full runnable example.
 
-## Project structure
+## Repo Layout
 
-```
+```text
 causal_optimizer/
-    types.py             # Core data models (SearchSpace, CausalGraph, ExperimentLog)
-    engine/              # Experiment loop orchestrator
-    discovery/           # Causal graph learning (correlation, PC, NOTEARS)
-    designer/            # DoE: full/fractional factorial, LHS, screening
-    estimator/           # Treatment effect estimation (difference, bootstrap, AIPW)
-    optimizer/           # Parameter suggestion (exploration → surrogate/Bayesian → local)
-    evolution/           # MAP-Elites population diversity
-    predictor/           # Off-policy evaluation, observation-intervention tradeoff
-    validator/           # Sensitivity analysis (E-values, SNR, robustness)
-    domain_adapters/     # Marketing, ML training (extensible)
-thoughts/                # Research notes, literature review, design rationale
-examples/                # Working examples and benchmarks
-tests/                   # Unit and integration tests
+  engine/          Experiment loop orchestrator
+  optimizer/       Candidate suggestion and reranking
+  predictor/       Off-policy estimation and skip logic
+  validator/       Robustness and sensitivity checks
+  benchmarks/      Predictive, counterfactual, and null-control benchmark support
+  diagnostics/     Profiler and calibration diagnostics
+thoughts/          Plans, prompts, reports, and research notes
+examples/          Small runnable demos
+tests/             Unit and integration coverage
 ```
-
-## Domain adapters
-
-The optimizer is domain-agnostic. Plug in different domains via adapters:
-
-- **Marketing** — campaign optimization, media mix, audience targeting
-- **ML Training** — hyperparameter and architecture optimization
-- **Manufacturing** — process parameter optimization (planned)
-- **Drug Discovery** — compound/dosing optimization (planned)
-
-Each adapter defines a search space, a runner, and optionally a prior causal graph based on domain knowledge.
-
-## Relationship to causal-inference-marketing
-
-This project was originally developed alongside [causal-inference-marketing](https://github.com/datablogin/causal-inference-marketing). The `causal` optional extra now installs [DoWhy](https://github.com/py-why/dowhy) for advanced causal estimators and discovery algorithms. The CI library provides the *analysis* tools; this project provides the *optimization loop* that uses those tools to design and sequence experiments.
-
-Core functionality works without it — built-in bootstrap estimation and correlation-based graphs cover the basics.
-
-## Research
-
-Design rationale, literature review, and exploratory notes are in the [thoughts/](thoughts/) directory.
 
 ## License
 
