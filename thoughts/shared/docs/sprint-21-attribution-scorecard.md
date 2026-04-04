@@ -65,7 +65,7 @@ The A/B artifacts confirm environment lock:
 | botorch | 0.17.2 | 0.17.2 | Yes |
 | torch | 2.10.0 | 2.10.0 | Yes |
 | numpy | 2.4.2 | 2.4.2 | Yes |
-| Dataset hash | `be4af8b3...` | `be4af8b3...` | Yes |
+| Dataset hash | `be4af8b30fd77748...d21d8bf7` | `be4af8b30fd77748...d21d8bf7` | Yes |
 
 Random strategy results are numerically identical on both sides, confirming
 the environment lock is sound.
@@ -148,10 +148,13 @@ candidates are generated at higher budgets).
 | B40 | 55.0 | 0.73 | No |
 | B80 | 48.0 | 0.91 | No |
 
-No budget reaches statistical significance. The non-significance at B80
-reflects the small sample size (10 seeds) relative to the high variance
-on the balanced side (std 5.69). The practical difference is nonetheless
-large: every seed on the alignment-only side achieves regret below 1.0.
+No budget reaches statistical significance. A Wilcoxon signed-rank
+test on the paired per-seed differences (which accounts for the matched
+A/B design) is also non-significant at B80 (W=16.0, p=0.50). The
+non-significance reflects the small sample size (10 seeds) relative to
+the high variance on the balanced side (std 5.69). The practical
+difference is nonetheless large: every seed on the alignment-only side
+achieves regret below 1.0.
 
 ## 4. High-Noise Attribution
 
