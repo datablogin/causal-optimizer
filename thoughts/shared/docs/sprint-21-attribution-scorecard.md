@@ -165,7 +165,7 @@ achieves regret below 1.0.
 | Mean regret | 2.58 | 3.27 |
 | Std | 4.29 | 4.21 |
 | Max | 14.80 | 14.95 |
-| Seeds < 1.0 | 5/10 | 3/10 |
+| Seeds < 1.0 | 7/10 | 5/10 |
 | Seeds > 10 | 1/10 | 1/10 |
 
 On high-noise, balanced is marginally better on mean (-0.69 regret
