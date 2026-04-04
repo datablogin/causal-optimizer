@@ -89,7 +89,7 @@ See Sections 3--5 for details.
 | Mean regret | 3.57 | 0.52 |
 | Std | 5.69 | 0.16 |
 | Max | 14.85 | 0.85 |
-| Seeds < 1.0 | 6/10 | 10/10 |
+| Seeds < 1.0 | 7/10 | 10/10 |
 | Seeds > 10 | 2/10 | 0/10 |
 
 Alignment-only achieves 6.9x lower mean regret, 36x lower standard
