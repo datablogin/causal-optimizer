@@ -28,7 +28,9 @@ Alignment-only re-ranking is confirmed as the correct production default.
 The causal advantage is real and statistically significant on both
 positive-control benchmarks.  However, the bimodal B80 mode (1-3
 catastrophic seeds per 10-seed session) persists across every session
-since Sprint 20 except for one outlier (Sprint 21 alignment-only: 0/10).
+since Sprint 20 except for one unreproduced session (Sprint 21
+alignment-only: 0/10, which should not be treated as operationally
+settled).
 The project now understands the failure well enough to design a targeted
 fix (forced categorical diversity in Ax candidate generation), but that
 fix has not been implemented or tested.
@@ -115,8 +117,11 @@ fix ensures Ax candidate generation is deterministic with respect to
 the top-level seed, simplifying future stability analysis.
 
 The seed-forwarding fix does not eliminate the bimodal failure.  It makes
-the failure reproducible within a session (same seed always fails) rather
-than random across sessions.
+Ax candidate generation deterministic with respect to the top-level seed,
+which should improve within-session reproducibility.  However, it has not
+been proven that identical top-level seeds reproduce identical fail/succeed
+outcomes across fresh sessions (different `.venv` builds, different
+machines).
 
 ### 3c. What the Hardening Proved
 
@@ -192,12 +197,14 @@ generation) and exactly what does not work (PyTorch determinism).
 | S23 hardened | 5.30 | 6.82 | 3/10 | 6/10 |
 
 The S21 alignment-only result (0/10 catastrophic) has not been
-reproduced.  That session ran with unseeded Ax (before the Sprint 23
-seed-forwarding fix), so the 0/10 result is itself an artifact of
-session-level randomness rather than a true signal of stability.
-Typical sessions show 1-3 catastrophic seeds.  The best recent
-session (S23 benchmark: 1/10, mean 1.81) is encouraging but
-represents session-level luck, not a code improvement.
+reproduced in any subsequent session and should not be treated as
+sufficient evidence of operational stability.  That session ran with
+unseeded Ax (before the Sprint 23 seed-forwarding fix), so its
+favorable outcome may reflect session-level randomness rather than
+a fundamentally different code path.  Typical sessions show 1-3
+catastrophic seeds.  The best recent session (S23 benchmark: 1/10,
+mean 1.81) is encouraging but represents session-level variation,
+not a code improvement.
 
 ## 6. Decision
 
