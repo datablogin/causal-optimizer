@@ -348,7 +348,7 @@ class TestBayesianIntegration:
                 "temp": float(rng.uniform(15.0, 25.0)),
                 "hour_start": int(rng.integers(6, 19)),
                 "hour_end": int(rng.integers(18, 24)),
-                "day_filter": rng.choice(["all", "weekday", "weekend"]),
+                "day_filter": str(rng.choice(["all", "weekday", "weekend"])),
             }
             obj = -params["temp"] + params["hour_start"] - params["hour_end"]
             results.append(
