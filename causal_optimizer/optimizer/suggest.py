@@ -1097,3 +1097,29 @@ def _scalarize_log(
             # Negate maximize objectives so the surrogate always minimizes
             scalar += obj.weight * (val if obj.minimize else -val)
         result.metrics[target_name] = scalar
+
+
+def inject_categorical_diversity(
+    candidates: list[dict[str, Any]],
+    search_space: SearchSpace,
+) -> list[dict[str, Any]]:
+    """Ensure every value of every categorical variable appears in the batch.
+
+    For each categorical variable in the search space, checks which of its
+    ``choices`` are missing from the candidate batch.  For each missing value,
+    creates a diversity candidate by copying the first candidate and
+    substituting that categorical value.  Appends diversity candidates to the
+    end of the batch.
+
+    Returns the original list unmodified when no categorical variables exist
+    or all values are already represented.
+
+    Args:
+        candidates: List of candidate parameter dicts (from Ax or other source).
+        search_space: The optimization search space (used to find categorical
+            variables and their choices).
+
+    Returns:
+        The (possibly extended) candidate list.
+    """
+    raise NotImplementedError("inject_categorical_diversity not yet implemented")
