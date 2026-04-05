@@ -32,7 +32,6 @@ from causal_optimizer.types import (
     VariableType,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -105,7 +104,12 @@ def _make_uniform_batch(
 ) -> list[dict[str, Any]]:
     """Create a batch of n candidates all sharing the same categorical value."""
     return [
-        {"temp": 20.0 + i * 0.1, "hour_start": 10, "hour_end": 21, categorical_name: categorical_value}
+        {
+            "temp": 20.0 + i * 0.1,
+            "hour_start": 10,
+            "hour_end": 21,
+            categorical_name: categorical_value,
+        }
         for i in range(n)
     ]
 
@@ -211,15 +215,14 @@ class TestLargeCategoricalDomain:
 
     def test_eight_categories_from_five_candidates(self) -> None:
         ss = _make_search_space_large_categorical()
-        batch = [
-            {"X1": float(i), "color": "red"} for i in range(5)
-        ]
+        batch = [{"X1": float(i), "color": "red"} for i in range(5)]
 
         result = inject_categorical_diversity(batch, ss)
 
         # 8 choices, 1 present -> 7 injected -> total 12
         color_values = {c["color"] for c in result}
-        assert color_values == {"red", "orange", "yellow", "green", "blue", "indigo", "violet", "black"}
+        expected = {"red", "orange", "yellow", "green", "blue", "indigo", "violet", "black"}
+        assert color_values == expected
         assert len(result) == 12
 
     def test_injected_candidates_from_large_domain_have_correct_continuous(self) -> None:
@@ -270,10 +273,7 @@ class TestMultipleCategoricals:
 
     def test_two_categoricals_all_values_covered(self) -> None:
         ss = _make_search_space_two_categoricals()
-        batch = [
-            {"X1": float(i), "day_filter": "weekday", "method": "A"}
-            for i in range(5)
-        ]
+        batch = [{"X1": float(i), "day_filter": "weekday", "method": "A"} for i in range(5)]
 
         result = inject_categorical_diversity(batch, ss)
 
