@@ -354,6 +354,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="b80_diagnostics.json",
         help="Output JSON path",
     )
+    parser.add_argument(
+        "--strategy",
+        default="causal",
+        choices=["causal", "surrogate_only", "random"],
+        help="Optimization strategy (default: causal)",
+    )
     return parser.parse_args(argv)
 
 
@@ -371,7 +377,7 @@ def main() -> None:
 
     scenario = DemandResponseScenario(
         covariates=covariates,
-        seed=0,
+        seed=0,  # Fixed: all optimizer seeds see the same synthetic problem instance.
         treatment_cost=60.0,
     )
 
@@ -379,7 +385,7 @@ def main() -> None:
     for seed in seeds:
         logger.info("Running instrumented benchmark: seed=%d budget=%d", seed, args.budget)
         t0 = time.perf_counter()
-        result = run_instrumented(scenario, args.budget, seed, "causal")
+        result = run_instrumented(scenario, args.budget, seed, args.strategy)
         elapsed = time.perf_counter() - t0
         logger.info(
             "  seed=%d regret=%.4f best_at_step=%d (%.1fs)",

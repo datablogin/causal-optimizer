@@ -383,8 +383,7 @@ lock-in on `treat_day_filter`.
 | `s23_b80_diagnostics.json` | Instrumented per-step trajectories for all 10 seeds |
 | `scripts/b80_seed_diagnostics.py` | Diagnostic instrumentation script |
 
-Artifact JSON files stored in machine-local directory:
-`/Users/robertwelborn/Projects/_local/causal-optimizer/artifacts/`.
+Artifact JSON files are available on request (not committed to the repository).
 
 ## 9. Recommendation
 
