@@ -15,11 +15,12 @@ The catastrophic B80 failure mode has a single, clear signature:
 never escapes to `"all"`**.  This noise-dimension lock-in accounts
 for the entire ~14.5 regret gap between good and bad seeds.
 
-The failure is not in Ax candidate generation, not in the alignment-only
-re-ranking, and not in the evaluation.  It is a categorical-variable
-exploration failure: once the optimizer commits to `weekday` as its
-best-so-far filter, neither Ax nor the exploitation phase generates
-enough `all`-filter candidates to displace it.  The training-set
+The failure is in Ax candidate generation — specifically, categorical
+variable exploration.  The alignment-only re-ranking is neutral on the
+noise dimension, and the evaluation itself is correct.  The root cause
+is that once the optimizer commits to `weekday` as its best-so-far
+filter, Ax does not generate enough `all`-filter candidates to displace
+it, and the exploitation phase inherits the same lock-in.  The training-set
 objective for `weekday` is misleadingly competitive (-24 vs -33 for
 `all`) because the 80/20 opt/test split has a different weekday/weekend
 ratio than the test set, masking the ~14 regret penalty.
