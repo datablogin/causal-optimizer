@@ -667,6 +667,12 @@ def _suggest_bayesian(
     for _ in range(n_candidates):
         candidates.append(optimizer.suggest())
 
+    # Sprint 24: inject diversity candidates so every value of every
+    # categorical variable appears in the batch.  This prevents the
+    # GP model's categorical preference from locking out alternatives
+    # (e.g., treat_day_filter="weekday" excluding "all").
+    candidates = inject_categorical_diversity(candidates, search_space)
+
     # If no ancestors or no best params, just return the first candidate
     if not ancestor_names or not best_params:
         return candidates[0]
@@ -1122,4 +1128,41 @@ def inject_categorical_diversity(
     Returns:
         The (possibly extended) candidate list.
     """
-    raise NotImplementedError("inject_categorical_diversity not yet implemented")
+    if not candidates:
+        return candidates
+
+    # Find categorical variables with choices
+    cat_vars = [
+        v
+        for v in search_space.variables
+        if v.variable_type == VariableType.CATEGORICAL and v.choices
+    ]
+
+    if not cat_vars:
+        return candidates
+
+    # For each categorical variable, find which values are missing
+    any_missing = False
+    missing_per_var: list[tuple[Variable, list[Any]]] = []
+    for var in cat_vars:
+        present_values = {c.get(var.name) for c in candidates}
+        choices = var.choices or []
+        missing = [v for v in choices if v not in present_values]
+        missing_per_var.append((var, missing))
+        if missing:
+            any_missing = True
+
+    if not any_missing:
+        return candidates
+
+    # Inject diversity candidates: copy the first candidate, substitute
+    # the missing categorical value.  One new candidate per missing value
+    # per categorical variable.
+    base = candidates[0]
+    for var, missing_values in missing_per_var:
+        for value in missing_values:
+            diversity_candidate = dict(base)
+            diversity_candidate[var.name] = value
+            candidates.append(diversity_candidate)
+
+    return candidates
