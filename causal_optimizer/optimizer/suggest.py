@@ -667,15 +667,18 @@ def _suggest_bayesian(
     for _ in range(n_candidates):
         candidates.append(optimizer.suggest())
 
+    # If no ancestors or no best params, just return the first candidate
+    if not ancestor_names or not best_params:
+        return candidates[0]
+
     # Sprint 24: inject diversity candidates so every value of every
     # categorical variable appears in the batch.  This prevents the
     # GP model's categorical preference from locking out alternatives
     # (e.g., treat_day_filter="weekday" excluding "all").
+    # Placed after the early-return guard because diversity candidates
+    # are only useful when the alignment-only reranker has ancestors
+    # to score by.
     candidates = inject_categorical_diversity(candidates, search_space)
-
-    # If no ancestors or no best params, just return the first candidate
-    if not ancestor_names or not best_params:
-        return candidates[0]
 
     return _rerank_alignment_only(
         candidates,
@@ -1118,7 +1121,12 @@ def inject_categorical_diversity(
     end of the batch.
 
     Returns the original list unmodified when no categorical variables exist
-    or all values are already represented.
+    or all values are already represented.  When injection occurs, a new
+    list is returned (the input list is not mutated).
+
+    Note: the base for diversity candidates is ``candidates[0]`` — the first
+    in Ax generation order, not necessarily the candidate with the highest
+    acquisition value (Ax does not guarantee ordering).
 
     Args:
         candidates: List of candidate parameter dicts (from Ax or other source).
@@ -1126,7 +1134,8 @@ def inject_categorical_diversity(
             variables and their choices).
 
     Returns:
-        The (possibly extended) candidate list.
+        A new list with diversity candidates appended, or the original list
+        if no injection was needed.
     """
     if not candidates:
         return candidates
@@ -1155,14 +1164,17 @@ def inject_categorical_diversity(
     if not any_missing:
         return candidates
 
-    # Inject diversity candidates: copy the first candidate, substitute
-    # the missing categorical value.  One new candidate per missing value
-    # per categorical variable.
-    base = candidates[0]
+    # Inject diversity candidates: copy the first Ax candidate (the first
+    # in generation order — Ax does not guarantee acquisition-value
+    # ordering), substitute the missing categorical value.  One new
+    # candidate per missing value per categorical variable.
+    # Work on a copy to avoid mutating the caller's list.
+    expanded = list(candidates)
+    base = expanded[0]
     for var, missing_values in missing_per_var:
         for value in missing_values:
             diversity_candidate = dict(base)
             diversity_candidate[var.name] = value
-            candidates.append(diversity_candidate)
+            expanded.append(diversity_candidate)
 
-    return candidates
+    return expanded

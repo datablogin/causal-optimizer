@@ -379,3 +379,36 @@ class TestBayesianIntegration:
         assert result["day_filter"] in ["all", "weekday", "weekend"]
         for v in ss.variables:
             assert v.name in result
+
+
+class TestInjectCategoricalDiversityNoMutation:
+    """inject_categorical_diversity must not mutate the input list."""
+
+    def test_input_list_unchanged_after_injection(self) -> None:
+        ss = SearchSpace(
+            variables=[
+                Variable(
+                    name="x",
+                    variable_type=VariableType.CONTINUOUS,
+                    lower=0.0,
+                    upper=1.0,
+                ),
+                Variable(
+                    name="cat",
+                    variable_type=VariableType.CATEGORICAL,
+                    choices=["a", "b", "c"],
+                ),
+            ]
+        )
+        candidates = [{"x": 0.5, "cat": "a"}, {"x": 0.6, "cat": "a"}]
+        original_len = len(candidates)
+
+        result = inject_categorical_diversity(candidates, ss)
+
+        # Input list should not be mutated
+        assert len(candidates) == original_len, (
+            f"Input list was mutated: {len(candidates)} != {original_len}"
+        )
+        # Result should be a new, longer list
+        assert len(result) > original_len
+        assert result is not candidates
