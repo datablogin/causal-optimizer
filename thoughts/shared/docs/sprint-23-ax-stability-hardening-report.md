@@ -24,11 +24,13 @@ seeds with mean regret 4.56 (worse than Sprint 22's 2.45).  The
 hardening also imposed a significant runtime penalty due to
 single-threaded BLAS operations.
 
-**Verdict: NO IMPROVEMENT.**  The hardening should not be kept.
+**Verdict: NO IMPROVEMENT.**  The PyTorch determinism hardening has been
+reverted per Section 9's recommendation.  Only the seed-forwarding bug
+fix is retained.
 
 ## 2. Code Changes
 
-### 2a. Seed Forwarding (suggest.py)
+### 2a. Seed Forwarding (suggest.py) -- RETAINED
 
 Previously, `_suggest_bayesian()` did not accept or forward a `seed`
 parameter, even though the caller (`_suggest_optimization`) had a
@@ -40,17 +42,15 @@ The fix adds a `seed` parameter to `_suggest_bayesian()` and passes
 `step_seed` from the call site, which is then forwarded to
 `AxBayesianOptimizer(seed=...)`.
 
-### 2b. PyTorch Determinism (bayesian.py)
+### 2b. PyTorch Determinism (bayesian.py) -- REVERTED
 
-Added `_set_torch_deterministic(seed)` which, when a seed is provided:
-
-1. Calls `torch.manual_seed(seed)` before each AxClient operation
-2. Enables `torch.use_deterministic_algorithms(True, warn_only=True)`
-3. Sets `CUBLAS_WORKSPACE_CONFIG=:4096:8` for deterministic GPU ops
-4. Limits `torch.set_num_threads(1)` to eliminate BLAS thread jitter
-
-The function is called both at `AxBayesianOptimizer.__init__()` and
-before each `suggest()` call (with a unique per-call derived seed).
+The `_set_torch_deterministic(seed)` function was tested but produced
+worse results on both benchmarks and imposed a significant runtime
+penalty.  The function and all call sites have been removed per this
+report's recommendation (see Section 9).  The code mutated process-wide
+state (`torch.use_deterministic_algorithms`, `torch.set_num_threads(1)`,
+`os.environ["CUBLAS_WORKSPACE_CONFIG"]`) without cleanup, which posed
+additional risk to other PyTorch code in the same process.
 
 ### 2c. Test Results
 
@@ -158,25 +158,27 @@ High-noise B80 also worsened.  The catastrophic seed count went from
 
 ## 5. Null Control
 
-The null control benchmark was running at the time of this report but
-had not completed due to the significant runtime penalty from
-single-threaded BLAS operations.  Based on Sprint 22 precedent (max
-strategy difference 0.23%, well within the 2% threshold), the null
-control is expected to remain clean.  The hardening changes affect only
-the randomness of Ax candidate generation, which cannot create false
-signal on permuted data where all strategies converge to the same ridge
-predictor.
+The null control benchmark had not completed at the time of the initial
+report due to the significant runtime penalty from single-threaded BLAS
+operations.  Since the PyTorch determinism settings have been reverted,
+the null control is no longer affected by the runtime penalty.  Based on
+Sprint 22 precedent (max strategy difference 0.23%, well within the 2%
+threshold), the null control is expected to remain clean.  The retained
+seed-forwarding change affects only the seeding of Ax candidate
+generation, which cannot create false signal on permuted data where all
+strategies converge to the same ridge predictor.
 
-**Expected verdict: PASS** (pending final confirmation).
+**Verdict: NOT YET CONFIRMED** -- expected PASS based on Sprint 22
+precedent, but not independently verified for this change.
 
 ## 6. Runtime Impact
 
-The `torch.set_num_threads(1)` setting imposed a significant runtime
-penalty.  Each causal B80 run took noticeably longer due to
-single-threaded Cholesky decompositions in GPyTorch.  The total
-benchmark suite runtime was substantially longer than Sprint 22,
-making the hardening unsuitable for production even if it had improved
-stability.
+The `torch.set_num_threads(1)` setting (now reverted) imposed a
+significant runtime penalty.  Each causal B80 run took noticeably longer
+due to single-threaded Cholesky decompositions in GPyTorch.  The total
+benchmark suite runtime was substantially longer than Sprint 22.  This
+was one of the factors in the decision to revert the determinism
+settings.
 
 ## 7. Answers to Must-Answer Questions
 
@@ -200,16 +202,17 @@ Catastrophic seeds increased from 1/10 to 2/10.
 
 ### Q4: Did null control stay clean?
 
-**Expected yes** based on Sprint 22 precedent.  The null control was
-running at report time.
+**Not yet confirmed.**  Expected PASS based on Sprint 22 precedent, but
+the null control was not completed before the determinism settings were
+reverted.
 
 ### Q5: Should the change be kept?
 
-**No.**  The hardening produced worse results on both benchmarks and
-imposed a significant runtime penalty.  The changes should be reverted
-before merging.  However, the seed-forwarding fix (passing `step_seed`
-to `_suggest_bayesian`) is a legitimate bug fix that should be
-retained in a separate commit without the PyTorch determinism settings.
+**Partially.**  The PyTorch determinism hardening has been reverted --
+it produced worse results on both benchmarks and imposed a significant
+runtime penalty.  The seed-forwarding fix (passing `step_seed` to
+`_suggest_bayesian`) is retained as a legitimate bug fix that ensures
+Ax seed propagation is consistent with the rest of the codebase.
 
 ## 8. Interpretation
 
@@ -245,12 +248,13 @@ is deterministic with respect to the top-level seed.
 
 1. **Do not keep the PyTorch determinism settings.**  They worsen
    results and impose a runtime penalty without addressing the root
-   cause of B80 instability.
+   cause of B80 instability.  *Status: DONE -- reverted.*
 
 2. **Keep the seed-forwarding fix** (`_suggest_bayesian` now accepts
    and forwards `seed` to `AxBayesianOptimizer`) in a separate commit.
    This is a correct bug fix that ensures Ax seed propagation is
    consistent, even though it does not solve the bimodal failure.
+   *Status: DONE -- retained.*
 
 3. **The B80 bimodal failure is not reducible by PyTorch-level
    determinism.**  Future attempts to address it should look at the
@@ -264,7 +268,7 @@ is deterministic with respect to the top-level seed.
 |------|-------------|
 | `s23_hardened_base.json` | Base counterfactual, 10 seeds, hardened Ax |
 | `s23_hardened_high_noise.json` | High-noise counterfactual, 10 seeds, hardened Ax |
-| `s23_hardened_null.json` | Null control, 3 seeds, hardened Ax (pending) |
+| `s23_hardened_null.json` | Null control, 3 seeds, hardened Ax (incomplete) |
 
 Artifact files are stored in a machine-local directory (not committed
 to the repository):
