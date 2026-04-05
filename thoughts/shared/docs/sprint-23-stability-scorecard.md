@@ -76,11 +76,11 @@ produced different catastrophic seeds:
 
 | Session | Catastrophic Seeds | Count |
 |---------|-------------------|-------|
-| Sprint 20 (pre-Ax fix) | 0,1,2,4,5,8 | 6/10 |
-| Sprint 20 (post-Ax fix) | 1,4 | 2/10 |
-| Sprint 21 (balanced) | 8,9 | 2/10 |
-| Sprint 21 (align-only) | -- | 0/10 |
-| Sprint 22 | 3,9 | 2/10 |
+| S20 (pre-Ax fix) | 0,1,2,4,5,8 | 6/10 |
+| S20 (post-Ax fix) | 1,4 | 2/10 |
+| S21 (balanced) | 8,9 | 2/10 |
+| S21 (align-only) | -- | 0/10 |
+| S22 | 3,9 | 2/10 |
 | S23 diagnostic | 2,8 | 2/10 |
 | S23 benchmark | 9 | 1/10 |
 | S23 hardened | 3,8,9 | 3/10 |
@@ -145,7 +145,10 @@ The null control has passed in every session since Sprint 18:
 | S20 | 6.50 | 0.20% | PASS |
 | S21 A/B | 5.81 | 0.18% | PASS |
 | S22 | 7.36 | 0.23% | PASS |
-| S23 | -- | 0.2% | PASS |
+| S23 | n/a* | 0.2% | PASS |
+
+*S23 null control used a reduced slice (budgets 20,40; seeds 0,1,2)
+for confirmation only; raw MAE difference was not recorded.
 
 No strategy shows consistent improvement on permuted data.  The null
 control safety gate remains solid.
@@ -189,8 +192,11 @@ generation) and exactly what does not work (PyTorch determinism).
 | S23 hardened | 5.30 | 6.82 | 3/10 | 6/10 |
 
 The S21 alignment-only result (0/10 catastrophic) has not been
-reproduced.  Typical sessions show 1-3 catastrophic seeds.  The best
-recent session (S23 benchmark: 1/10, mean 1.81) is encouraging but
+reproduced.  That session ran with unseeded Ax (before the Sprint 23
+seed-forwarding fix), so the 0/10 result is itself an artifact of
+session-level randomness rather than a true signal of stability.
+Typical sessions show 1-3 catastrophic seeds.  The best recent
+session (S23 benchmark: 1/10, mean 1.81) is encouraging but
 represents session-level luck, not a code improvement.
 
 ## 6. Decision
@@ -239,12 +245,17 @@ stability sweep.**
 Concrete plan:
 
 1. **Implement forced categorical diversity in Ax candidate generation.**
-   When generating the 5 candidates for re-ranking, ensure at least one
+   When generating candidates for re-ranking, ensure at least one
    candidate uses each value of each categorical variable.  This
    guarantees the optimizer always considers `all` vs `weekday` vs
    `weekend` and prevents the GP model's categorical preference from
    excluding alternatives.  This is the change identified by the
    diagnostics report as most likely to eliminate the catastrophic mode.
+   Note: with 3 categorical values and a 5-candidate batch, this
+   reserves 3/5 slots for diversity, leaving only 2 for the GP's
+   preferred candidates.  If this proves too constraining, increasing
+   the batch size (e.g., to 7) would restore the GP's influence while
+   maintaining categorical coverage.
 
 2. **Rerun the 10-seed base counterfactual benchmark.**  Success
    criterion: 0/10 catastrophic seeds (regret > 10), mean regret < 2.0,
