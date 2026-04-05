@@ -215,7 +215,7 @@ dimension (neither helping nor hurting the categorical lock-in).
 clear, untested fix.  Expanding to new benchmark families before
 implementing the categorical diversity fix would mean:
 
-1. Running new benchmarks with a known ~15-30% catastrophic-seed rate
+1. Running new benchmarks with a known ~10-30% catastrophic-seed rate
 2. Being unable to distinguish new-benchmark instability from the
    existing categorical lock-in issue
 3. Potentially attributing benchmark failures to wrong causes
