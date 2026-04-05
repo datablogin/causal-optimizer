@@ -477,6 +477,7 @@ def _suggest_optimization(
             pomis_sets=pomis_sets,
             causal_softness=causal_softness,
             causal_graph=causal_graph,
+            seed=step_seed,
         )
     except ImportError:
         logger.info("Ax/BoTorch not available, using surrogate-guided sampling")
@@ -577,6 +578,7 @@ def _suggest_bayesian(
     pomis_sets: list[frozenset[str]] | None = None,
     causal_softness: float = 0.5,
     causal_graph: CausalGraph | None = None,
+    seed: int | None = None,
 ) -> dict[str, Any]:
     """Bayesian optimization via Ax/BoTorch using :class:`AxBayesianOptimizer`.
 
@@ -635,6 +637,7 @@ def _suggest_bayesian(
         minimize=minimize,
         focus_variables=ax_focus,
         pomis_prior=pomis_sets,
+        seed=seed,
     )
 
     # Feed historical data into the optimizer (O(N) replay — see Notes above)
