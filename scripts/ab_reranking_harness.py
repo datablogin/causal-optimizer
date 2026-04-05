@@ -1,5 +1,12 @@
 """Local-only A/B harness for Sprint 21 reranking comparison.
 
+.. deprecated:: Sprint 22
+   The ``CAUSAL_OPT_RERANKING_MODE`` env-var toggle was removed in Sprint 22
+   after the Sprint 21 A/B comparison showed alignment-only re-ranking is
+   equal or better.  This script is retained for historical reference but is
+   **no longer functional** — running it will use alignment-only on both sides,
+   producing identical A and B outputs.
+
 Runs the counterfactual or null benchmark twice in the same interpreter
 session — once with balanced re-ranking (default) and once with
 alignment-only re-ranking (via env var) — to eliminate environment drift.

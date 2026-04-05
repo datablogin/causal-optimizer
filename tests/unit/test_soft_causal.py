@@ -18,7 +18,6 @@ from causal_optimizer.engine.loop import ExperimentEngine
 from causal_optimizer.optimizer.suggest import (
     _causal_alignment_score,
     _get_targeted_ratio,
-    _predict_objective_quality,
     _score_candidate_causal_exploration,
     _suggest_bayesian,
     _suggest_exploration,
@@ -548,82 +547,13 @@ def test_bayesian_soft_causal_uses_all_variables() -> None:
         )
 
 
-# ---- Sprint 20: Balanced Ax Re-Ranking Tests ----
+# ---- Ax Re-Ranking Tests ----
 
 
-def test_bayesian_balanced_reranking_uses_objective_quality() -> None:
-    """Balanced re-ranking should use BOTH objective quality and causal alignment.
-
-    With causal_softness=0.0, the composite score should pick purely on
-    objective quality (the RF prediction), ignoring alignment.  With a
-    moderate softness, alignment should influence the pick.  If the old
-    alignment-only code is still in place, causal_softness=0.0 would make
-    ALL candidates score identically (0 * alignment = 0), so the function
-    would just return the first candidate -- NOT the one with the best
-    predicted objective.
-
-    This test verifies that with causal_softness=0.0, the Ax path still
-    makes a quality-based choice (not just returning candidates[0]).
-    """
-    ax = pytest.importorskip("ax", reason="ax-platform required")  # noqa: F841
-
-    ss = _make_search_space_5d()
-    graph = _make_causal_graph()
-
-    # With causal_softness=0.0, the result should be driven by objective quality,
-    # not alignment.  Run multiple seeds and collect results.
-    results_softness_zero: list[dict[str, Any]] = []
-    results_softness_mid: list[dict[str, Any]] = []
-
-    for seed_offset in range(3):
-        trial_log = _make_experiment_log(n=20, seed=42 + seed_offset)
-        r0 = _suggest_bayesian(
-            ss,
-            trial_log,
-            minimize=True,
-            objective_name="objective",
-            focus_variables=["X1", "X2", "X3"],
-            causal_softness=0.0,
-            causal_graph=graph,
-        )
-        results_softness_zero.append(r0)
-
-        r_mid = _suggest_bayesian(
-            ss,
-            trial_log,
-            minimize=True,
-            objective_name="objective",
-            focus_variables=["X1", "X2", "X3"],
-            causal_softness=0.8,
-            causal_graph=graph,
-        )
-        results_softness_mid.append(r_mid)
-
-    # At least one seed should produce different results between softness=0.0
-    # (pure objective) and softness=0.8 (blended) -- if the implementation
-    # actually uses both terms.
-    any_differ = False
-    for r0, rm in zip(results_softness_zero, results_softness_mid, strict=True):
-        for v in ss.variable_names:
-            if abs(r0[v] - rm[v]) > 0.01:
-                any_differ = True
-                break
-        if any_differ:
-            break
-
-    assert any_differ, (
-        "With balanced scoring, changing causal_softness from 0.0 to 0.8 should "
-        "change the selected candidate for at least one seed"
-    )
-
-
-def test_bayesian_softness_zero_favors_objective() -> None:
-    """With causal_softness=0.0, the Ax path should pick based on predicted
-    objective quality only (no causal alignment influence).
-
-    The key invariant: the composite score with w=0 should equal a pure
-    objective-quality score.  If the old alignment-only code is used, w=0
-    makes the score constant (all candidates score 0), which is wrong.
+def test_bayesian_softness_zero_returns_valid_candidate() -> None:
+    """With causal_softness=0.0, alignment-only scores are all zero so the
+    first Ax candidate is returned.  The candidate should still be valid
+    since Ax already optimizes the objective.
     """
     ax = pytest.importorskip("ax", reason="ax-platform required")  # noqa: F841
 
@@ -631,7 +561,7 @@ def test_bayesian_softness_zero_favors_objective() -> None:
     graph = _make_causal_graph()
     log = _make_experiment_log(n=20)
 
-    # Run with causal_softness=0.0 (pure objective quality)
+    # Run with causal_softness=0.0 — alignment-only scores all zero, first Ax candidate returned
     result = _suggest_bayesian(
         ss,
         log,
@@ -646,18 +576,14 @@ def test_bayesian_softness_zero_favors_objective() -> None:
     for v in ss.variables:
         assert v.name in result, f"Missing variable {v.name}"
 
-    # The selected candidate should have a reasonable objective prediction.
-    # Since we're minimizing X1+X2+X3, the suggested params should tend toward
-    # lower values for ancestor variables (not just the candidate with highest
-    # alignment).  We can't assert exact values since Ax is stochastic, but
-    # the sum of ancestor values should be in the lower half of the range.
+    # Since Ax is already minimizing X1+X2+X3, the first candidate should
+    # have a reasonable ancestor sum even without alignment re-ranking.
     ancestor_sum = result["X1"] + result["X2"] + result["X3"]
-    # Max possible sum = 30 (10+10+10), min = 0.  Lower half means < 15.
-    # With 20 observations of a simple linear function, the RF should predict
-    # well enough that the selected candidate is in the lower half.
+    # Max possible sum = 30 (10+10+10), min = 0.
+    # Ax-generated candidates should be in a reasonable range.
     assert ancestor_sum < 20.0, (
-        f"With softness=0.0 (pure objective), ancestor sum should be low for "
-        f"minimization, got {ancestor_sum:.2f}"
+        f"With softness=0.0, Ax candidate ancestor sum should be reasonable "
+        f"for minimization, got {ancestor_sum:.2f}"
     )
 
 
@@ -697,140 +623,7 @@ def test_bayesian_no_graph_unchanged_by_softness() -> None:
         )
 
 
-def test_bayesian_balanced_score_differentiates_candidates() -> None:
-    """The balanced composite score should actually differentiate among
-    Ax candidates by blending objective quality with alignment.
-
-    Tests the scoring formula directly via _rerank_candidates_balanced:
-    given fixed candidates with varying quality and alignment, different
-    causal_softness values should pick different winners.
-    """
-    from causal_optimizer.optimizer.suggest import _rerank_candidates_balanced
-
-    ss = _make_search_space_5d()
-    graph = _make_causal_graph()
-    log = _make_experiment_log(n=20)
-
-    best = log.best_result("objective", minimize=True)
-    assert best is not None
-    best_params = dict(best.parameters)
-    ancestors = graph.ancestors("objective")
-    ancestor_names = {v for v in ss.variable_names if v in ancestors}
-
-    # Construct two candidates with different trade-off profiles:
-    # Candidate A: good objective (low ancestor values => low X1+X2+X3)
-    #              but low alignment (close to best)
-    candidate_a = dict(best_params)  # close to best => low alignment
-    candidate_a["X1"] = max(0.0, best_params["X1"] - 0.1)
-    candidate_a["X2"] = max(0.0, best_params["X2"] - 0.1)
-
-    # Candidate B: mediocre objective (higher ancestor values)
-    #              but high alignment (far from best on ancestors)
-    candidate_b = dict(best_params)
-    candidate_b["X1"] = 9.0  # far from best => high alignment
-    candidate_b["X2"] = 8.0
-    candidate_b["X3"] = 9.0
-
-    candidates = [candidate_a, candidate_b]
-
-    # With causal_softness=0.0 (w=0), pure objective quality -> candidate A
-    result_obj = _rerank_candidates_balanced(
-        candidates=candidates,
-        best_params=best_params,
-        ancestor_names=ancestor_names,
-        search_space=ss,
-        experiment_log=log,
-        objective_name="objective",
-        minimize=True,
-        causal_softness=0.0,
-    )
-
-    # With causal_softness=100.0 (w~1), nearly pure alignment -> candidate B
-    result_align = _rerank_candidates_balanced(
-        candidates=candidates,
-        best_params=best_params,
-        ancestor_names=ancestor_names,
-        search_space=ss,
-        experiment_log=log,
-        objective_name="objective",
-        minimize=True,
-        causal_softness=100.0,
-    )
-
-    # The two selections should differ
-    differ = any(abs(result_obj[v] - result_align[v]) > 0.01 for v in ss.variable_names)
-    assert differ, (
-        "Balanced scoring: softness=0 (objective-only) and softness=100 "
-        "(alignment-dominated) should pick different candidates"
-    )
-
-
-# ---- Regression: _predict_objective_quality with crash rows ----
-
-
-def test_predict_objective_quality_with_crash_rows() -> None:
-    """RF quality prediction must handle logs containing crash/missing-objective rows.
-
-    Regression test: a CRASH row with empty metrics must be filtered out
-    before RF training, not cause a fallback to uniform [1.0, ...] scores.
-    """
-    ss = _make_search_space_5d()
-    log = ExperimentLog()
-
-    # Add 5 valid results with a clear pattern: low X1 -> low objective
-    rng = np.random.default_rng(42)
-    for i in range(5):
-        params = {v.name: float(rng.uniform(v.lower, v.upper)) for v in ss.variables}
-        params["X1"] = float(i) * 0.25  # X1 ranges 0.0 to 1.0
-        objective = params["X1"] ** 2 + 0.1  # clear monotone signal
-        log.results.append(
-            ExperimentResult(
-                experiment_id=str(i),
-                parameters=params,
-                metrics={"objective": objective},
-                status=ExperimentStatus.KEEP,
-            )
-        )
-
-    # Add 2 CRASH rows with empty metrics (no objective value)
-    for j in range(2):
-        params = {v.name: float(rng.uniform(v.lower, v.upper)) for v in ss.variables}
-        log.results.append(
-            ExperimentResult(
-                experiment_id=f"crash_{j}",
-                parameters=params,
-                metrics={},
-                status=ExperimentStatus.CRASH,
-            )
-        )
-
-    # Candidates: one with low X1 (should predict low objective) and one with high X1
-    candidate_low = {v.name: 0.5 for v in ss.variables}
-    candidate_low["X1"] = 0.1
-    candidate_high = {v.name: 0.5 for v in ss.variables}
-    candidate_high["X1"] = 0.9
-
-    scores = _predict_objective_quality(
-        candidates=[candidate_low, candidate_high],
-        experiment_log=log,
-        objective_name="objective",
-        search_space=ss,
-        minimize=True,
-    )
-
-    # Scores must NOT be uniform — the RF should differentiate candidates
-    assert len(scores) == 2
-    assert scores[0] != pytest.approx(scores[1], abs=1e-6), (
-        f"Scores are uniform ({scores}) — crash rows likely poisoned RF training"
-    )
-    # For minimization, lower predicted objective -> higher quality score.
-    # candidate_low (X1=0.1) should have higher quality than candidate_high (X1=0.9).
-    assert scores[0] > scores[1], (
-        f"Expected candidate with X1=0.1 to score higher than X1=0.9 (minimize=True), got {scores}"
-    )
-
-
-# ---- Alignment-only re-ranking (A/B harness path) ----
+# ---- Alignment-only re-ranking (production path) ----
 
 
 def test_rerank_alignment_only_prefers_ancestor_variation() -> None:
@@ -874,56 +667,28 @@ def test_rerank_alignment_only_single_candidate() -> None:
     assert result is candidate
 
 
-def test_env_var_alignment_only_mode() -> None:
-    """CAUSAL_OPT_RERANKING_MODE=alignment_only activates alignment-only path."""
-    import os
-    from unittest.mock import patch
+def test_bayesian_alignment_only_is_default_path() -> None:
+    """_suggest_bayesian in soft mode always uses alignment-only re-ranking.
 
-    from causal_optimizer.optimizer.suggest import _rerank_alignment_only
-
-    ss = _make_search_space_5d()
-    graph = _make_causal_graph()
-    ancestor_names = graph.ancestors("objective")
-    best_params = {"X1": 0.5, "X2": 0.5, "X3": 0.5, "X4": 0.5, "X5": 0.5}
-
-    candidate_a = {"X1": 0.9, "X2": 0.9, "X3": 0.9, "X4": 0.5, "X5": 0.5}
-    candidate_b = {"X1": 0.5, "X2": 0.5, "X3": 0.5, "X4": 0.9, "X5": 0.9}
-
-    # Directly call _rerank_alignment_only (the function the env var routes to)
-    # to verify it's callable and produces correct results
-    with patch.dict(os.environ, {"CAUSAL_OPT_RERANKING_MODE": "alignment_only"}):
-        result = _rerank_alignment_only(
-            candidates=[candidate_b, candidate_a],
-            best_params=best_params,
-            ancestor_names=ancestor_names,
-            search_space=ss,
-            causal_softness=0.5,
-        )
-        assert result["X1"] == pytest.approx(0.9)
-
-
-def test_suggest_bayesian_env_var_routes_to_alignment_only() -> None:
-    """_suggest_bayesian with CAUSAL_OPT_RERANKING_MODE=alignment_only uses alignment path."""
+    Sprint 22 removed balanced re-ranking. This test verifies the Ax path
+    returns a valid candidate using alignment-only re-ranking without any
+    env-var toggle.
+    """
     ax = pytest.importorskip("ax")  # noqa: F841
-
-    import os
-    from unittest.mock import patch
 
     ss = _make_search_space_5d()
     graph = _make_causal_graph()
     log = _make_experiment_log(n=15)
 
-    with patch.dict(os.environ, {"CAUSAL_OPT_RERANKING_MODE": "alignment_only"}):
-        result = _suggest_bayesian(
-            ss,
-            log,
-            focus_variables=["X1", "X2", "X3"],
-            minimize=True,
-            objective_name="objective",
-            causal_graph=graph,
-            seed=42,
-            causal_softness=0.5,
-        )
+    result = _suggest_bayesian(
+        ss,
+        log,
+        focus_variables=["X1", "X2", "X3"],
+        minimize=True,
+        objective_name="objective",
+        causal_graph=graph,
+        causal_softness=0.5,
+    )
     # Should return a valid parameter dict with all variables
     assert isinstance(result, dict)
     for v in ss.variable_names:
