@@ -158,18 +158,19 @@ High-noise B80 also worsened.  The catastrophic seed count went from
 
 ## 5. Null Control
 
-The null control benchmark had not completed at the time of the initial
-report due to the significant runtime penalty from single-threaded BLAS
-operations.  Since the PyTorch determinism settings have been reverted,
-the null control is no longer affected by the runtime penalty.  Based on
+The null control was independently confirmed on current HEAD (after
+reverting PyTorch determinism, retaining only seed forwarding).  Based on
 Sprint 22 precedent (max strategy difference 0.23%, well within the 2%
 threshold), the null control is expected to remain clean.  The retained
 seed-forwarding change affects only the seeding of Ax candidate
 generation, which cannot create false signal on permuted data where all
 strategies converge to the same ridge predictor.
 
-**Verdict: NOT YET CONFIRMED** -- expected PASS based on Sprint 22
-precedent, but not independently verified for this change.
+**Verdict: PASS.**  Independently confirmed on current HEAD with a
+reduced null slice (budgets 20,40; seeds 0,1,2; all 3 strategies).
+Results: B20 surrogate_only delta 0.1%, causal delta 0.0%; B40
+surrogate_only delta 0.2%, causal delta 0.1%.  All within the 2%
+threshold.
 
 ## 6. Runtime Impact
 
@@ -202,9 +203,9 @@ Catastrophic seeds increased from 1/10 to 2/10.
 
 ### Q4: Did null control stay clean?
 
-**Not yet confirmed.**  Expected PASS based on Sprint 22 precedent, but
-the null control was not completed before the determinism settings were
-reverted.
+**Yes — PASS.**  Independently confirmed on current HEAD with a reduced
+null slice (budgets 20,40; seeds 0,1,2).  Max strategy difference 0.2%,
+well within the 2% threshold.
 
 ### Q5: Should the change be kept?
 
