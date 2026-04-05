@@ -10,20 +10,24 @@
 
 ## 1. Executive Summary
 
-Sprint 22 reverted balanced Ax re-ranking to alignment-only and confirmed
-that alignment-only re-ranking preserves the strong causal advantage seen
-in Sprint 21's locked A/B test.  The revert was narrow: three functions
-removed (`_rerank_candidates_balanced`, `_predict_objective_quality`,
+Sprint 22 reverted balanced Ax re-ranking to alignment-only and reran
+the benchmark stack.  The revert was narrow: three functions removed
+(`_rerank_candidates_balanced`, `_predict_objective_quality`,
 `_min_max_normalize`), the `CAUSAL_OPT_RERANKING_MODE` env-var toggle
 removed, and `_rerank_alignment_only` made the sole production re-ranking
-path.  912 fast tests pass after the revert.
+path.  951 fast tests pass after the revert.
 
-Benchmark results on the reverted code confirm causal beats surrogate_only
-with statistical significance at all budget levels on the base
-counterfactual, and at B40 and B80 on the high-noise variant.  The null
-control passes cleanly (0.23% max strategy difference).
+Alignment-only remains the better default: causal beats surrogate_only
+directionally at all budgets, with stat sig at B40 and B80.  However,
+the Sprint 22 rerun did **not** cleanly reproduce the strong B80 session
+from Sprint 21's locked A/B (mean 0.52, std 0.16, 10/10 seeds < 1.0).
+Instead, B80 showed mean 3.26, std 5.78, with 2/10 catastrophic seeds
+-- consistent with the bimodal Ax session non-determinism documented
+across Sprints 20-22.  The null control passes (0.23% max diff).
 
-**Verdict: CONFIRMED.**
+**Verdict: MIXED.**  Alignment-only is confirmed as the correct default,
+but the Sprint 21 B80 strength is not yet operationally reproducible
+across sessions.
 
 ## 2. Code Changes
 
@@ -318,23 +322,28 @@ The project can proceed to new benchmark families while monitoring:
 
 ## 8. Verdict
 
-**CONFIRMED.**
+**MIXED.**
 
-Alignment-only re-ranking is the correct production default.  The Sprint
-22 benchmark run -- on reverted code with balanced re-ranking fully removed
--- confirms the causal advantage at every budget level on both the base
-and high-noise counterfactual benchmarks, with statistical significance.
-The null control is clean.  The 2/10 catastrophic seeds on the base
-benchmark are a known Ax session non-determinism artifact, not a code
-regression, as documented across Sprints 20-22.
+Alignment-only re-ranking is confirmed as the correct production default:
+the revert is clean, causal beats surrogate_only directionally at all
+budgets, and the null control passes.  However, the Sprint 22 rerun did
+not reproduce the strong B80 session from Sprint 21's locked A/B
+comparison (mean 0.52 vs 3.26, std 0.16 vs 5.78, 10/10 vs 8/10 seeds
+below 1.0).  The 2/10 catastrophic seeds are consistent with the bimodal
+Ax session non-determinism documented across Sprints 20-22.
+
+The revert decision is sound.  The B80 stability question remains open.
 
 ## 9. Recommendation for Sprint 23
 
-The causal optimizer's core re-ranking path is now stable and confirmed;
-Sprint 23 should expand the benchmark evidence by introducing a new
-benchmark family (e.g., a different data domain or causal structure) to
-test whether the causal advantage generalizes beyond the ERCOT
-counterfactual benchmarks.
+The revert to alignment-only is the right call, but B80 stability is not
+yet operationally settled.  Sprint 23 should stay focused on hardening
+the alignment-only path rather than expanding to new benchmark families.
+Specifically: investigate the bimodal B80 failure mode (2/10 catastrophic
+seeds across multiple sessions), determine whether it is reducible via
+seed-level diagnostics or Ax configuration, and establish a reproducible
+B80 success criterion (e.g., mean < 2.0, std < 3.0, 0 catastrophic
+seeds across 10 runs) before declaring readiness for new benchmarks.
 
 ## 10. Artifacts
 
