@@ -126,18 +126,23 @@ existing categorical lock-in issue.
 | S21 (balanced) | 3.57 | 5.69 | 2/10 | 7/10 | balanced reranking |
 | S21 (align-only) | 0.52 | 0.16 | 0/10 | 10/10 | alignment-only |
 | S22 | 3.26 | 5.78 | 2/10 | 8/10 | alignment-only (revert) |
+| S23 diagnostic* | — | — | 2/10 | — | diagnostic run (PR #122) |
 | S23 benchmark | 1.81 | 4.35 | 1/10 | 9/10 | seed forwarding |
 | S23 hardened | 5.30 | 6.82 | 3/10 | 6/10 | PyTorch determinism (reverted) |
 | **S24** | **5.30** | **6.82** | **3/10** | **6/10** | **categorical diversity** |
+
+*S23 diagnostic was a partial run focused on per-seed parameter analysis
+(see PR #122); mean/std/good-seed counts were not reported in the same
+format but the catastrophic count (seeds 2, 8) was recorded.
 
 The S24 row is numerically identical to S23 hardened because seed
 forwarding makes Ax deterministic per seed and the diversity fix does
 not change which candidate the reranker selects.
 
 The S21 alignment-only result (0/10 catastrophic) remains an unreproduced
-outlier — five subsequent sessions (S22, S23 benchmark, S23 hardened, S23
-diagnostic, S24) all showed 1-3 catastrophic seeds.  Typical sessions show
-1-3 catastrophic seeds.
+outlier — five subsequent sessions shown in the table above (S22, S23
+diagnostic, S23 benchmark, S23 hardened, S24) all showed 1-3 catastrophic
+seeds.
 
 ### 4b. High-Noise B80 (Causal vs Surrogate-Only)
 
