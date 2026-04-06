@@ -15,6 +15,7 @@ import pytest
 from causal_optimizer.benchmarks.dose_response import (
     DoseResponseBenchmarkResult,
     DoseResponseScenario,
+    ProtocolRunner,
     dose_response_effect,
     evaluate_protocol,
 )
@@ -250,10 +251,22 @@ class TestRunBenchmark:
     def test_oracle_value_consistent_across_strategies(
         self, scenario: DoseResponseScenario
     ) -> None:
-        """Oracle value depends only on the data, not the strategy."""
+        """Oracle value depends only on the data, not the strategy.
+
+        Both strategies see the same test split because generate() is
+        deterministic (controlled by self._seed, not the optimizer seed).
+        """
         r1 = scenario.run_benchmark(budget=5, seed=0, strategy="random")
         r2 = scenario.run_benchmark(budget=5, seed=0, strategy="surrogate_only")
         assert r1.oracle_value == pytest.approx(r2.oracle_value, rel=1e-6)
+
+    def test_surrogate_budget_15_reaches_optimization_phase(
+        self, scenario: DoseResponseScenario
+    ) -> None:
+        """Budget=15 exercises the exploration-to-optimization phase transition."""
+        result = scenario.run_benchmark(budget=15, seed=0, strategy="surrogate_only")
+        assert isinstance(result, DoseResponseBenchmarkResult)
+        assert result.regret >= 0.0
 
 
 # ── Test 8: Reproducibility ─────────────────────────────────────────
@@ -275,3 +288,29 @@ class TestReproducibility:
         d1 = s1.generate()
         d2 = s2.generate()
         assert not d1.equals(d2)
+
+
+# ── Test 9: ProtocolRunner sign flip ─────────────────────────────────
+
+
+class TestProtocolRunner:
+    """Verify ProtocolRunner correctly negates policy value for minimization."""
+
+    def test_objective_is_negated_policy_value(self, scenario: DoseResponseScenario) -> None:
+        """The optimizer minimizes objective = -policy_value."""
+        data = scenario.generate()
+        n = len(data)
+        val_data = data.iloc[: int(n * 0.8)].reset_index(drop=True)
+        runner = ProtocolRunner(val_data, scenario.treatment_cost)
+        params = {
+            "dose_level": 0.7,
+            "biomarker_threshold": 0.3,
+            "severity_threshold": 0.3,
+            "bmi_threshold": 0.0,
+            "age_threshold": 0.0,
+            "comorbidity_threshold": 0.0,
+        }
+        metrics = runner.run(params)
+        assert "objective" in metrics
+        assert "policy_value" in metrics
+        assert metrics["objective"] == pytest.approx(-metrics["policy_value"])

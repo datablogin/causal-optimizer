@@ -160,7 +160,7 @@ def _net_benefit(
 ) -> float:
     """Compute average net benefit of a treatment protocol.
 
-    Net benefit = sum over patients of:
+    Average over patients of:
     - If treated: (y0 - y1) - cost = symptom_reduction - cost
     - If untreated: 0
 
@@ -210,7 +210,10 @@ def evaluate_protocol(
     # Core selection: patients with biomarker and severity above thresholds
     treat_mask = (data["biomarker"] >= bio_thresh) & (data["severity"] >= sev_thresh)
 
-    # Noise dimensions (should NOT matter for optimal protocol)
+    # Noise dimensions: these have no causal effect on treatment benefit.
+    # When threshold > 0 they exclude patients (harmful); the optimal protocol
+    # sets all three to 0.  The discontinuity at 0 is intentional: values in
+    # (0, 1] restrict the patient pool while 0 disables filtering entirely.
     if bmi_thresh > 0:
         treat_mask = treat_mask & (data["bmi"] >= bmi_thresh)
     if age_thresh > 0:
@@ -233,7 +236,10 @@ def evaluate_protocol(
     # Policy value: benefit from treating selected patients at this dose
     policy_value = _net_benefit(y0, y1_at_dose, treat_arr, treatment_cost)
 
-    # Decision error: compare against oracle at THIS dose level
+    # Decision error: compare against the oracle at THIS dose level.
+    # Note: this is dose-specific -- a protocol at dose=0.3 is compared
+    # against the optimal selection *at dose=0.3*, not the global oracle
+    # (which uses the reference dose).  Regret captures the full gap.
     oracle_treat = effect_at_dose > treatment_cost
     decision_error = float(np.mean(treat_arr != oracle_treat))
 
@@ -438,10 +444,17 @@ class DoseResponseScenario:
         )
 
     def oracle_policy_value(self, data: pd.DataFrame) -> float:
-        """Compute the value of the oracle protocol.
+        """Compute the value of the oracle protocol at the reference dose.
 
         The oracle treats exactly the patients whose effect at the
-        reference dose exceeds the treatment cost.
+        *reference dose* (``self._reference_dose``, default 0.7) exceeds
+        the treatment cost.  This is the global oracle -- it answers
+        "what is the best achievable benefit at the reference dose?"
+
+        Note: ``evaluate_protocol`` computes decision error against the
+        oracle *at the protocol's chosen dose*, which is a different
+        (dose-specific) quantity.  Regret = oracle_value - policy_value
+        captures the full gap including suboptimal dose selection.
 
         Returns:
             Average net benefit under the oracle protocol.
