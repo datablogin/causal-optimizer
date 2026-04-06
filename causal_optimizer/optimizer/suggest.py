@@ -644,13 +644,24 @@ def _categorical_sweep(
     if len(candidates) == 1:
         return candidates[0]
 
-    # Fit a lightweight RF on experiment history to predict objective
+    # Fit a lightweight RF on experiment history to predict objective.
+    # Filter to rows with a valid (non-NaN) objective value so that CRASH
+    # or partial results don't poison the RF fit.
     from sklearn.ensemble import RandomForestRegressor
 
     df = experiment_log.to_dataframe()
     var_names = [v.name for v in search_space.variables if v.name in df.columns]
 
     if len(var_names) == 0 or len(df) < 5:
+        return None
+
+    # Drop rows where objective is missing or NaN
+    if objective_name not in df.columns:
+        return None
+    valid_mask = df[objective_name].notna()
+    df = df.loc[valid_mask].reset_index(drop=True)
+
+    if len(df) < 5:
         return None
 
     try:
