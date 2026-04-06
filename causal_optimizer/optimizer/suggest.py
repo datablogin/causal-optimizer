@@ -671,6 +671,15 @@ def _suggest_bayesian(
     if not ancestor_names or not best_params:
         return candidates[0]
 
+    # Sprint 24: inject diversity candidates so every value of every
+    # categorical variable appears in the batch.  This prevents the
+    # GP model's categorical preference from locking out alternatives
+    # (e.g., treat_day_filter="weekday" excluding "all").
+    # Placed after the early-return guard because diversity candidates
+    # are only useful when the alignment-only reranker has ancestors
+    # to score by.
+    candidates = inject_categorical_diversity(candidates, search_space)
+
     return _rerank_alignment_only(
         candidates,
         best_params,
@@ -1097,3 +1106,75 @@ def _scalarize_log(
             # Negate maximize objectives so the surrogate always minimizes
             scalar += obj.weight * (val if obj.minimize else -val)
         result.metrics[target_name] = scalar
+
+
+def inject_categorical_diversity(
+    candidates: list[dict[str, Any]],
+    search_space: SearchSpace,
+) -> list[dict[str, Any]]:
+    """Ensure every value of every categorical variable appears in the batch.
+
+    For each categorical variable in the search space, checks which of its
+    ``choices`` are missing from the candidate batch.  For each missing value,
+    creates a diversity candidate by copying the first candidate and
+    substituting that categorical value.  Appends diversity candidates to the
+    end of the batch.
+
+    Returns the original list unmodified when no categorical variables exist
+    or all values are already represented.  When injection occurs, a new
+    list is returned (the input list is not mutated).
+
+    Note: the base for diversity candidates is ``candidates[0]`` — the first
+    in Ax generation order, not necessarily the candidate with the highest
+    acquisition value (Ax does not guarantee ordering).
+
+    Args:
+        candidates: List of candidate parameter dicts (from Ax or other source).
+        search_space: The optimization search space (used to find categorical
+            variables and their choices).
+
+    Returns:
+        A new list with diversity candidates appended, or the original list
+        if no injection was needed.
+    """
+    if not candidates:
+        return candidates
+
+    # Find categorical variables with choices
+    cat_vars = [
+        v
+        for v in search_space.variables
+        if v.variable_type == VariableType.CATEGORICAL and v.choices
+    ]
+
+    if not cat_vars:
+        return candidates
+
+    # For each categorical variable, find which values are missing
+    any_missing = False
+    missing_per_var: list[tuple[Variable, list[Any]]] = []
+    for var in cat_vars:
+        present_values = {c.get(var.name) for c in candidates}
+        choices = var.choices or []
+        missing = [v for v in choices if v not in present_values]
+        missing_per_var.append((var, missing))
+        if missing:
+            any_missing = True
+
+    if not any_missing:
+        return candidates
+
+    # Inject diversity candidates: copy the first Ax candidate (the first
+    # in generation order — Ax does not guarantee acquisition-value
+    # ordering), substitute the missing categorical value.  One new
+    # candidate per missing value per categorical variable.
+    # Work on a copy to avoid mutating the caller's list.
+    expanded = list(candidates)
+    base = expanded[0]
+    for var, missing_values in missing_per_var:
+        for value in missing_values:
+            diversity_candidate = dict(base)
+            diversity_candidate[var.name] = value
+            expanded.append(diversity_candidate)
+
+    return expanded
