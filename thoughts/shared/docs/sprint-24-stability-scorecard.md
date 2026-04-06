@@ -85,8 +85,12 @@ deterministic seed forwarding, the identical seeds fail identically.
 
 **Yes, at B40 and B80.**  Causal wins 9/10 at B40 (two-sided p=0.014) and
 7/10 at B80 (two-sided p=0.037).  B20 is marginal (7/10 wins, two-sided
-p=0.062).  Surrogate-only is catastrophic on 7/10 seeds at B80 (mean
-15.30) while causal is catastrophic on only 2/10 (mean 4.56).
+p=0.062; one-sided p=0.031).  Surrogate-only is catastrophic on 7/10 seeds
+at B80 (mean 15.30) while causal is catastrophic on only 2/10 (mean 4.56).
+All p-values use the directional hypothesis H_a: causal regret <
+surrogate_only regret.  Two-sided values are reported as the conservative
+default; one-sided values are justified by prior Sprint 19-23 evidence
+(see post-fix report PR #129 section 4c for both).
 
 ### 3d. Did null control remain clean?
 
@@ -131,7 +135,9 @@ forwarding makes Ax deterministic per seed and the diversity fix does
 not change which candidate the reranker selects.
 
 The S21 alignment-only result (0/10 catastrophic) remains an unreproduced
-outlier.  Typical sessions show 1-3 catastrophic seeds.
+outlier — five subsequent sessions (S22, S23 benchmark, S23 hardened, S23
+diagnostic, S24) all showed 1-3 catastrophic seeds.  Typical sessions show
+1-3 catastrophic seeds.
 
 ### 4b. High-Noise B80 (Causal vs Surrogate-Only)
 
@@ -282,7 +288,8 @@ optimization with categorical variables and shifting focus to:
 Sprint 25 is successful if either:
 
 1. The exploitation-phase fix reduces catastrophic seeds to 0/10 and meets
-   the stability gate (mean < 2.0, std < 3.0), OR
+   the stability gate (mean < 2.0, std < 3.0 — targets set in Sprint 24
+   recommendation plan `15-sprint-24-recommendation.md`), OR
 2. The project explicitly accepts the bimodal mode, implements multi-seed
    ensembling, and demonstrates that the ensemble approach eliminates
    catastrophic outcomes at the cost of additional compute
