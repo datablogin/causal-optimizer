@@ -61,6 +61,8 @@ _PARENT_WEIGHT = 0.7
 _NON_PARENT_WEIGHT = 0.3
 #: Continuous perturbation scale for exploitation (fixed 10% of range).
 _EXPLOITATION_SCALE = 0.1
+#: Default period for categorical sweep during exploitation (every N-th step).
+_CATEGORICAL_SWEEP_PERIOD = 5
 #: Continuous perturbation scale range for targeted candidates (10-30% of range).
 _TARGETED_SCALE_RANGE = (0.1, 0.3)
 #: Seed offset (prime) for targeted candidate generation to avoid LHS seed collision.
@@ -502,6 +504,7 @@ def _suggest_exploitation(
     base_parameters: dict[str, Any] | None = None,
     causal_graph: CausalGraph | None = None,
     seed: int | None = None,
+    categorical_sweep_period: int = _CATEGORICAL_SWEEP_PERIOD,
 ) -> dict[str, Any]:
     """Exploitation: perturb the best known configuration or a provided base.
 
@@ -512,6 +515,12 @@ def _suggest_exploitation(
     When *causal_graph* is provided, perturbation is biased toward direct
     parents of the objective (parents are weighted 7:3 over non-parents
     before normalization).
+
+    Sprint 25 categorical sweep: every *categorical_sweep_period* exploitation
+    steps, instead of the normal 1-2-variable perturbation, generate one
+    candidate per categorical value (holding continuous parameters at the
+    incumbent) and return the best by RF-predicted objective.  This gives
+    bad seeds a guaranteed opportunity to escape categorical lock-in.
     """
     if base_parameters is not None:
         params = dict(base_parameters)
@@ -522,6 +531,28 @@ def _suggest_exploitation(
         params = dict(best.parameters)
 
     rng = np.random.default_rng(seed)
+
+    # Sprint 25: periodic categorical sweep.
+    # step_count uses total log length (all phases), not exploitation-only steps.
+    # With default phase boundaries (exploitation starts at step 50) and period=5,
+    # the sweep fires on steps 50, 55, 60, 65, 70, 75 — giving 6 sweep
+    # opportunities across 30 exploitation steps.  This coupling is acceptable
+    # because the period is short enough that small shifts in phase boundaries
+    # do not meaningfully change the sweep frequency.
+    step_count = len(experiment_log.results)
+    cat_vars = [
+        v
+        for v in search_space.variables
+        if v.variable_type == VariableType.CATEGORICAL and v.choices
+    ]
+    if cat_vars and categorical_sweep_period > 0 and step_count % categorical_sweep_period == 0:
+        sweep_result = _categorical_sweep(
+            params, cat_vars, search_space, experiment_log, objective_name, minimize, rng
+        )
+        if sweep_result is not None:
+            return sweep_result
+
+    # --- Normal perturbation path (unchanged from Sprint 24) ---
 
     # Determine which variables are eligible for perturbation
     if focus_variables:
@@ -567,6 +598,97 @@ def _suggest_exploitation(
         _perturb_variable(params, var, rng, continuous_scale=_EXPLOITATION_SCALE)
 
     return params
+
+
+def _categorical_sweep(
+    incumbent: dict[str, Any],
+    cat_vars: list[Variable],
+    search_space: SearchSpace,
+    experiment_log: ExperimentLog,
+    objective_name: str,
+    minimize: bool,
+    rng: np.random.Generator,
+) -> dict[str, Any] | None:
+    """Generate one candidate per categorical value per variable and pick the best.
+
+    Holds continuous parameters at the incumbent values.  For each categorical
+    variable, creates one candidate per possible value (not the Cartesian
+    product across variables — that would explode combinatorially).  Uses a
+    lightweight RF surrogate to predict objective values and returns the
+    candidate with the best predicted objective.
+
+    Returns None if the RF cannot be fitted (too few results), falling through
+    to the normal perturbation path.
+    """
+    # Build candidate set: one per categorical value per variable
+    candidates: list[dict[str, Any]] = []
+    for var in cat_vars:
+        for value in var.choices or []:
+            candidate = dict(incumbent)
+            candidate[var.name] = value
+            candidates.append(candidate)
+
+    if not candidates:
+        return None
+
+    # Deduplicate (multiple cat vars may produce identical candidates)
+    seen: set[tuple[tuple[str, Any], ...]] = set()
+    unique: list[dict[str, Any]] = []
+    for c in candidates:
+        key = tuple(sorted(c.items()))
+        if key not in seen:
+            seen.add(key)
+            unique.append(c)
+    candidates = unique
+
+    if len(candidates) == 1:
+        return candidates[0]
+
+    # Fit a lightweight RF on experiment history to predict objective.
+    # Filter to rows with a valid (non-NaN) objective value so that CRASH
+    # or partial results don't poison the RF fit.
+    from sklearn.ensemble import RandomForestRegressor
+
+    df = experiment_log.to_dataframe()
+    var_names = [v.name for v in search_space.variables if v.name in df.columns]
+
+    if len(var_names) == 0 or len(df) < 5:
+        return None
+
+    # Drop rows where objective is missing or NaN
+    if objective_name not in df.columns:
+        return None
+    valid_mask = df[objective_name].notna()
+    df = df.loc[valid_mask].reset_index(drop=True)
+
+    if len(df) < 5:
+        return None
+
+    try:
+        x_train = encode_dataframe_for_rf(df, var_names, search_space)
+        y_train = df[objective_name].values
+    except (ValueError, KeyError):
+        return None
+
+    rf = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=int(rng.integers(10**9)))
+    rf.fit(x_train, y_train)
+
+    # Predict objective for each candidate
+    best_candidate = candidates[0]
+    best_score: float = float("-inf") if not minimize else float("inf")
+
+    for candidate in candidates:
+        try:
+            x = encode_params_for_rf(candidate, var_names, search_space)
+            pred = float(rf.predict(x.reshape(1, -1))[0])
+        except (ValueError, KeyError):
+            continue
+
+        if (not minimize and pred > best_score) or (minimize and pred < best_score):
+            best_score = pred
+            best_candidate = candidate
+
+    return dict(best_candidate)
 
 
 def _suggest_bayesian(
