@@ -532,7 +532,13 @@ def _suggest_exploitation(
 
     rng = np.random.default_rng(seed)
 
-    # Sprint 25: periodic categorical sweep
+    # Sprint 25: periodic categorical sweep.
+    # step_count uses total log length (all phases), not exploitation-only steps.
+    # With default phase boundaries (exploitation starts at step 50) and period=5,
+    # the sweep fires on steps 50, 55, 60, 65, 70, 75 — giving 6 sweep
+    # opportunities across 30 exploitation steps.  This coupling is acceptable
+    # because the period is short enough that small shifts in phase boundaries
+    # do not meaningfully change the sweep frequency.
     step_count = len(experiment_log.results)
     cat_vars = [
         v
@@ -603,12 +609,13 @@ def _categorical_sweep(
     minimize: bool,
     rng: np.random.Generator,
 ) -> dict[str, Any] | None:
-    """Generate one candidate per categorical value combination and pick the best.
+    """Generate one candidate per categorical value per variable and pick the best.
 
     Holds continuous parameters at the incumbent values.  For each categorical
-    variable, creates a candidate with each possible value.  Uses a lightweight
-    RF surrogate to predict objective values and returns the candidate with the
-    best predicted objective.
+    variable, creates one candidate per possible value (not the Cartesian
+    product across variables — that would explode combinatorially).  Uses a
+    lightweight RF surrogate to predict objective values and returns the
+    candidate with the best predicted objective.
 
     Returns None if the RF cannot be fitted (too few results), falling through
     to the normal perturbation path.
@@ -652,7 +659,7 @@ def _categorical_sweep(
     except (ValueError, KeyError):
         return None
 
-    rf = RandomForestRegressor(n_estimators=50, max_depth=10, random_state=int(rng.integers(1e9)))
+    rf = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=int(rng.integers(10**9)))
     rf.fit(x_train, y_train)
 
     # Predict objective for each candidate
