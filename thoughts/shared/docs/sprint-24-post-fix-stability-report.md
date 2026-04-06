@@ -25,8 +25,8 @@ Base B80 results are unchanged from Sprint 23 hardened: 3/10 catastrophic
 seeds, mean regret 5.30, std 6.82.  The fix had no measurable effect on the
 bimodal failure mode.
 
-High-noise remains directionally strong (causal wins 7/10 at B80, p=0.019).
-Null control passes cleanly (max delta 0.2%).
+High-noise remains directionally strong (causal wins 7/10 at B80,
+two-sided p=0.037).  Null control passes cleanly (max delta 0.2%).
 
 The fix was correctly implemented and tested but is insufficient: the
 categorical lock-in that traps bad seeds persists despite diversity
@@ -98,10 +98,13 @@ injection into the Ax candidate batch.
 | Catastrophic | 3/10 | 3/10 |
 | Seeds < 1.0 | 6/10 | 3/10 |
 | Wins | 7/10 | 3/10 |
-| MWU p-value | 0.154 | — |
+| MWU p (one-sided) | 0.154 | — |
+| MWU p (two-sided) | 0.307 | — |
 
 Causal wins 7/10 seeds but the advantage is not statistically significant
-at B80 (p=0.154) due to the high variance from catastrophic seeds.
+at B80 (one-sided p=0.154, two-sided p=0.307) due to the high variance
+from catastrophic seeds.  All Mann-Whitney U tests in this report use the
+directional hypothesis H_a: causal regret < surrogate_only regret.
 
 ### 3d. Comparison to Sprint 22 and Sprint 23 Baselines
 
@@ -146,7 +149,7 @@ candidates the alignment-only reranker selects.
 - Causal catastrophic: 2/10
 - Surrogate-only catastrophic: 7/10
 - Causal wins: 7/10
-- Mann-Whitney U: p=0.019 (statistically significant)
+- Mann-Whitney U: one-sided p=0.019, two-sided p=0.037
 
 Note: Seed 8 is catastrophic for causal on both base and high-noise.  Seed 7
 is catastrophic on high-noise but only mediocre (3.93) on base.  The partial
@@ -155,16 +158,21 @@ trajectory) rather than benchmark-specific.
 
 ### 4c. High-Noise Causal Advantage
 
-The causal advantage on high-noise is clear and statistically significant:
+The causal advantage on high-noise is directionally strong.  All tests use
+the one-sided hypothesis H_a: causal regret < surrogate_only regret.
+Two-sided p-values are also reported for completeness.
 
-| Budget | Causal wins | MWU p-value |
-|--------|------------|-------------|
-| B20 | 7/10 | 0.031 |
-| B40 | 9/10 | 0.007 |
-| B80 | 7/10 | 0.019 |
+| Budget | Causal wins | MWU p (one-sided) | MWU p (two-sided) |
+|--------|------------|-------------------|-------------------|
+| B20 | 7/10 | 0.031 | 0.062 |
+| B40 | 9/10 | 0.007 | 0.014 |
+| B80 | 7/10 | 0.019 | 0.037 |
 
-High-noise is the strongest evidence for causal advantage at all budget
-levels.  However, the bimodal mode still appears (seeds 7, 8 catastrophic).
+Under two-sided testing at alpha=0.05, B40 and B80 are significant but B20
+is not (p=0.062).  Under one-sided testing all three budgets are significant.
+The directional hypothesis is justified by the prior Sprint 19-23 evidence
+that causal should outperform surrogate_only on positive-control benchmarks.
+However, the bimodal mode still appears (seeds 7, 8 catastrophic).
 
 ## 5. Null Control Results
 
@@ -210,7 +218,7 @@ No strategy shows consistent improvement on permuted data.
 | Base B80 catastrophic seeds = 0/10 | 3/10 | **NO** |
 | Base B80 mean regret < 2.0 | 5.30 | **NO** |
 | Base B80 std < 3.0 | 6.82 | **NO** |
-| High-noise remains directionally strong | 7/10 wins, p=0.019 | YES |
+| High-noise remains directionally strong | 7/10 wins, two-sided p=0.037 | YES |
 | Null control within 2% | 0.2% max | YES |
 
 **The categorical diversity fix did not meet the stability gate.**
@@ -263,8 +271,8 @@ std) remain at Sprint 23 hardened levels.
 ### 7b. What Is Confirmed
 
 1. **Null control**: PASS (0.2% max, 7 consecutive sprints clean)
-2. **High-noise causal advantage**: statistically significant at all budget
-   levels (p < 0.05 at B20, B40, B80)
+2. **High-noise causal advantage**: significant at B40 and B80 (two-sided
+   p=0.014, 0.037); B20 marginal (two-sided p=0.062)
 3. **Alignment-only reranking**: correct default (Sprint 21 A/B confirmed,
    Sprint 22 revert confirmed)
 4. **Seed forwarding**: working as intended (deterministic per-seed behavior)
