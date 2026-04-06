@@ -148,6 +148,11 @@ candidates the alignment-only reranker selects.
 - Causal wins: 7/10
 - Mann-Whitney U: p=0.019 (statistically significant)
 
+Note: Seed 8 is catastrophic for causal on both base and high-noise.  Seed 7
+is catastrophic on high-noise but only mediocre (3.93) on base.  The partial
+overlap suggests the failure is seed-specific (bad initial LHS draw or GP
+trajectory) rather than benchmark-specific.
+
 ### 4c. High-Noise Causal Advantage
 
 The causal advantage on high-noise is clear and statistically significant:
@@ -186,15 +191,15 @@ No strategy shows consistent improvement on permuted data.
 
 ### 5a. Null Control History
 
-| Sprint | Max Diff | Verdict |
-|--------|----------|---------|
-| S18 | 0.15% | PASS |
-| S19 | 0.15% | PASS |
-| S20 | 0.20% | PASS |
-| S21 | 0.18% | PASS |
-| S22 | 0.23% | PASS |
-| S23 | 0.20% | PASS |
-| **S24** | **0.20%** | **PASS** |
+| Sprint | Max Diff | Verdict | Source |
+|--------|----------|---------|--------|
+| S18 | 0.15% | PASS | sprint-18-discovery-trust-scorecard |
+| S19 | 0.15% | PASS | sprint-19-differentiation-scorecard |
+| S20 | 0.20% | PASS | sprint-20-post-ax-rerun-report |
+| S21 | 0.18% | PASS | sprint-21-attribution-scorecard |
+| S22 | 0.23% | PASS | sprint-22-alignment-only-confirmation-report |
+| S23 | 0.20% | PASS | sprint-23-stability-scorecard |
+| **S24** | **0.20%** | **PASS** | this report |
 
 ## 6. Stability Gate Assessment
 
