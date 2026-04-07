@@ -186,19 +186,36 @@ class TestInteractionDrivenEffects:
 
 
 class TestOraclePolicyIsOptimal:
-    """Verify oracle achieves the best possible policy value."""
+    """Verify oracle achieves the best possible policy value.
 
-    def test_oracle_beats_always_treat(self, scenario: InteractionPolicyScenario) -> None:
-        data = scenario.generate()
-        cost = scenario.treatment_cost
-        oracle_value = scenario.oracle_policy_value(data)
-        always_treat_value = float((data["true_treatment_effect"] - cost).mean())
-        assert oracle_value >= always_treat_value - 1e-9
+    Tests compare oracle value against policies that exercise real
+    evaluation logic, not just mathematical identities.
+    """
 
-    def test_oracle_beats_never_treat(self, scenario: InteractionPolicyScenario) -> None:
+    def test_oracle_beats_good_parametric_policy(
+        self, scenario: InteractionPolicyScenario
+    ) -> None:
+        """Oracle should beat a hand-tuned 'good' policy targeting hot-humid afternoons."""
+        from causal_optimizer.benchmarks.interaction_policy import evaluate_interaction_policy
+
         data = scenario.generate()
         oracle_value = scenario.oracle_policy_value(data)
-        assert oracle_value >= -1e-9
+        good_params = {
+            "policy_temp_threshold": 28.0,
+            "policy_humidity_threshold": 50.0,
+            "policy_hour_start": 12,
+            "policy_hour_end": 20,
+            "noise_wind_speed": 5.0,
+            "noise_pressure": 1013.0,
+            "noise_cloud_cover": 50.0,
+        }
+        good_value, _ = evaluate_interaction_policy(
+            data, good_params, scenario.treatment_cost
+        )
+        assert oracle_value > good_value, (
+            f"Oracle ({oracle_value:.2f}) should beat good parametric "
+            f"policy ({good_value:.2f})"
+        )
 
     def test_oracle_beats_random_policy(self, scenario: InteractionPolicyScenario) -> None:
         data = scenario.generate()
