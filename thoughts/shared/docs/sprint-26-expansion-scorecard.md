@@ -14,7 +14,7 @@
 
 ## Verdict
 
-**EXPANDED BUT MIXED** -- benchmark coverage grew from 4 to 6 families,
+**EXPANDED BUT MIXED** -- benchmark coverage grew from 4 to 6 benchmarks,
 but causal advantage is domain-specific, not universal.
 
 ## 1. Executive Summary
@@ -28,7 +28,7 @@ The expansion produced clear, interpretable results.  Both new benchmarks
 work as intended: the interaction policy separates guided strategies from
 random (p=0.0003 at B80), and the dose-response benchmark shows
 surrogate_only winning at B80 (regret 1.32 vs 6.51 for causal).  Null
-control passed for the 8th consecutive sprint.
+control clean streak remains at 8 (S18--S25; not re-run in S26).
 
 The verdict is EXPANDED BUT MIXED because while benchmark coverage grew
 substantially, the new evidence reinforces that causal advantage is
