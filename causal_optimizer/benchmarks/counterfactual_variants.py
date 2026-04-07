@@ -345,7 +345,7 @@ class ConfoundedDemandResponse(DemandResponseScenario):
         """Oracle value anchored to the true causal effect, not confounded y0-y1.
 
         In the confounded variant, ``y0 - y1 = effect + 500 * grid_stress``,
-        so the inherited oracle (which uses ``_net_benefit(y0, y1, ...)``)
+        so the inherited oracle (which uses ``net_benefit(y0, y1, ...)``)
         would NOT be the ceiling of the causal metric.  We override to
         compute oracle value from ``true_treatment_effect`` directly.
 
