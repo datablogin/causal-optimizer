@@ -19,6 +19,11 @@ from causal_optimizer.benchmarks.counterfactual_variants import (
 )
 from causal_optimizer.benchmarks.high_dimensional import HighDimensionalSparseBenchmark
 from causal_optimizer.benchmarks.interaction import InteractionBenchmark
+from causal_optimizer.benchmarks.interaction_policy import (
+    InteractionPolicyScenario,
+    evaluate_interaction_policy,
+    interaction_treatment_effect,
+)
 from causal_optimizer.benchmarks.interaction_scm import InteractionSCM
 from causal_optimizer.benchmarks.null_predictive_energy import (
     NullSignalResult,
@@ -76,6 +81,7 @@ __all__ = [
     "HighDimensionalSparseBenchmark",
     "HighNoiseDemandResponse",
     "InteractionBenchmark",
+    "InteractionPolicyScenario",
     "InteractionSCM",
     "NullSignalResult",
     "PolicyRunner",
@@ -83,8 +89,10 @@ __all__ = [
     "ToyGraphBenchmark",
     "ValidationEnergyRunner",
     "check_null_signal",
+    "evaluate_interaction_policy",
     "evaluate_on_test",
     "evaluate_policy",
+    "interaction_treatment_effect",
     "load_energy_frame",
     "permute_target",
     "propensity",

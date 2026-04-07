@@ -44,6 +44,9 @@ from causal_optimizer.benchmarks.counterfactual_variants import (
     ConfoundedDemandResponse,
     HighNoiseDemandResponse,
 )
+from causal_optimizer.benchmarks.interaction_policy import (
+    InteractionPolicyScenario,
+)
 from causal_optimizer.benchmarks.predictive_energy import load_energy_frame
 from causal_optimizer.benchmarks.provenance import collect_provenance
 
@@ -105,10 +108,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--variant",
         default="base",
-        choices=["base", "high_noise", "confounded"],
+        choices=["base", "high_noise", "confounded", "interaction"],
         help=(
             "Benchmark variant: 'base' (default), 'high_noise' (10+ nuisance dims), "
-            "or 'confounded' (Simpson's paradox from hidden confounder)."
+            "'confounded' (Simpson's paradox from hidden confounder), or "
+            "'interaction' (multi-threshold interaction policy)."
         ),
     )
     parser.add_argument(
@@ -264,20 +268,28 @@ def main() -> None:
 
     # Create scenario (variant-specific)
     variant = args.variant
-    scenario_cls: type[DemandResponseScenario]
-    if variant == "high_noise":
-        scenario_cls = HighNoiseDemandResponse
-    elif variant == "confounded":
-        scenario_cls = ConfoundedDemandResponse
+    if variant == "interaction":
+        scenario: DemandResponseScenario | InteractionPolicyScenario = InteractionPolicyScenario(
+            covariates=covariates,
+            seed=0,
+            treatment_cost=args.treatment_cost,
+        )
+        logger.info("Using variant: %s (%s)", variant, "InteractionPolicyScenario")
     else:
-        scenario_cls = DemandResponseScenario
+        scenario_cls: type[DemandResponseScenario]
+        if variant == "high_noise":
+            scenario_cls = HighNoiseDemandResponse
+        elif variant == "confounded":
+            scenario_cls = ConfoundedDemandResponse
+        else:
+            scenario_cls = DemandResponseScenario
 
-    scenario = scenario_cls(
-        covariates=covariates,
-        seed=0,  # data generation seed (fixed for reproducibility)
-        treatment_cost=args.treatment_cost,
-    )
-    logger.info("Using variant: %s (%s)", variant, scenario_cls.__name__)
+        scenario = scenario_cls(
+            covariates=covariates,
+            seed=0,  # data generation seed (fixed for reproducibility)
+            treatment_cost=args.treatment_cost,
+        )
+        logger.info("Using variant: %s (%s)", variant, scenario_cls.__name__)
 
     # Run all combinations
     results: list[CounterfactualBenchmarkResult] = []
