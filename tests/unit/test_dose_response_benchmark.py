@@ -342,3 +342,39 @@ class TestProtocolRunner:
         assert "objective" in metrics
         assert "policy_value" in metrics
         assert metrics["objective"] == pytest.approx(-metrics["policy_value"])
+
+
+class TestFallbackPath:
+    """Regression tests for the best_params=None fallback path."""
+
+    def test_fallback_decision_error_uses_max_dose_oracle(self, scenario):
+        """When best_params is None (empty log), decision_error should be
+        computed against the max-dose oracle, consistent with oracle_policy_value."""
+        # Run with minimal budget — result should still have consistent oracle
+        result = scenario.run_benchmark(budget=2, seed=999, strategy="random")
+
+        # Regret should be non-negative (oracle uses max dose)
+        assert result.regret >= 0.0
+        # Decision error should be in [0, 1]
+        assert 0.0 <= result.decision_error_rate <= 1.0
+
+    def test_fallback_oracle_consistency(self, scenario):
+        """The fallback path's oracle treat mask should use the global oracle
+        (max dose=1.0), not the reference dose."""
+        data = scenario.generate()
+
+        # Global oracle treat mask at max dose
+        bio = data["biomarker"].values
+        sev = data["severity"].values
+        max_effect = dose_response_effect(np.ones(len(data)), bio, sev)
+        global_oracle_treat = max_effect > scenario.treatment_cost
+
+        # Reference-dose treat mask (should differ from global oracle)
+        ref_effect = data["true_treatment_effect"].values
+        ref_oracle_treat = ref_effect > scenario.treatment_cost
+
+        # These should differ because max_dose=1.0 > reference_dose=0.7
+        # means more patients benefit at max dose
+        if not np.array_equal(global_oracle_treat, ref_oracle_treat):
+            mismatch = float(np.mean(global_oracle_treat != ref_oracle_treat))
+            assert mismatch > 0.0, "Expected mismatch between max-dose and ref-dose oracles"

@@ -242,7 +242,7 @@ def evaluate_protocol(
     # Decision error: compare against the oracle at THIS dose level.
     # Note: this is dose-specific -- a protocol at dose=0.3 is compared
     # against the optimal selection *at dose=0.3*, not the global oracle
-    # (which uses the reference dose).  Regret captures the full gap.
+    # (which uses max dose=1.0).  Regret captures the full gap.
     oracle_treat = effect_at_dose > treatment_cost
     decision_error = float(np.mean(treat_arr != oracle_treat))
 
@@ -549,8 +549,12 @@ class DoseResponseScenario:
             )
         else:
             policy_value = 0.0
-            effect = test_data["true_treatment_effect"].values
-            oracle_treat = effect > self.treatment_cost
+            # Use the global oracle (max dose=1.0) for decision error,
+            # consistent with oracle_policy_value().
+            bio = test_data["biomarker"].values
+            sev = test_data["severity"].values
+            max_effect = dose_response_effect(np.ones(len(test_data)), bio, sev)
+            oracle_treat = max_effect > self.treatment_cost
             decision_error = float(np.mean(oracle_treat))
 
         oracle_value = self.oracle_policy_value(test_data)
