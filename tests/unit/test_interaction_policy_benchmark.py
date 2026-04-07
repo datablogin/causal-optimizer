@@ -15,6 +15,7 @@ import pytest
 
 from causal_optimizer.benchmarks.interaction_policy import (
     InteractionPolicyScenario,
+    interaction_propensity,
     interaction_treatment_effect,
 )
 
@@ -367,4 +368,40 @@ class TestPolicyEvaluationUsesInteractions:
         bad_value, _ = evaluate_interaction_policy(val_data, bad_params, scenario.treatment_cost)
         assert good_value > bad_value, (
             f"Good policy value ({good_value:.2f}) should beat bad policy value ({bad_value:.2f})"
+        )
+
+
+# ── Test 10: Propensity function ────────────────────────────────────
+
+
+class TestInteractionPropensity:
+    """Verify interaction propensity bounds and directional behavior."""
+
+    def test_propensity_within_bounds(self) -> None:
+        """Propensity should be clipped to [0.05, 0.85]."""
+        temps = np.array([-10.0, 0.0, 20.0, 35.0, 45.0])
+        humidities = np.array([10.0, 30.0, 50.0, 80.0, 100.0])
+        hours = np.array([0.0, 6.0, 12.0, 18.0, 23.0])
+        prop = interaction_propensity(temps, humidities, hours)
+        assert prop.min() >= 0.05, f"Propensity min ({prop.min():.4f}) should be >= 0.05"
+        assert prop.max() <= 0.85, f"Propensity max ({prop.max():.4f}) should be <= 0.85"
+
+    def test_propensity_increases_with_temperature(self) -> None:
+        """Higher temperature -> higher propensity, holding hour and humidity constant."""
+        hours = np.full(3, 15.0)
+        humidities = np.full(3, 60.0)
+        temps = np.array([10.0, 25.0, 40.0])
+        prop = interaction_propensity(temps, humidities, hours)
+        assert prop[2] > prop[0], (
+            f"Propensity at 40C ({prop[2]:.3f}) should exceed 10C ({prop[0]:.3f})"
+        )
+
+    def test_propensity_afternoon_higher_than_night(self) -> None:
+        """Afternoon propensity should exceed night propensity."""
+        temps = np.full(2, 30.0)
+        humidities = np.full(2, 60.0)
+        hours = np.array([15.0, 3.0])
+        prop = interaction_propensity(temps, humidities, hours)
+        assert prop[0] > prop[1], (
+            f"Afternoon propensity ({prop[0]:.3f}) should exceed night ({prop[1]:.3f})"
         )

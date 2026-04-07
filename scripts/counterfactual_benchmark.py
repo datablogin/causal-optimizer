@@ -133,8 +133,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--treatment-cost",
         type=float,
-        default=60.0,
-        help="Fixed cost per demand-response event (default: 60.0).",
+        default=None,
+        help=(
+            "Fixed cost per treatment event.  Defaults are variant-specific: "
+            "60.0 for base/high_noise/confounded, 120.0 for interaction."
+        ),
     )
     parser.add_argument(
         "--output",
@@ -268,11 +271,25 @@ def main() -> None:
 
     # Create scenario (variant-specific)
     variant = args.variant
+
+    # Apply variant-specific treatment cost default if not overridden by user.
+    variant_default_cost: dict[str, float] = {
+        "base": 60.0,
+        "high_noise": 60.0,
+        "confounded": 60.0,
+        "interaction": 120.0,
+    }
+    treatment_cost = (
+        args.treatment_cost
+        if args.treatment_cost is not None
+        else variant_default_cost.get(variant, 60.0)
+    )
+
     if variant == "interaction":
         scenario: DemandResponseScenario | InteractionPolicyScenario = InteractionPolicyScenario(
             covariates=covariates,
             seed=0,
-            treatment_cost=args.treatment_cost,
+            treatment_cost=treatment_cost,
         )
         logger.info("Using variant: %s (%s)", variant, "InteractionPolicyScenario")
     else:
@@ -287,7 +304,7 @@ def main() -> None:
         scenario = scenario_cls(
             covariates=covariates,
             seed=0,  # data generation seed (fixed for reproducibility)
-            treatment_cost=args.treatment_cost,
+            treatment_cost=treatment_cost,
         )
         logger.info("Using variant: %s (%s)", variant, scenario_cls.__name__)
 
@@ -332,7 +349,7 @@ def main() -> None:
         "benchmark": "counterfactual_demand_response",
         "variant": variant,
         "data_source": str(args.data_path),
-        "treatment_cost": args.treatment_cost,
+        "treatment_cost": treatment_cost,
         "n_covariates": len(covariates),
         "suite_runtime_seconds": suite_runtime,
         "results": [_sanitize_for_json(dataclasses.asdict(r)) for r in results],
