@@ -146,7 +146,8 @@ def dose_response_effect(
     # Severity modifier: higher severity -> larger effect
     severity_mod = 0.3 + 0.7 * s
 
-    return np.maximum(emax_response * severity_mod, 0.0)
+    result: np.ndarray = np.maximum(emax_response * severity_mod, 0.0)
+    return result
 
 
 # ── Protocol evaluation ─────────────────────────────────────────────
