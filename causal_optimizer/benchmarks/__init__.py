@@ -18,6 +18,13 @@ from causal_optimizer.benchmarks.counterfactual_variants import (
     ConfoundedDemandResponse,
     HighNoiseDemandResponse,
 )
+from causal_optimizer.benchmarks.dose_response import (
+    DoseResponseBenchmarkResult,
+    DoseResponseScenario,
+    ProtocolRunner,
+    dose_response_effect,
+    evaluate_protocol,
+)
 from causal_optimizer.benchmarks.high_dimensional import HighDimensionalSparseBenchmark
 from causal_optimizer.benchmarks.interaction import InteractionBenchmark
 from causal_optimizer.benchmarks.interaction_policy import (
@@ -80,6 +87,8 @@ __all__ = [
     "ConfoundedDemandResponse",
     "CounterfactualBenchmarkResult",
     "DemandResponseScenario",
+    "DoseResponseBenchmarkResult",
+    "DoseResponseScenario",
     "HighDimensionalSparseBenchmark",
     "HighNoiseDemandResponse",
     "InteractionBenchmark",
@@ -88,12 +97,15 @@ __all__ = [
     "NullSignalResult",
     "PolicyRunner",
     "PredictiveBenchmarkResult",
+    "ProtocolRunner",
     "ToyGraphBenchmark",
     "ValidationEnergyRunner",
     "check_null_signal",
+    "dose_response_effect",
     "evaluate_interaction_policy",
     "evaluate_on_test",
     "evaluate_policy",
+    "evaluate_protocol",
     "interaction_propensity",
     "interaction_treatment_effect",
     "load_energy_frame",
