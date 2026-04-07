@@ -192,9 +192,7 @@ class TestOraclePolicyIsOptimal:
     evaluation logic, not just mathematical identities.
     """
 
-    def test_oracle_beats_good_parametric_policy(
-        self, scenario: InteractionPolicyScenario
-    ) -> None:
+    def test_oracle_beats_good_parametric_policy(self, scenario: InteractionPolicyScenario) -> None:
         """Oracle should beat a hand-tuned 'good' policy targeting hot-humid afternoons."""
         from causal_optimizer.benchmarks.interaction_policy import evaluate_interaction_policy
 
@@ -209,12 +207,9 @@ class TestOraclePolicyIsOptimal:
             "noise_pressure": 1013.0,
             "noise_cloud_cover": 50.0,
         }
-        good_value, _ = evaluate_interaction_policy(
-            data, good_params, scenario.treatment_cost
-        )
+        good_value, _ = evaluate_interaction_policy(data, good_params, scenario.treatment_cost)
         assert oracle_value > good_value, (
-            f"Oracle ({oracle_value:.2f}) should beat good parametric "
-            f"policy ({good_value:.2f})"
+            f"Oracle ({oracle_value:.2f}) should beat good parametric policy ({good_value:.2f})"
         )
 
     def test_oracle_beats_random_policy(self, scenario: InteractionPolicyScenario) -> None:
