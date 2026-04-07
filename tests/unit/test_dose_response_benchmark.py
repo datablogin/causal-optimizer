@@ -153,10 +153,17 @@ class TestOraclePolicy:
         assert oracle_val > 0.0, "Oracle policy value must be positive"
 
     def test_oracle_treat_rate_non_degenerate(self, scenario: DoseResponseScenario) -> None:
-        """Oracle should treat a non-trivial fraction (not all, not none)."""
+        """Oracle should treat a non-trivial fraction (not all, not none).
+
+        The global oracle uses max dose (1.0), so we compute the effect
+        at dose=1.0 for the treat-rate check.
+        """
         data = scenario.generate()
-        effect = data["true_treatment_effect"].values
-        oracle_treat = effect > scenario.treatment_cost
+        max_dose = np.ones(len(data))
+        effect_at_max = dose_response_effect(
+            max_dose, data["biomarker"].values, data["severity"].values
+        )
+        oracle_treat = effect_at_max > scenario.treatment_cost
         rate = oracle_treat.mean()
         assert 0.10 < rate < 0.90, f"Oracle treat rate {rate:.2f} is degenerate"
 
@@ -295,6 +302,27 @@ class TestReproducibility:
 
 class TestProtocolRunner:
     """Verify ProtocolRunner correctly negates policy value for minimization."""
+
+    def test_regret_non_negative_at_max_dose(self, scenario: DoseResponseScenario) -> None:
+        """Even a protocol at max dose should not beat the global oracle."""
+        data = scenario.generate()
+        n = len(data)
+        test_data = data.iloc[int(n * 0.8) :].reset_index(drop=True)
+
+        # Protocol at dose=1.0 with very permissive thresholds
+        params = {
+            "dose_level": 1.0,
+            "biomarker_threshold": 0.0,
+            "severity_threshold": 0.0,
+            "bmi_threshold": 0.0,
+            "age_threshold": 0.0,
+            "comorbidity_threshold": 0.0,
+        }
+        policy_value, _ = evaluate_protocol(test_data, params, scenario.treatment_cost)
+        oracle_value = scenario.oracle_policy_value(test_data)
+        assert oracle_value >= policy_value, (
+            f"Oracle ({oracle_value:.4f}) should >= policy ({policy_value:.4f})"
+        )
 
     def test_objective_is_negated_policy_value(self, scenario: DoseResponseScenario) -> None:
         """The optimizer minimizes objective = -policy_value."""

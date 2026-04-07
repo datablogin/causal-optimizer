@@ -73,10 +73,12 @@ class DoseResponseBenchmarkResult:
         seed: Random seed used.
         policy_value: Average net benefit under the learned protocol
             (higher is better; symptom reduction minus treatment cost).
-        oracle_value: Average net benefit under the oracle protocol.
-        regret: oracle_value - policy_value (non-negative by construction).
+        oracle_value: Average net benefit under the global oracle protocol
+            (uses max dose=1.0 and optimal patient selection).
+        regret: oracle_value - policy_value (non-negative by construction
+            because the oracle uses the globally optimal dose).
         decision_error_rate: Fraction of treat/no-treat decisions that
-            disagree with the oracle's optimal decision.
+            disagree with the oracle at the protocol's chosen dose.
         runtime_seconds: Wall-clock time for the full run.
     """
 
@@ -445,26 +447,35 @@ class DoseResponseScenario:
         )
 
     def oracle_policy_value(self, data: pd.DataFrame) -> float:
-        """Compute the value of the oracle protocol at the reference dose.
+        """Compute the value of the global oracle protocol.
 
-        The oracle treats exactly the patients whose effect at the
-        *reference dose* (``self._reference_dose``, default 0.7) exceeds
-        the treatment cost.  This is the global oracle -- it answers
-        "what is the best achievable benefit at the reference dose?"
+        The oracle uses the maximum dose (1.0) and treats exactly the
+        patients whose effect at that dose exceeds the treatment cost.
+        This is a true global oracle: no strategy can beat it because
+        dose=1.0 maximizes the Emax curve for every patient, and
+        the oracle then selects the optimal patient subset.
+
+        Regret = oracle_value - policy_value is therefore non-negative
+        by construction.
 
         Note: ``evaluate_protocol`` computes decision error against the
         oracle *at the protocol's chosen dose*, which is a different
-        (dose-specific) quantity.  Regret = oracle_value - policy_value
-        captures the full gap including suboptimal dose selection.
+        (dose-specific) quantity.
 
         Returns:
-            Average net benefit under the oracle protocol.
+            Average net benefit under the global oracle protocol.
         """
         y0 = data["y0"].values
-        y1 = data["y1"].values
-        effect = data["true_treatment_effect"].values
-        oracle_treat = effect > self.treatment_cost
-        return _net_benefit(y0, y1, oracle_treat, self.treatment_cost)
+        bio = data["biomarker"].values
+        sev = data["severity"].values
+
+        # Compute effect at max dose (1.0) -- the global ceiling
+        max_dose = np.ones(len(data))
+        effect_at_max = dose_response_effect(max_dose, bio, sev)
+        y1_at_max = y0 - effect_at_max
+
+        oracle_treat = effect_at_max > self.treatment_cost
+        return _net_benefit(y0, y1_at_max, oracle_treat, self.treatment_cost)
 
     def run_benchmark(
         self,
