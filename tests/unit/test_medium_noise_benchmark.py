@@ -94,9 +94,7 @@ class TestMediumNoiseDemandResponse:
             MediumNoiseDemandResponse,
         )
 
-        scenario = MediumNoiseDemandResponse(
-            covariates=_make_minimal_covariates(), seed=42
-        )
+        scenario = MediumNoiseDemandResponse(covariates=_make_minimal_covariates(), seed=42)
         df = scenario.generate()
         for i in range(4):
             assert f"noise_var_{i}" in df.columns
@@ -107,9 +105,7 @@ class TestMediumNoiseDemandResponse:
             MediumNoiseDemandResponse,
         )
 
-        scenario = MediumNoiseDemandResponse(
-            covariates=_make_minimal_covariates(), seed=42
-        )
+        scenario = MediumNoiseDemandResponse(covariates=_make_minimal_covariates(), seed=42)
         df = scenario.generate()
         for i in range(4, 10):
             assert f"noise_var_{i}" not in df.columns
@@ -138,9 +134,7 @@ class TestMediumNoiseDemandResponse:
             MediumNoiseDemandResponse,
         )
 
-        scenario = MediumNoiseDemandResponse(
-            covariates=_make_minimal_covariates(), seed=42
-        )
+        scenario = MediumNoiseDemandResponse(covariates=_make_minimal_covariates(), seed=42)
         df = scenario.generate()
 
         for i in range(4):
