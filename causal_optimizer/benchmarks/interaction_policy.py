@@ -28,7 +28,6 @@ Public API
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -38,7 +37,7 @@ if TYPE_CHECKING:
 
 from causal_optimizer.benchmarks.counterfactual_energy import (
     CounterfactualBenchmarkResult,
-    _net_benefit,
+    net_benefit,
 )
 from causal_optimizer.benchmarks.runner import sample_random_params
 from causal_optimizer.engine.loop import ExperimentEngine
@@ -206,7 +205,7 @@ def evaluate_interaction_policy(
     y0 = data["y0"].values
     y1 = data["y1"].values
 
-    policy_value = _net_benefit(y0, y1, treat_arr, treatment_cost)
+    policy_value = net_benefit(y0, y1, treat_arr, treatment_cost)
 
     # Decision error rate: fraction that disagree with oracle
     true_effect = data["true_treatment_effect"].values
@@ -239,13 +238,6 @@ class InteractionPolicyRunner:
 
 
 # ── Main scenario class ─────────────────────────────────────────────
-
-
-@dataclass
-class _InteractionScenarioConfig:
-    """Internal config to avoid dataclass inheritance issues."""
-
-    treatment_cost: float = 120.0
 
 
 class InteractionPolicyScenario:
@@ -305,8 +297,11 @@ class InteractionPolicyScenario:
         humid = df["humidity"].values.astype(np.float64)
         hour = df["hour_of_day"].values.astype(np.float64)
 
-        # Fill NaN humidity with neutral value (median-ish) to avoid NaN in effect
+        # Fill NaN covariates with neutral values to prevent NaN propagation.
+        # Real ERCOT data has rare NaN humidity (~3 rows out of 26k).
+        temp = np.where(np.isnan(temp), 20.0, temp)
         humid = np.where(np.isnan(humid), 50.0, humid)
+        hour = np.where(np.isnan(hour), 12.0, hour)
 
         # Y(0) = base load
         y0 = df["target_load"].values.astype(np.float64)
@@ -419,7 +414,7 @@ class InteractionPolicyScenario:
         y1 = data["y1"].values
         effect = data["true_treatment_effect"].values
         oracle_treat = effect > self.treatment_cost
-        return _net_benefit(y0, y1, oracle_treat, self.treatment_cost)
+        return net_benefit(y0, y1, oracle_treat, self.treatment_cost)
 
     def run_benchmark(
         self,

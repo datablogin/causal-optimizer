@@ -139,7 +139,7 @@ def propensity(temperature: np.ndarray, hour_of_day: np.ndarray) -> np.ndarray:
 # ── Policy evaluation ────────────────────────────────────────────────
 
 
-def _net_benefit(
+def net_benefit(
     y0: np.ndarray,
     y1: np.ndarray,
     treat_mask: np.ndarray,
@@ -219,7 +219,7 @@ def evaluate_policy(
     y1 = data["y1"].values
 
     # Policy value = average net benefit relative to never-treat
-    policy_value = _net_benefit(y0, y1, treat_arr, treatment_cost)
+    policy_value = net_benefit(y0, y1, treat_arr, treatment_cost)
 
     # Decision error rate: fraction of decisions that disagree with oracle
     true_effect = data["true_treatment_effect"].values
@@ -411,7 +411,7 @@ class DemandResponseScenario:
 
         # Treat when effect > cost (load reduction exceeds cost)
         oracle_treat = effect > self.treatment_cost
-        return _net_benefit(y0, y1, oracle_treat, self.treatment_cost)
+        return net_benefit(y0, y1, oracle_treat, self.treatment_cost)
 
     def _prepare_eval_data(self, test_data: pd.DataFrame) -> pd.DataFrame:
         """Prepare evaluation data from the test split.

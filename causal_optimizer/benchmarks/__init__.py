@@ -10,6 +10,7 @@ from causal_optimizer.benchmarks.counterfactual_energy import (
     DemandResponseScenario,
     PolicyRunner,
     evaluate_policy,
+    net_benefit,
     propensity,
     treatment_effect,
 )
@@ -22,6 +23,7 @@ from causal_optimizer.benchmarks.interaction import InteractionBenchmark
 from causal_optimizer.benchmarks.interaction_policy import (
     InteractionPolicyScenario,
     evaluate_interaction_policy,
+    interaction_propensity,
     interaction_treatment_effect,
 )
 from causal_optimizer.benchmarks.interaction_scm import InteractionSCM
@@ -92,8 +94,10 @@ __all__ = [
     "evaluate_interaction_policy",
     "evaluate_on_test",
     "evaluate_policy",
+    "interaction_propensity",
     "interaction_treatment_effect",
     "load_energy_frame",
+    "net_benefit",
     "permute_target",
     "propensity",
     "run_null_strategy",
