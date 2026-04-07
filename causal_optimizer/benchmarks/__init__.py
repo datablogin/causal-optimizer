@@ -17,6 +17,7 @@ from causal_optimizer.benchmarks.counterfactual_energy import (
 from causal_optimizer.benchmarks.counterfactual_variants import (
     ConfoundedDemandResponse,
     HighNoiseDemandResponse,
+    MediumNoiseDemandResponse,
 )
 from causal_optimizer.benchmarks.dose_response import (
     DoseResponseBenchmarkResult,
@@ -93,6 +94,7 @@ __all__ = [
     "HighNoiseDemandResponse",
     "InteractionBenchmark",
     "InteractionPolicyScenario",
+    "MediumNoiseDemandResponse",
     "InteractionSCM",
     "NullSignalResult",
     "PolicyRunner",
