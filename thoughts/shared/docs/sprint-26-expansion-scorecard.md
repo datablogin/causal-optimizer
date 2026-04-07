@@ -14,7 +14,8 @@
 
 ## Verdict
 
-**EXPANDED BUT MIXED.**
+**EXPANDED BUT MIXED** -- benchmark coverage grew from 4 to 6 families,
+but causal advantage is domain-specific, not universal.
 
 ## 1. Executive Summary
 
@@ -45,9 +46,13 @@ coverage, not broader scientific claims.
 **Yes.**  The exploitation-phase categorical sweep (PR #131) was not
 modified in Sprint 26.  The Sprint 25 base-B80 results (0/10 catastrophic,
 mean 1.13, std 1.40) were the starting point for this sprint, not retested,
-because no code path affecting the existing benchmark was changed.  The two
-new benchmarks have independent evaluation logic and do not share
-exploitation-phase code with the energy demand-response family.
+because no code path affecting the existing benchmark was changed.
+
+The two new benchmarks have independent evaluation logic: each defines its
+own scenario class, oracle, and regret calculation.  They share the engine's
+`suggest_parameters` and `ExperimentEngine` infrastructure, but neither
+modifies that infrastructure.  A combined regression gate across all 6
+benchmarks is recommended for Sprint 27 to confirm no drift.
 
 ### 2b. Did the new positive-control family show meaningful causal differentiation?
 
@@ -122,7 +127,7 @@ It supports a more specific and defensible claim:
 | Confounded energy | Demand-response | 5 | 1 | No (all misled) | S19 |
 | Null control | Permuted targets | 5 | 1 | PASS (0.2%) | S18 |
 | Interaction policy | Energy policy | 7 | 0 | Tie at B80 (p=0.68) | S26 |
-| Dose-response | Clinical trial | 6 | 0 | No (s.o. wins at B80) | S26 |
+| Dose-response | Clinical trial | 6 | 0 | No (surrogate_only wins at B80) | S26 |
 
 ### 3b. Where Causal Wins
 
@@ -215,7 +220,8 @@ Sprint 27 should:
    test where the crossover between causal advantage and surrogate advantage
    occurs.
 2. **Run a combined regression gate** across all 6 benchmarks to ensure
-   that no existing result has drifted.
+   that no existing result has drifted.  This was deferred from Sprint 26
+   because no engine code was changed, but should not be deferred further.
 3. **Update the README** to reflect the domain-dependent causal advantage
    finding, since the current README predates Sprint 26's expansion.
 4. **Consider whether the interaction benchmark needs a harder variant**
