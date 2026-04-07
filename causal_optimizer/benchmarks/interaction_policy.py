@@ -68,10 +68,12 @@ def interaction_treatment_effect(
       amplifies cooling load and therefore treatment benefit.
     - Hour: Gaussian peak at 15:00, sigma 3.0h.  Afternoon peak demand.
 
-    The three-way product is scaled to a peak of ~400 MW when all three
-    conditions are extreme (temp >> 35C, humidity >> 80%, hour ~ 15).
-    Each marginal component contributes only ~30-80 MW alone, so the
-    super-additive interaction is the dominant feature.
+    The combined effect peaks at ~365 MW on realistic ERCOT covariates
+    (temp ~42C, humidity ~100%, hour ~ 15).  The mathematical maximum
+    at full sigmoid saturation is ~626 MW, but real-world covariates
+    never reach full saturation simultaneously.  Each marginal component
+    contributes only ~20-32 MW alone, so the super-additive interaction
+    is the dominant feature.
 
     Temperature is expected in Celsius, humidity in percent (0-100).
 
@@ -299,9 +301,14 @@ class InteractionPolicyScenario:
 
         # Fill NaN covariates with neutral values to prevent NaN propagation.
         # Real ERCOT data has rare NaN humidity (~3 rows out of 26k).
+        # Write cleaned values back to df so policy evaluation (which reads
+        # df columns for threshold comparisons) sees consistent values.
         temp = np.where(np.isnan(temp), 20.0, temp)
         humid = np.where(np.isnan(humid), 50.0, humid)
         hour = np.where(np.isnan(hour), 12.0, hour)
+        df["temperature"] = temp
+        df["humidity"] = humid
+        df["hour_of_day"] = hour
 
         # Y(0) = base load
         y0 = df["target_load"].values.astype(np.float64)
@@ -426,6 +433,12 @@ class InteractionPolicyScenario:
 
         Generates data, splits into opt/test, runs the optimizer
         on opt, evaluates the learned policy on test.
+
+        .. note::
+            This method is structurally similar to
+            ``DemandResponseScenario.run_benchmark()``.  If the harness
+            logic needs a bug fix, update both.  A future refactor could
+            extract a shared ``_run_benchmark_core()`` helper.
 
         Args:
             budget: Number of experiments (policy evaluations).

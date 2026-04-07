@@ -88,6 +88,37 @@ class TestScenarioGeneratesValidData:
         data = scenario.generate()
         assert (data["true_treatment_effect"] >= -1e-9).all()
 
+    def test_nan_covariates_filled(self) -> None:
+        """NaN humidity/temperature rows should be filled, not propagated."""
+        rng = np.random.default_rng(99)
+        n = 48
+        temps = 20.0 + 15.0 * rng.random(n)
+        temps[0] = np.nan  # inject NaN temperature
+        humidity = 40.0 + 30.0 * rng.random(n)
+        humidity[1] = np.nan  # inject NaN humidity
+        df = pd.DataFrame(
+            {
+                "timestamp": pd.date_range("2023-01-01", periods=n, freq="h"),
+                "temperature": temps,
+                "humidity": humidity,
+                "hour_of_day": np.tile(np.arange(24), 2),
+                "day_of_week": np.zeros(n, dtype=int),
+                "is_holiday": np.zeros(n, dtype=int),
+                "target_load": 1000.0 + 100 * rng.random(n),
+                "load_lag_1h": 1000.0 + 100 * rng.random(n),
+                "load_lag_24h": 1000.0 + 100 * rng.random(n),
+            }
+        )
+        scenario = InteractionPolicyScenario(covariates=df, seed=0)
+        data = scenario.generate()
+        # No NaN in any generated column
+        assert data["true_treatment_effect"].notna().all()
+        assert data["y0"].notna().all()
+        assert data["y1"].notna().all()
+        # Cleaned covariates should not have NaN either
+        assert data["temperature"].notna().all()
+        assert data["humidity"].notna().all()
+
 
 # ── Test 2: Interaction-driven effects ────────────────────────────────
 
