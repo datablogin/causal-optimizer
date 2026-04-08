@@ -31,6 +31,7 @@ benefit.
 
 Public API
 ----------
+- :class:`MediumNoiseDemandResponse`
 - :class:`HighNoiseDemandResponse`
 - :class:`ConfoundedDemandResponse`
 """

@@ -4,11 +4,13 @@ Runs random, surrogate-only, and causal strategies on the semi-synthetic
 demand-response benchmark using real ERCOT covariates with known treatment
 effects.
 
-Supports three variants via ``--variant``:
+Supports five variants via ``--variant``:
 
 - ``base`` (default): 3 causal parents + 2 noise dimensions.
+- ``medium_noise``: 3 causal parents + 2 original noise + 4 nuisance dimensions.
 - ``high_noise``: 3 causal parents + 2 original noise + 10 nuisance dimensions.
 - ``confounded``: Hidden confounder (grid stress) biases treatment assignment.
+- ``interaction``: Multi-threshold interaction policy (7D continuous, no categoricals).
 
 Usage::
 
