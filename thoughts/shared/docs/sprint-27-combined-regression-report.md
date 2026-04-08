@@ -8,14 +8,16 @@
 - **Branch**: `sprint-27/combined-regression-gate`
 - **Base commit**: `f9bb372` (Sprint 27 medium-noise merged to main)
 - **Benchmarks run**: 7 of 7
+- **Optimizer path**: RF surrogate fallback (Ax/BoTorch not installed)
 
 ## Verdict
 
-**PASS WITH CAVEAT** -- all 7 benchmarks ran successfully with consistent
-internal ordering, null control clean, and no code regressions detected.
-Absolute regret numbers are not directly comparable to Sprint 25 priors
-because this run used the RF surrogate fallback path (Ax/BoTorch not
-installed), while Sprint 25 used Bayesian optimization.
+**PASS WITH CAVEAT (RF fallback path, not directly comparable to S25
+Ax/BoTorch baselines)** -- all 7 benchmarks ran successfully with
+consistent internal ordering, null control clean, and no code regressions
+detected.  Absolute regret numbers are not directly comparable to Sprint
+25 priors because this run used the RF surrogate fallback path
+(Ax/BoTorch not installed), while Sprint 25 used Bayesian optimization.
 
 ## 1. Executive Summary
 
@@ -207,7 +209,11 @@ dimensionality effect in 15D search space.
 | causal | 24.54 | 7.55 | 10/10 | 20.65, 20.65, 33.54, 21.96, 20.65, 44.16, 20.65, 20.72, 20.65, 21.77 |
 
 All strategies misled by confounding, consistent with prior sprints.
-Surrogate_only converges to a fixed (wrong) policy with zero variance.
+Surrogate_only converges to a fixed (wrong) policy with zero variance --
+the RF surrogate deterministically learns the same confounded surface
+every time, producing identical regret (20.65) across all 10 seeds.
+This is expected behavior: the surrogate faithfully models the biased
+observational data and converges to the same (wrong) optimum.
 Random and causal have high variance around the same wrong level.
 
 ### 4e. Null Control (B20/B40, 3 seeds)
@@ -229,6 +235,10 @@ Random and causal have high variance around the same wrong level.
 
 MWU causal vs s.o.: U=96.0, one-sided p=1.000, two-sided p=0.0006
 
+Note: one-sided p=1.000 reflects the directional test H_a: causal < s.o.,
+which is the wrong direction here.  The two-sided p=0.0006 confirms
+surrogate_only's decisive advantage.
+
 Surrogate_only wins 8/10 seeds at B80.  Both guided strategies beat
 random (s.o. vs random: 10/10 wins).  Under RF fallback, the causal
 strategy's advantage from noise pruning is insufficient to overcome the
@@ -242,8 +252,14 @@ surrogate's ability to model the interaction surface directly.
 | surrogate_only | 2.80 | 2.08 | 4.91, 5.05, 0.47, 0.26, 3.33 |
 | causal | 7.99 | 1.83 | 9.28, 7.54, 10.51, 5.11, 7.51 |
 
-Oracle value: 10.51 (vs S26 oracle 9.03 -- synthetic data stochasticity).
+Oracle value: 10.51 (vs S26 oracle 9.03).  The difference suggests
+the synthetic patient generation is not fully seed-controlled across
+runs; a follow-up should pin the data-generation RNG for reproducibility.
 MWU causal vs s.o.: U=25.0, one-sided p=1.000, two-sided p=0.008
+
+Note: one-sided p=1.000 means the one-sided test was directional
+(H_a: causal < s.o.), which is the wrong direction here since s.o.
+wins.  The two-sided p=0.008 is the appropriate test statistic.
 
 Surrogate_only wins 5/5 seeds.  Consistent with Sprint 26: the smooth
 Emax landscape favors direct surrogate modeling over causal pruning.
@@ -286,8 +302,8 @@ Sprint 25-27 prior references.
 
 ### 6d. Artifacts
 
-All JSON result files written to:
-`/Users/robertwelborn/Projects/_local/causal-optimizer/artifacts/sprint-27-regression/`
+All JSON result files written to (local path, not checked into repo):
+`artifacts/sprint-27-regression/` (relative to the local data directory)
 
 - `base_results.json` (90 results)
 - `medium_noise_results.json` (90 results)
