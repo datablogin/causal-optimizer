@@ -38,8 +38,8 @@ structure, not noise volume alone.  Smooth, all-continuous landscapes
 favor surrogate-only.  Noisy, categorical-barrier landscapes
 (demand-response variants) favor causal.
 
-The null control remains clean for the 9th consecutive run (S18--S25 plus
-S27; S26 did not re-run).  The combined regression gate passes with the
+The null control remains clean for the 9th run across S18--S27 (S26 did
+not re-run).  The combined regression gate passes with the
 expected caveat that RF-fallback absolute numbers are not directly
 comparable to Sprint 25 Ax/BoTorch priors.
 
@@ -50,11 +50,11 @@ comparable to Sprint 25 Ax/BoTorch priors.
 Causal wins on the demand-response family at all noise levels under
 Ax/BoTorch:
 
-| Variant | Dims | Noise | B80 Causal Mean | B80 S.O. Mean | Causal Wins | Two-Sided p |
-|---------|------|-------|-----------------|---------------|-------------|-------------|
-| Base | 5 | 2 | 1.13 | 4.90 | 9/10 | 0.045 |
-| Medium | 9 | 6 | 1.87 | 9.61 | 10/10 | 0.007 |
-| High | 15 | 12 | 2.57 | 15.23 | 8/10 | 0.014 |
+| Variant | Dims | Noise | B80 Causal Mean | B80 S.O. Mean | Catastrophic | Causal Wins | Two-Sided p |
+|---------|------|-------|-----------------|---------------|--------------|-------------|-------------|
+| Base | 5 | 2 | 1.13 | 4.90 | 0/10 | 9/10 | 0.045 |
+| Medium | 9 | 6 | 1.87 | 9.61 | 0/10 | 10/10 | 0.007 |
+| High | 15 | 12 | 2.57 | 15.23 | 0/10 | 8/10 | 0.014 |
 
 All three results are statistically significant (two-sided MWU).  The
 pattern is consistent: causal pruning focuses on the 3 real parents,

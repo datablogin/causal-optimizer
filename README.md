@@ -11,7 +11,7 @@ What we can say confidently today:
 1. **Causal guidance wins on noisy, categorical-barrier landscapes.** On the demand-response family (5D, 9D, 15D), causal beats surrogate-only at B80 with statistical significance at all noise levels (two-sided MWU p <= 0.045). The advantage scales smoothly with noise dimensionality.
 2. **Surrogate-only wins on smooth, all-continuous landscapes.** On the dose-response benchmark (Emax curve, 6D, no categoricals), surrogate-only decisively beats causal.
 3. **The crossover is structural, not dimensional.** The boundary depends on landscape family (categorical barriers, noise-to-signal ratio), not a single noise-dimension threshold.
-4. **Null control has been clean for 9 consecutive runs** (S18--S27), confirming the optimizer does not manufacture false signal.
+4. **Null control has been clean for 9 runs across Sprints 18--27** (S26 did not re-run), confirming the optimizer does not manufacture false signal.
 5. The project has **not yet** shown a reliable causal advantage on the real ERCOT forecasting tasks.
 6. The benchmark stack is disciplined enough to catch false stories -- Sprint 21 rejected an attractive reranking idea that did not survive locked A/B attribution.
 
