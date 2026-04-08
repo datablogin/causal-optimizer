@@ -153,9 +153,8 @@ under RF fallback, matching the Sprint 27 PR #143 finding.
 
 The crossover story holds: as noise dimensionality increases, the RF
 surrogate degrades (3.66 -> 8.68 -> 15.89), while causal remains stable
-(7.32 -> 4.63 -> 3.62).  The crossover from surrogate advantage to causal
-advantage happens between base (5D) and medium-noise (9D), exactly where
-the noise-to-signal ratio shifts from 40% to 67%.
+(7.32 -> 4.63 -> 3.62).  The crossover appears to lie between base (5D) and medium-noise (9D),
+where the noise-to-signal ratio shifts from 40% to 67%.
 
 ## 4. Per-Benchmark Detailed Results
 
