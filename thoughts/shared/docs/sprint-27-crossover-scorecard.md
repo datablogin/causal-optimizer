@@ -118,8 +118,9 @@ noise-dimensional:
 benchmarks under the RF fallback path (Ax/BoTorch not installed).
 Results:
 
-- **Strategy ordering consistent** across all 7 benchmarks compared to
-  prior sprints
+- **Qualitative family-level conclusions remain usable**, with documented
+  backend-sensitive shifts in base (causal win → tie) and interaction
+  (tie → surrogate-only win)
 - **Null control PASS** (0.2% max delta, 9th clean run)
 - **High-noise robust** across backends (9/10 causal wins, two-sided
   p=0.017 under RF)
@@ -227,8 +228,8 @@ the result depends on the optimizer backend (tie under Ax, surrogate-only
 under RF).
 
 **What makes causal win:**
-- Noise-to-signal dimension ratio above ~40%
-- Categorical variables that create exploitation-phase traps
+- Higher noise burden in the demand-response family, especially when
+  paired with categorical barriers
 - Treatment-effect structure that aligns with the causal graph
 
 **What makes surrogate-only win:**
@@ -250,7 +251,7 @@ All claims trace to one of the following source documents:
 | Surrogate-only B80 gradient: 4.90 -> 9.61 -> 15.23 | Sprint 25 scorecard + Sprint 27 medium-noise report |
 | Interaction: tie at B80 under Ax (two-sided p=0.68) | Sprint 26 expansion scorecard (PR #139) |
 | Dose-response: s.o. regret 1.32 vs causal 6.51 at B80 | Sprint 26 expansion scorecard (PR #139) |
-| RF regression gate: 7/7 benchmarks passed, strategy ordering consistent | Sprint 27 combined regression report (PR #144) |
+| RF regression gate: 7/7 benchmarks passed, family-level conclusions usable with backend-sensitive shifts | Sprint 27 combined regression report (PR #144) |
 | RF high-noise: 9/10 causal wins (two-sided p=0.017) | Sprint 27 combined regression report (PR #144) |
 | RF medium-noise: 8/10 causal wins (two-sided p=0.026) | Sprint 27 combined regression report (PR #144) |
 | Null control: 0.2%, 9th clean run | Sprint 27 combined regression report (PR #144) |
@@ -263,9 +264,11 @@ All claims trace to one of the following source documents:
    monotonic gradient across 5D, 9D, 15D.
 2. Did the regression gate cover all benchmarks? **YES** -- first-ever
    7-benchmark combined gate.
-3. Did null control remain clean? **YES** -- 0.2%, 9th consecutive PASS.
-4. Did any prior result regress? **NO** -- strategy ordering consistent
-   under RF fallback.
+3. Did null control remain clean? **YES** -- 0.2%, 9th clean null run
+   (S26 did not re-run).
+4. Did any prior result regress? **NO code regressions** -- family-level
+   conclusions hold under RF fallback, with documented backend-sensitive
+   shifts on base and interaction benchmarks.
 
 ### 7b. What We Learned
 
