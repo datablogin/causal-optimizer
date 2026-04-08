@@ -68,8 +68,9 @@ Under the RF fallback path, the base benchmark shows causal and
 surrogate_only at rough parity (B80 MWU two-sided p=0.97), with
 surrogate_only actually achieving lower mean regret (3.66 vs 7.32).
 This is expected: the Sprint 25 exploitation-phase categorical sweep
-was designed to work with the Ax/BoTorch optimization phase, and the RF
-surrogate fallback bypasses that pathway entirely.
+still runs under RF fallback, but it operates on a different surrounding
+optimizer path and surrogate behavior, making it less effective than
+under the Ax/BoTorch optimization phase it was designed for.
 
 The stability gate as defined in Sprint 25 (0/10 catastrophic, mean < 2.0,
 std < 3.0) is **not met under RF fallback**.  This does not indicate a code
@@ -105,8 +106,8 @@ parents and achieves regret comparable to the Ax/BoTorch path.
 | B40 | 0.2% | 0.1% |
 
 Maximum strategy difference: **0.2%** (within the 2% threshold).
-This is the **10th consecutive sprint** with a clean null control
-(S18--S27).
+This is the **9th clean null run** with a clean null control
+(S18--S25 plus S27; S26 did not re-run null control).
 
 ### 3d. Did any Sprint 26 expansion benchmarks drift materially?
 
@@ -272,7 +273,7 @@ Emax landscape favors direct surrogate modeling over causal pruning.
 | Medium-noise | Causal (p=0.026) | Yes | Yes (S27 PR #143) |
 | High-noise | Causal (p=0.017) | Yes, strong | Yes (S25 causal won) |
 | Confounded | None (all misled) | No | Yes (S19: all misled) |
-| Null control | None (PASS) | N/A | Yes (10th consecutive PASS) |
+| Null control | None (PASS) | N/A | Yes (9th clean null run) |
 | Interaction | S.O. (p=0.0006) | No | Changed: S26 was tie (with Ax) |
 | Dose-response | S.O. (p=0.008) | No | Yes (S26: s.o. won) |
 
@@ -334,7 +335,8 @@ underlying model is an RF surrogate or a GP.
 
 ### 7c. Did null control remain clean?
 
-**Yes.** PASS with 0.2% maximum delta.  10th consecutive clean sprint.
+**Yes.** PASS with 0.2% maximum delta.  9th clean null run
+(S18--S25 plus S27; S26 did not re-run null control).
 
 ### 7d. Did any Sprint 26 expansion benchmarks drift materially?
 
@@ -347,9 +349,10 @@ consistent** (s.o. wins at B80 in both Sprint 26 and Sprint 27).
 
 **Yes, cleanly.** The noise-dimension gradient is smooth and monotonic:
 causal B80 mean regret 7.32 (5D) -> 4.63 (9D) -> 3.62 (15D).
-Surrogate_only degrades: 3.66 -> 8.68 -> 15.89.  The crossover from
-surrogate advantage to causal advantage occurs between base and
-medium-noise, at the 40-67% noise ratio boundary.
+Surrogate_only degrades: 3.66 -> 8.68 -> 15.89.  The crossover region from surrogate advantage to causal advantage
+appears to lie between base and medium-noise (noise ratio 40-67%),
+though the exact boundary is not established from this single
+RF-fallback run.
 
 ## 8. Recommendation
 
