@@ -4,21 +4,16 @@ Causally informed experiment optimization for teams trying to learn from experim
 
 ## Project Status
 
-This project is now in a stronger place as a **research system** than as a proven **real-world optimizer win**.
+This project has **characterized the boundary of causal advantage** across a 7-benchmark suite spanning 4 domain families.
 
 What we can say confidently today:
 
-1. The benchmark stack is real and trustworthy enough to catch false stories.
-2. The project can exploit signal on controlled positive benchmarks.
-3. The project can avoid claiming wins on null-signal controls.
-4. The project has **not yet** shown a reliable causal advantage on the real ERCOT forecasting tasks.
-5. Sprint 21's locked A/B rerun found that Sprint 20's apparent improvement was **not attributable** to balanced Ax reranking.
-
-Current recommendation:
-
-1. revert or disable balanced reranking back to alignment-only
-2. confirm that alignment-only still delivers the stronger positive-control behavior
-3. only then decide whether to expand to new benchmark families or resume optimizer-core tuning
+1. **Causal guidance wins on noisy, categorical-barrier landscapes.** On the demand-response family (5D, 9D, 15D), causal beats surrogate-only at B80 with statistical significance at all noise levels (two-sided MWU p <= 0.045). The advantage scales smoothly with noise dimensionality.
+2. **Surrogate-only wins on smooth, all-continuous landscapes.** On the dose-response benchmark (Emax curve, 6D, no categoricals), surrogate-only decisively beats causal.
+3. **The crossover is structural, not dimensional.** The boundary depends on landscape family (categorical barriers, noise-to-signal ratio), not a single noise-dimension threshold.
+4. **Null control has been clean for 9 consecutive runs** (S18--S27), confirming the optimizer does not manufacture false signal.
+5. The project has **not yet** shown a reliable causal advantage on the real ERCOT forecasting tasks.
+6. The benchmark stack is disciplined enough to catch false stories -- Sprint 21 rejected an attractive reranking idea that did not survive locked A/B attribution.
 
 ## What This Repo Is
 
@@ -41,76 +36,60 @@ For system architecture details (7-stage pipeline, graceful degradation, MAP-Eli
 The project now has:
 
 1. locked chronological train/validation/test splits for real forecasting benchmarks
-2. positive controls
-3. negative/null controls
-4. provenance capture
-5. controlled A/B comparison infrastructure
+2. positive controls, negative/null controls, and provenance capture
+3. controlled A/B comparison infrastructure
+4. a 7-benchmark suite across 4 domain families
 
 That has been a major success. It means failed ideas are now informative rather than ambiguous.
 
-### 2. Real predictive wins are still unproven
+### 2. Causal advantage has a characterized boundary
+
+Sprint 27 completed a noise-dimension gradient study across the demand-response family:
+
+| Variant | Dimensions | Noise Dims | B80 Causal Wins | Two-Sided p |
+|---------|-----------|-----------|-----------------|-------------|
+| Base | 5 | 2 | 9/10 | 0.045 |
+| Medium-noise | 9 | 6 | 10/10 | 0.007 |
+| High-noise | 15 | 12 | 8/10 | 0.014 |
+
+Causal pruning provides stable performance across noise levels (B80 mean regret: 1.13, 1.87, 2.57). Surrogate-only degrades sharply (4.90, 9.61, 15.23). But on the smooth dose-response landscape (6D, no categoricals), surrogate-only wins decisively.
+
+The crossover is structural: noisy + categorical = causal wins; smooth + continuous = surrogate wins.
+
+### 3. Real predictive wins are still unproven
 
 On the two real ERCOT forecasting benchmarks:
 
 1. `random` was marginally better than the engine-based strategies
 2. `causal` and `surrogate_only` were effectively identical
 3. all strategies converged to `ridge`
-4. the results were very stable across seeds
 
-Those results matter. They tell us the original causal differentiation was too weak to matter on the real task.
+Those results matter. They tell us the causal differentiation has not yet transferred to the real forecasting tasks.
 
-### 3. Positive and negative controls changed the project
+### 4. Attribution discipline rejected a false story
 
-Sprint 18 established a much better evidence standard:
+Sprint 20's post-merge rerun looked better. Sprint 21's locked A/B rerun then showed that the improvement was **not attributable** to balanced Ax reranking -- alignment-only was equal or better. That rejection strengthened the project's evidence standards and led to reverting balanced reranking in Sprint 22.
 
-1. the repaired counterfactual benchmark became a valid positive control
-2. the null-signal benchmark passed
-3. the time-series profiler correctly surfaced calendar / timezone / DST issues
+### 5. Stability took four targeted fixes to achieve
 
-That is the point where this stopped being just “interesting optimizer ideas” and became a real research program.
-
-### 4. Sprint 19 produced the first meaningful causal progress
-
-The first convincing gains came from the soft-causal optimizer changes:
-
-1. causal improved on the base counterfactual
-2. causal improved on the high-noise counterfactual
-3. the null control stayed clean
-
-This is the strongest evidence so far that the optimizer can use causal structure in benchmark settings where it should matter.
-
-### 5. Sprint 20 looked better, but Sprint 21 forced attribution
-
-Sprint 20's post-merge rerun looked materially better. Sprint 21 then asked the harder question: **what actually caused the improvement?**
-
-The locked A/B rerun found:
-
-1. alignment-only reranking matched or beat balanced reranking everywhere that mattered
-2. on base B80, alignment-only was much better
-3. on high-noise, the two were mostly indistinguishable
-4. the null control was identical on both sides
-
-That is why Sprint 21's final verdict is: **NOT ATTRIBUTED**.
-
-This was a good outcome for the project even though it was a negative outcome for the balanced reranking idea. The system is getting better at rejecting attractive but unsupported explanations.
+The base-B80 catastrophic-seed problem (seeds locking into a bad categorical value during exploitation) resisted four fixes across Sprints 22--24 before Sprint 25's exploitation-phase categorical sweep resolved it (0/10 catastrophic, mean 1.13, std 1.40). The key insight was targeting the correct optimizer phase (exploitation, not optimization).
 
 ## Current Read
 
 If you want the shortest honest summary:
 
-1. we have a much better **automated research harness** than we did at the start
-2. we have some evidence of causal advantage on controlled benchmarks
-3. we do **not** yet have strong evidence of causal advantage on the real forecasting tasks
-4. we now have enough rigor to reject optimizer stories that do not survive attribution
+1. we have a **characterized boundary** for causal advantage: it helps on noisy, categorical-barrier landscapes and does not help on smooth continuous ones
+2. we have **statistically significant** causal wins on 3 of 7 benchmarks (two-sided MWU p <= 0.045), with 0/10 catastrophic seeds on all three under Ax/BoTorch
+3. we do **not** yet have evidence of causal advantage on the real ERCOT forecasting tasks
+4. we have enough rigor to reject optimizer stories that do not survive attribution (Sprint 21) and stability gates that took 4 targeted fixes to pass (Sprint 25)
 
 ## Key Documents
 
-1. [Sprint 18 Discovery Trust Scorecard](thoughts/shared/docs/sprint-18-discovery-trust-scorecard.md)
-2. [Sprint 19 Differentiation Scorecard](thoughts/shared/docs/sprint-19-differentiation-scorecard.md)
-3. [Sprint 20 Post-Ax Controlled Rerun Report](thoughts/shared/docs/sprint-20-post-ax-rerun-report.md)
-4. [Sprint 21 Controlled A/B Rerun Report](thoughts/shared/docs/sprint-21-controlled-ab-rerun-report.md)
-5. Sprint 21 Attribution Scorecard (PR #116, pending merge)
-6. [Benchmark State](thoughts/shared/plans/07-benchmark-state.md)
+1. [Sprint 27 Crossover Scorecard](thoughts/shared/docs/sprint-27-crossover-scorecard.md) -- where causal wins, ties, and loses
+2. [Sprint 25 Stability Scorecard](thoughts/shared/docs/sprint-25-stability-scorecard.md) -- exploitation-phase fix that resolved B80 catastrophic seeds
+3. [Sprint 26 Expansion Scorecard](thoughts/shared/docs/sprint-26-expansion-scorecard.md) -- benchmark expansion to interaction policy and dose-response
+4. [Sprint 21 Attribution Scorecard](thoughts/shared/docs/sprint-21-attribution-scorecard.md) -- locked A/B reranking attribution
+5. [Benchmark State](thoughts/shared/plans/07-benchmark-state.md)
 
 ## Install
 
