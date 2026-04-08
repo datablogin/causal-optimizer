@@ -1,14 +1,18 @@
 """Harder counterfactual benchmark variants for causal differentiation.
 
-Provides two variants of the base DemandResponseScenario that create
-stronger positive-control pressure for causal guidance:
+Provides three variants of the base DemandResponseScenario that create
+positive-control pressure for causal guidance at different noise levels:
 
-1. **HighNoiseDemandResponse** -- Adds 10 irrelevant nuisance dimensions
+1. **MediumNoiseDemandResponse** -- Adds 4 irrelevant nuisance dimensions
+   to the search space (9D total).  Sits between base (5D) and high-noise
+   (15D) to map the causal/surrogate crossover boundary.
+
+2. **HighNoiseDemandResponse** -- Adds 10 irrelevant nuisance dimensions
    to the search space.  The causal graph excludes these nuisance vars
    as ancestors of the objective, so causal guidance focuses on 3 real
    dimensions while surrogate_only must search 13+.
 
-2. **ConfoundedDemandResponse** -- Introduces a hidden confounder ("grid
+3. **ConfoundedDemandResponse** -- Introduces a hidden confounder ("grid
    stress") that affects both treatment assignment probability and the
    base load outcome.  This creates Simpson's paradox: naive estimation
    overestimates treatment benefit because treated hours systematically
@@ -27,6 +31,7 @@ benefit.
 
 Public API
 ----------
+- :class:`MediumNoiseDemandResponse`
 - :class:`HighNoiseDemandResponse`
 - :class:`ConfoundedDemandResponse`
 """
@@ -52,8 +57,80 @@ from causal_optimizer.types import (
     VariableType,
 )
 
-# Number of nuisance dimensions added by the high-noise variant.
+# Number of nuisance dimensions added by each noise variant.
+_NUM_MEDIUM_NUISANCE_VARS: int = 4
 _NUM_NUISANCE_VARS: int = 10
+
+
+# ── Medium-noise variant ───────────────────────────────────────────
+
+
+class MediumNoiseDemandResponse(DemandResponseScenario):
+    """Medium-dimensional noise variant of the demand-response benchmark.
+
+    Adds 4 irrelevant nuisance dimensions (``noise_var_0`` through
+    ``noise_var_3``) to the search space, for 9 total variables
+    (3 real + 2 original noise + 4 nuisance).
+
+    Sits between the base (5D) and high-noise (15D) variants to map the
+    crossover boundary where causal pruning starts to provide a decisive
+    advantage over surrogate-only search.
+
+    The causal graph does NOT include edges from nuisance vars to the
+    objective, so causal guidance can focus on the 3 real parents while
+    surrogate_only must search 9 dimensions.
+
+    Inherits ``run_benchmark`` from :class:`DemandResponseScenario`
+    unchanged.
+    """
+
+    def generate(self) -> pd.DataFrame:
+        """Generate data with 4 nuisance columns appended."""
+        df = super().generate()
+
+        rng = np.random.default_rng(self._seed + 7777)
+        for i in range(_NUM_MEDIUM_NUISANCE_VARS):
+            df[f"noise_var_{i}"] = rng.random(len(df))
+
+        return df
+
+    @staticmethod
+    def search_space() -> SearchSpace:
+        """Return the expanded search space with 4 nuisance dimensions.
+
+        The 3 real causal parents + 2 original noise dims from the base
+        benchmark, plus 4 new nuisance dimensions, for 9 total.
+        """
+        base_vars = DemandResponseScenario.search_space().variables
+
+        nuisance_vars = [
+            Variable(
+                name=f"noise_var_{i}",
+                variable_type=VariableType.CONTINUOUS,
+                lower=0.0,
+                upper=1.0,
+            )
+            for i in range(_NUM_MEDIUM_NUISANCE_VARS)
+        ]
+
+        return SearchSpace(variables=base_vars + nuisance_vars)
+
+    @staticmethod
+    def causal_graph() -> CausalGraph:
+        """Return the causal graph with 4 nuisance vars disconnected from objective."""
+        base_edges = [
+            ("treat_temp_threshold", "objective"),
+            ("treat_hour_start", "objective"),
+            ("treat_hour_end", "objective"),
+            ("treat_humidity_threshold", "base_load"),
+            ("treat_day_filter", "base_load"),
+        ]
+
+        nuisance_edges = [
+            (f"noise_var_{i}", "nuisance_sink") for i in range(_NUM_MEDIUM_NUISANCE_VARS)
+        ]
+
+        return CausalGraph(edges=base_edges + nuisance_edges)
 
 
 # ── High-noise variant ─────────────────────────────────────────────

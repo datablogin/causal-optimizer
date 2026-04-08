@@ -4,11 +4,13 @@ Runs random, surrogate-only, and causal strategies on the semi-synthetic
 demand-response benchmark using real ERCOT covariates with known treatment
 effects.
 
-Supports three variants via ``--variant``:
+Supports five variants via ``--variant``:
 
 - ``base`` (default): 3 causal parents + 2 noise dimensions.
+- ``medium_noise``: 3 causal parents + 2 original noise + 4 nuisance dimensions.
 - ``high_noise``: 3 causal parents + 2 original noise + 10 nuisance dimensions.
 - ``confounded``: Hidden confounder (grid stress) biases treatment assignment.
+- ``interaction``: Multi-threshold interaction policy (7D continuous, no categoricals).
 
 Usage::
 
@@ -43,6 +45,7 @@ from causal_optimizer.benchmarks.counterfactual_energy import (
 from causal_optimizer.benchmarks.counterfactual_variants import (
     ConfoundedDemandResponse,
     HighNoiseDemandResponse,
+    MediumNoiseDemandResponse,
 )
 from causal_optimizer.benchmarks.interaction_policy import (
     InteractionPolicyScenario,
@@ -108,9 +111,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--variant",
         default="base",
-        choices=["base", "high_noise", "confounded", "interaction"],
+        choices=["base", "medium_noise", "high_noise", "confounded", "interaction"],
         help=(
-            "Benchmark variant: 'base' (default), 'high_noise' (10+ nuisance dims), "
+            "Benchmark variant: 'base' (default), 'medium_noise' (4 nuisance dims), "
+            "'high_noise' (10+ nuisance dims), "
             "'confounded' (Simpson's paradox from hidden confounder), or "
             "'interaction' (multi-threshold interaction policy)."
         ),
@@ -275,6 +279,7 @@ def main() -> None:
     # Apply variant-specific treatment cost default if not overridden by user.
     variant_default_cost: dict[str, float] = {
         "base": 60.0,
+        "medium_noise": 60.0,
         "high_noise": 60.0,
         "confounded": 60.0,
         "interaction": 120.0,
@@ -294,7 +299,9 @@ def main() -> None:
         logger.info("Using variant: %s (%s)", variant, "InteractionPolicyScenario")
     else:
         scenario_cls: type[DemandResponseScenario]
-        if variant == "high_noise":
+        if variant == "medium_noise":
+            scenario_cls = MediumNoiseDemandResponse
+        elif variant == "high_noise":
             scenario_cls = HighNoiseDemandResponse
         elif variant == "confounded":
             scenario_cls = ConfoundedDemandResponse
