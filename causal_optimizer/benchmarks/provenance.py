@@ -87,6 +87,57 @@ def dataset_hash(path: str) -> str | None:
         return None
 
 
+def detect_optimizer_path() -> dict[str, object]:
+    """Detect which optimizer path is available in the current environment.
+
+    Checks whether Ax and BoTorch are importable.  When both are available,
+    the optimizer uses Bayesian optimization (``ax_botorch``).  When either
+    is missing, the engine falls back to the RF surrogate path
+    (``rf_fallback``).
+
+    Returns:
+        A JSON-serializable dict with:
+        - ``optimizer_path``: ``"ax_botorch"`` or ``"rf_fallback"``
+        - ``ax_available``: bool
+        - ``botorch_available``: bool
+        - ``fallback_reason``: ``None`` if Ax/BoTorch available, or a
+          string describing why fallback occurred (e.g., missing or broken
+          package install)
+    """
+    ax_ok = False
+    botorch_ok = False
+    reasons: list[str] = []
+
+    try:
+        import ax  # noqa: F401
+
+        ax_ok = True
+    except Exception as exc:
+        reasons.append(f"ax-platform not installed or failed to import ({type(exc).__name__})")
+
+    try:
+        import botorch  # noqa: F401
+
+        botorch_ok = True
+    except Exception as exc:
+        reasons.append(f"botorch not installed or failed to import ({type(exc).__name__})")
+
+    if ax_ok and botorch_ok:
+        return {
+            "optimizer_path": "ax_botorch",
+            "ax_available": True,
+            "botorch_available": True,
+            "fallback_reason": None,
+        }
+
+    return {
+        "optimizer_path": "rf_fallback",
+        "ax_available": ax_ok,
+        "botorch_available": botorch_ok,
+        "fallback_reason": "; ".join(reasons),
+    }
+
+
 def collect_provenance(
     *,
     seeds: list[int],
@@ -111,7 +162,8 @@ def collect_provenance(
         A JSON-serializable dict with provenance metadata including
         ``git_sha``, ``python_version``, ``package_versions``,
         ``command_line``, ``timestamp``, ``seeds``, ``budgets``,
-        ``strategies``, and optionally ``dataset_path`` / ``dataset_hash``.
+        ``strategies``, ``optimizer_path``, and optionally
+        ``dataset_path`` / ``dataset_hash``.
     """
     vi = sys.version_info
     python_version = f"{vi.major}.{vi.minor}.{vi.micro}"
@@ -132,5 +184,8 @@ def collect_provenance(
     if dataset_path is not None:
         prov["dataset_path"] = dataset_path
         prov["dataset_hash"] = dataset_hash(dataset_path)
+
+    # Sprint 28: optimizer-path provenance
+    prov["optimizer_path"] = detect_optimizer_path()
 
     return prov
