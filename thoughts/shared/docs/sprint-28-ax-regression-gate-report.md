@@ -73,7 +73,7 @@ Per-seed B80 regrets: 0.35, 0.36, 0.35, 3.52, 0.60, 0.61, 0.36, 4.28, 0.36, 0.51
 
 **Yes, exactly.**
 
-| Metric | S25 Medium | S28 Medium | S25 High | S28 High |
+| Metric | S27 Medium | S28 Medium | S25 High | S28 High |
 |--------|-----------|-----------|---------|---------|
 | B80 causal mean | 1.87 | 1.87 | 2.57 | 2.57 |
 | B80 causal std | 1.74 | 1.74 | 2.28 | 2.28 |
@@ -81,7 +81,9 @@ Per-seed B80 regrets: 0.35, 0.36, 0.35, 3.52, 0.60, 0.61, 0.36, 4.28, 0.36, 0.51
 | Causal wins vs s.o. | 10/10 | 10/10 | 8/10 | 8/10 |
 | MWU two-sided p | 0.007 | 0.007 | 0.014 | 0.014 |
 
-Both medium-noise and high-noise reproduce Sprint 25 exactly.  The
+Medium-noise reproduces the Sprint 27 Ax-primary reference exactly
+(medium-noise was introduced in Sprint 27, not Sprint 25).  High-noise
+reproduces the Sprint 25 trusted prior exactly.  The
 noise-dimension gradient remains smooth and monotonic under Ax/BoTorch:
 
 | Variant | Dims | Noise dims | B80 causal mean | B80 s.o. mean | Causal wins | Two-sided p |
@@ -148,11 +150,14 @@ Two benchmarks flip their winner when switching backends:
   over causal pruning") was RF-specific rather than a fundamental
   property.
 
-All other family-level conclusions remain intact:
+Other family-level conclusions:
 - Core energy: causal advantage confirmed (3/3 variants under Ax, 2/3 under RF)
 - Confounded: all strategies misled (unchanged)
 - Null control: no false positives (unchanged)
-- Interaction: surrogate_only wins (unchanged, though gap narrows under Ax)
+- Interaction: surrogate_only wins under both backends, but the gap
+  narrows under Ax (S26 was a tie at p=0.68; S28 Ax shows s.o. wins at
+  p=0.014).  This benchmark is backend-sensitive in magnitude, with
+  surrogate_only consistently favored
 
 ## 4. Per-Benchmark Detailed Results
 
@@ -324,8 +329,10 @@ are fully met.
 ### 8b. Did medium-noise and high-noise preserve the demand-response story?
 
 **Yes, exactly.** Medium-noise: mean 1.87, std 1.74, 10/10 causal wins
-(p=0.007).  High-noise: mean 2.57, std 2.28, 8/10 causal wins (p=0.014).
-Both match Sprint 25 to the second decimal place.
+(p=0.007) — matches the Sprint 27 Ax-primary reference.  High-noise:
+mean 2.57, std 2.28, 8/10 causal wins (p=0.014) — matches the Sprint 25
+trusted prior.  Both match their respective Ax references to the second
+decimal place.
 
 ### 8c. Did null control remain clean?
 
