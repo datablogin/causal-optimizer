@@ -120,9 +120,7 @@ def detect_optimizer_path() -> dict[str, object]:
 
         botorch_ok = True
     except Exception as exc:
-        reasons.append(
-            f"botorch not installed or failed to import ({type(exc).__name__})"
-        )
+        reasons.append(f"botorch not installed or failed to import ({type(exc).__name__})")
 
     if ax_ok and botorch_ok:
         return {
