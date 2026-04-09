@@ -101,7 +101,8 @@ def detect_optimizer_path() -> dict[str, object]:
         - ``ax_available``: bool
         - ``botorch_available``: bool
         - ``fallback_reason``: ``None`` if Ax/BoTorch available, or a
-          string describing why fallback occurred (e.g., missing package)
+          string describing why fallback occurred (e.g., missing or broken
+          package install)
     """
     ax_ok = False
     botorch_ok = False
@@ -111,15 +112,17 @@ def detect_optimizer_path() -> dict[str, object]:
         import ax  # noqa: F401
 
         ax_ok = True
-    except ImportError:
-        reasons.append("ax-platform not installed")
+    except Exception as exc:
+        reasons.append(f"ax-platform not installed or failed to import ({type(exc).__name__})")
 
     try:
         import botorch  # noqa: F401
 
         botorch_ok = True
-    except ImportError:
-        reasons.append("botorch not installed")
+    except Exception as exc:
+        reasons.append(
+            f"botorch not installed or failed to import ({type(exc).__name__})"
+        )
 
     if ax_ok and botorch_ok:
         return {

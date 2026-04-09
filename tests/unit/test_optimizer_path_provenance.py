@@ -92,7 +92,7 @@ class TestDetectOptimizerPathFallback:
 
         assert result["optimizer_path"] == "rf_fallback"
         assert result["ax_available"] is False
-        assert "ax-platform not installed" in result["fallback_reason"]
+        assert "ax-platform not installed or failed to import" in result["fallback_reason"]
 
     def test_rf_fallback_when_both_missing(self):
         """When both ax and botorch imports fail, should detect rf_fallback."""
@@ -114,8 +114,30 @@ class TestDetectOptimizerPathFallback:
         assert result["optimizer_path"] == "rf_fallback"
         assert result["ax_available"] is False
         assert result["botorch_available"] is False
-        assert "ax-platform not installed" in result["fallback_reason"]
-        assert "botorch not installed" in result["fallback_reason"]
+        assert "ax-platform" in result["fallback_reason"]
+        assert "botorch" in result["fallback_reason"]
+
+    def test_rf_fallback_on_non_import_error(self):
+        """A broken install that raises OSError should still degrade to
+        rf_fallback, not crash provenance capture."""
+        import builtins
+        from unittest.mock import patch
+
+        from causal_optimizer.benchmarks.provenance import detect_optimizer_path
+
+        real_import = builtins.__import__
+
+        def mock_import(name, *args, **kwargs):
+            if name == "ax":
+                raise OSError("broken ax install")
+            return real_import(name, *args, **kwargs)
+
+        with patch("builtins.__import__", side_effect=mock_import):
+            result = detect_optimizer_path()
+
+        assert result["optimizer_path"] == "rf_fallback"
+        assert result["ax_available"] is False
+        assert "OSError" in result["fallback_reason"]
 
 
 class TestCollectProvenanceIncludesOptimizerPath:
