@@ -57,7 +57,7 @@ Total wall-clock time: approximately 2 hours running 7 benchmarks in parallel.
 | B80 causal mean regret | 1.13 | 1.13 | 7.32 |
 | B80 causal std | 1.40 | 1.40 | 10.14 |
 | Catastrophic (>10) | 0/10 | 0/10 | 3/10 |
-| Seeds < 1.0 | 8/10 | 7/10 | 3/10 |
+| Seeds < 1.0 | 8/10 | 8/10 | 3/10 |
 | Causal wins vs s.o. | 9/10 | 9/10 | 5/10 |
 | MWU two-sided p | 0.045 | 0.045 | 0.970 |
 
