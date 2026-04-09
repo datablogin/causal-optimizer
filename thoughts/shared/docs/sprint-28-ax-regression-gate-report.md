@@ -12,9 +12,9 @@
 
 ## Verdict
 
-**PASS -- Ax/BoTorch regression gate intact.** The Sprint 25 trusted
-priors are reproduced exactly on the three core energy benchmarks
-(base, medium-noise, high-noise).  The base-B80 stability gate holds
+**PASS -- Ax/BoTorch regression gate intact.** The trusted Ax priors
+are reproduced exactly: base and high-noise match Sprint 25, medium-noise
+matches Sprint 27 (when it was introduced).  The base-B80 stability gate holds
 (0/10 catastrophic, mean 1.13, std 1.40).  Null control is clean.  All
 7 benchmarks completed successfully with provenance confirming
 `optimizer_path: "ax_botorch"` in every artifact.
@@ -25,8 +25,9 @@ This is the direct Ax/BoTorch comparison that Sprint 27's combined
 regression gate could not provide (it ran on RF fallback).  With the
 same package versions as Sprint 25 (ax-platform 1.2.4, botorch 0.17.2,
 torch 2.10.0) and the same code (plus Sprint 28 provenance tracking),
-all three core energy benchmarks reproduce their Sprint 25 numbers
-to the second decimal place.
+the core energy benchmarks reproduce their trusted Ax references to the
+second decimal place (base and high-noise vs Sprint 25; medium-noise vs
+Sprint 27, when it was introduced).
 
 The key finding: **the optimizer backend is the primary driver of
 absolute regret differences between Sprint 25 and Sprint 27.**
@@ -251,11 +252,11 @@ and causal pruning to the dose variable further accelerates convergence.
 
 ## 5. Strategy Ordering Summary
 
-| Benchmark | B80 Winner | Causal Advantage? | Consistent with S25? | Changed from S27 RF? |
-|-----------|-----------|-------------------|---------------------|---------------------|
-| Base energy | Causal (p=0.045) | Yes | Yes (exact match) | Yes (was tie) |
-| Medium-noise | Causal (p=0.007) | Yes, strong | Yes (exact match) | No (was also causal) |
-| High-noise | Causal (p=0.014) | Yes, strong | Yes (exact match) | No (was also causal) |
+| Benchmark | B80 Winner | Causal Advantage? | Consistent with Ax prior? | Changed from S27 RF? |
+|-----------|-----------|-------------------|--------------------------|---------------------|
+| Base energy | Causal (p=0.045) | Yes | Yes, matches S25 | Yes (was tie) |
+| Medium-noise | Causal (p=0.007) | Yes, strong | Yes, matches S27 | No (was also causal) |
+| High-noise | Causal (p=0.014) | Yes, strong | Yes, matches S25 | No (was also causal) |
 | Confounded | None (all misled) | No | Yes | No |
 | Null control | None (PASS) | N/A | Yes | No |
 | Interaction | S.O. (p=0.014) | No | Closer to S26 tie | Yes (was stronger s.o.) |
