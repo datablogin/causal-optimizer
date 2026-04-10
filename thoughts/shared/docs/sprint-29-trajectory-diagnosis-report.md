@@ -69,7 +69,7 @@ at B20 (13.83 vs 10.13), then shows the steepest improvement trajectory
 | 8 | 16.79 | 7.65 | 12.20 |
 | 9 | 16.05 | 7.72 | 7.45 |
 
-At B20, 6 of 10 causal seeds have regret above 12.0 (near the oracle
+At B20, 7 of 10 causal seeds have regret above 12.0 (near the oracle
 value of ~19.88, meaning almost no improvement over random policy).
 Seeds 3 and 6 are at regret 19.67 and 19.88 -- the optimizer has found
 a policy that is *worse than doing nothing*.
@@ -82,9 +82,10 @@ suggesting a consistent convergence to a local optimum.
 The interaction benchmark has a 3-way interaction surface:
 
 ```
-effect = 32*temp + 24*humid + 20*hour
-       + 120*temp*humid + 100*temp*hour + 80*humid*hour
-       + 250*temp*humid*hour    <-- dominant term
+let T = sigmoid(temp), H = sigmoid(humid), W = gaussian(hour)  # each in [0,1]
+effect = 32*T + 24*H + 20*W
+       + 120*T*H + 100*T*W + 80*H*W
+       + 250*T*H*W    <-- dominant term
 ```
 
 The 250-coefficient 3-way term means marginal effects are weak (~20-32
@@ -315,10 +316,19 @@ the trajectory diagnosis merges.
 
 ### Data sources
 
-All trajectory data from Sprint 28 Ax/BoTorch artifacts:
+All trajectory data from Sprint 28 Ax/BoTorch artifacts (local, not
+committed to repo):
 ```
-/Users/robertwelborn/Projects/_local/causal-optimizer/artifacts/sprint-28-ax-gate/interaction_results.json
-/Users/robertwelborn/Projects/_local/causal-optimizer/artifacts/sprint-28-ax-gate/dose_response_results.json
+artifacts/sprint-28-ax-gate/interaction_results.json
+artifacts/sprint-28-ax-gate/dose_response_results.json
+```
+
+To regenerate, run the Sprint 28 Ax regression gate benchmarks with
+Ax/BoTorch installed (ax-platform 1.2.4, botorch 0.17.2):
+```bash
+uv sync --extra bayesian
+uv run python scripts/counterfactual_benchmark.py --variant interaction --seeds 10 --budgets 20,40,80
+uv run python scripts/dose_response_benchmark.py --seeds 5 --budgets 20,40,80
 ```
 
 ### Code inspected
@@ -349,4 +359,4 @@ print(graph.ancestors('objective'))
 1. **This PR**: trajectory diagnosis (no code changes)
 2. **Next**: increase dose-response seeds to 10 under Ax to certify/refute the causal trend
 3. **After**: if interaction fix is warranted, gate alignment bonus behind minimum optimization experiment count or surrogate-quality threshold
-4. **Gate**: Ax-primary regression gate to confirm demand-response wins are preserved
+4. **Gate**: Ax-primary regression gate to confirm demand-response and dose-response results are preserved
