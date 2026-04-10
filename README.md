@@ -78,9 +78,9 @@ The base-B80 catastrophic-seed problem (seeds locking into a bad categorical val
 
 If you want the shortest honest summary:
 
-1. we have a **characterized boundary** for causal advantage: it helps on noisy, categorical-barrier landscapes and does not help on smooth continuous ones
+1. we have a **characterized boundary** for causal advantage: it helps on noisy, categorical-barrier landscapes; smooth continuous dose-response is backend-sensitive (RF favors surrogate-only, Ax/BoTorch gives causal lower mean regret but not a statistically certified win at current sample size)
 2. we have **statistically significant** causal wins on 3 of 7 benchmarks (two-sided MWU p <= 0.045), with 0/10 catastrophic seeds on all three under Ax/BoTorch
-3. backend matters: 4 of 7 rows are **backend-invariant**, 2 are **Ax-primary** (winner changes by backend), and 1 is **backend-sensitive** in magnitude
+3. backend matters: 4 of 7 rows are **backend-invariant**, 2 are **Ax-primary** (mean-regret direction reverses by backend), and 1 is **backend-sensitive** in magnitude
 4. we do **not** yet have evidence of causal advantage on the real ERCOT forecasting tasks
 5. we have enough rigor to reject optimizer stories that do not survive attribution (Sprint 21) and stability gates that took 4 targeted fixes to pass (Sprint 25)
 

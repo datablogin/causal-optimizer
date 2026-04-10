@@ -306,7 +306,7 @@ What we learned:
 2. the Ax/BoTorch seven-benchmark rerun restores direct comparability to the trusted Ax baselines
 3. all demand-response trusted priors reproduced exactly (base matches S25, medium matches S27, high matches S25)
 4. null control: 10th clean run (0.2% max delta)
-5. two rows change winner by backend: base energy (tie under RF, causal win under Ax) and dose-response (s.o. win under RF, causal trend under Ax)
+5. two rows have mean-regret direction reverse by backend: base energy (tie under RF, causal win under Ax) and dose-response (s.o. win under RF, causal lower mean under Ax but p=0.142)
 6. one row is backend-sensitive in magnitude: interaction (s.o. wins under both, gap narrows under Ax)
 7. four rows are backend-invariant: medium-noise, high-noise, confounded, null control
 8. verdict: **AX PRIMARY, RF SECONDARY**
@@ -356,7 +356,7 @@ The project is a **trustworthy automated research harness with a characterized c
 What is now established:
 
 1. causal guidance clearly helps in the demand-response family under the trusted Ax path (3/3 variants, all statistically significant)
-2. four of seven benchmark rows are backend-invariant; two are Ax-primary (winner changes by backend); one is backend-sensitive in magnitude
+2. four of seven benchmark rows are backend-invariant; two are Ax-primary (mean-regret direction reverses by backend); one is backend-sensitive in magnitude
 3. RF fallback is a secondary family-level regression signal, not a drop-in substitute for Ax-primary baselines
 4. the benchmark contract is clean enough to evaluate optimizer-core changes
 

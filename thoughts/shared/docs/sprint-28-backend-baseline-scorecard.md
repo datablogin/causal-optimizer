@@ -56,7 +56,7 @@ with explicit backend context and should not be cited from RF-fallback runs.
 | Benchmark | Ax Result | RF Result | Ax-Primary Conclusion |
 |-----------|-----------|-----------|----------------------|
 | Base energy (5D) | Causal wins 9/10, p=0.045 | Tie, p=0.97 | Causal wins require the GP surrogate |
-| Dose-response (6D) | Causal regret 0.20, p=0.142 | S.O. wins, p=0.008 | Winner reverses by backend |
+| Dose-response (6D) | Causal mean regret 0.20, p=0.142 | S.O. wins, p=0.008 | Mean-regret direction reverses by backend |
 
 **Base energy**: the exploitation-phase categorical sweep (Sprint 25 fix)
 converges only when the GP-based BO provides a good surrogate surface.
@@ -201,7 +201,9 @@ base energy is a tie and dose-response reverses to a surrogate-only win.
 ### 6c. Which rows remain backend-sensitive?
 
 Three rows change meaningfully: base energy (winner flips), dose-response
-(winner flips), and interaction (same winner, magnitude changes).
+(mean-regret direction reverses; causal has lower mean under Ax but p=0.142
+is not statistically significant), and interaction (same winner, magnitude
+changes).
 Absolute regret numbers should never be compared across backends on any row.
 
 ### 6d. What exact regression role should RF fallback play going forward?
@@ -243,4 +245,4 @@ tasks can benefit from the demand-response insights.
 | 4 | Confounded | **Backend-invariant** | None | None | Bidirected edges insufficient |
 | 5 | Null control | **Backend-invariant** | PASS | PASS | 10th clean run |
 | 6 | Interaction | **Backend-sensitive** | S.O. (p=0.014) | S.O. (p=0.0006) | Magnitude varies |
-| 7 | Dose-response | **Ax-primary** | Causal (p=0.142) | S.O. (p=0.008) | Winner reverses |
+| 7 | Dose-response | **Ax-primary** | Causal trend (p=0.142) | S.O. (p=0.008) | Mean-regret direction reverses |
