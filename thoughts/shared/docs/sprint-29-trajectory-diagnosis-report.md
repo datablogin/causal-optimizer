@@ -191,7 +191,8 @@ much higher variance than causal.
 | 4 | 8.52 | 0.17 | 0.20 | 10.43 | 8.30 | 2.11 |
 
 Causal's advantage is sample efficiency: it solves 4/5 seeds by B40,
-while surrogate-only solves 2/5 by B40 and 5/5 only at B80.
+while surrogate-only has only 2/5 below 1.0 at B40 and remains in the
+0.15-2.11 range with much higher variance at B80.
 
 ### 3d. Mechanism: Dimensionality Reduction on a Smooth Surface
 
@@ -234,7 +235,7 @@ cross the significance threshold.
 | Is it unstable / seed-sensitive? | **No** -- std 0.02 at B80, near-zero variance |
 | Is it underpowered? | **Yes** -- n=5 is insufficient for the effect size at two-sided alpha=0.05 |
 | Is causal guidance helping? | **Yes** -- 3D focus gives ~2x faster convergence |
-| Would more seeds certify the win? | **Very likely** -- effect size d~1.7 would be significant at n=10 |
+| Would more seeds certify the win? | **Very likely** -- sample-pooled d~1.5; duplication estimate p~0.025; fresh 10-seed run still required |
 
 ## 4. Answers to Required Questions
 
