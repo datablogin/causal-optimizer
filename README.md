@@ -9,7 +9,7 @@ This project has **characterized the boundary of causal advantage** across a 7-b
 What we can say confidently today:
 
 1. **Causal guidance wins on noisy, categorical-barrier landscapes.** On the demand-response family (5D, 9D, 15D), causal beats surrogate-only at B80 with statistical significance at all noise levels (two-sided MWU p <= 0.045). The advantage scales smoothly with noise dimensionality.
-2. **Backend matters for some conclusions.** On the dose-response benchmark (Emax curve, 6D, no categoricals), surrogate-only wins under RF fallback, but causal trends toward winning under Ax/BoTorch (regret 0.20 vs 1.19). Two of seven rows change their winner by backend; four are backend-invariant.
+2. **Backend matters for some conclusions.** On the dose-response benchmark (Emax curve, 6D, no categoricals), surrogate-only wins under RF fallback, but causal trends toward winning under Ax/BoTorch (regret 0.20 vs 1.19). Two of seven rows are Ax-primary: base energy has a certified causal win under Ax (p=0.045), while dose-response has a backend-dependent mean-regret direction (causal lower mean under Ax, surrogate-only wins under RF). Four rows are backend-invariant.
 3. **The crossover is structural, not dimensional.** The boundary depends on landscape family (categorical barriers, noise-to-signal ratio), not a single noise-dimension threshold.
 4. **Null control has been clean for 10 runs across Sprints 18--28** (S26 did not re-run), confirming the optimizer does not manufacture false signal.
 5. The project has **not yet** shown a reliable causal advantage on the real ERCOT forecasting tasks.

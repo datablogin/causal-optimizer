@@ -24,8 +24,10 @@ win counts, same p-values to the second decimal place.  The code is stable;
 every observed variation between sprints was attributable to the optimizer
 backend, not code drift.
 
-Two of seven benchmark rows change their winner when the backend changes (base
-energy, dose-response).  A third row (interaction) changes magnitude
+Two of seven benchmark rows are Ax-primary: base energy has a certified causal
+win under Ax (p=0.045), while dose-response has a backend-dependent
+mean-regret direction (causal lower mean under Ax, surrogate-only wins under
+RF).  A third row (interaction) changes magnitude
 significantly.  These backend-sensitive rows make it impossible to treat RF and
 Ax results as interchangeable.  The cleanest description of the evidence is:
 Ax/BoTorch is the primary reference path, and RF fallback is a secondary
