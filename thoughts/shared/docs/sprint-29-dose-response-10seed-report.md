@@ -44,6 +44,10 @@ MWU causal vs s.o.: U=9.0, one-sided p=0.001, two-sided p=0.002
 Causal wins: 9/10 seeds
 Cohen's d (sample-pooled): 1.46
 
+**Std convention:** all std values in tables use population std (ddof=0).
+Cohen's d uses sample-pooled std (ddof=1), which produces slightly
+different denominators.
+
 ## 3. Full Budget Trajectory
 
 | Budget | Causal Mean (Std) | S.O. Mean (Std) | MWU Two-Sided p | Causal Wins |
@@ -172,7 +176,8 @@ exclusively on:
 1. **Interaction ablation**: test whether reducing
    `causal_exploration_weight` and/or delaying alignment bonus improves
    the interaction B20/B80 gap
-2. **Regression gate**: confirm demand-response and dose-response wins
-   are preserved after any interaction-targeted change
+2. **Regression gate**: confirm all 4 certified causal wins (base
+   energy, medium-noise, high-noise, dose-response) are preserved
+   after any interaction-targeted change
 3. **Do not pursue dose-response improvements** -- the row is solved
    (regret 0.19, p=0.002)
