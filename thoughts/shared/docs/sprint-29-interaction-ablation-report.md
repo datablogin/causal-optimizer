@@ -45,8 +45,9 @@ benchmark under the Ax/BoTorch primary path:
    no_alignment (7.77 at B20) is better than causal_default (13.83) but
    still worse than surrogate_only (5.44)
 4. **Graph-only causal guidance (no early pressure) outperforms
-   surrogate-only** -- the causal graph's variable pruning helps when
-   it does not distort exploration or optimization
+   surrogate-only** -- the exact Ax-path mechanism is not isolated by
+   this ablation, but empirically graph_only beats surrogate_only when
+   early pressure is removed
 
 ## 2. Results by Arm and Budget
 
