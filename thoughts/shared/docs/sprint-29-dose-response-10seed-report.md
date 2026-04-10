@@ -67,7 +67,7 @@ near-zero variance.
 | S.O. B80 mean | 1.19 | 0.92 | -0.27 (new seeds slightly better) |
 | S.O. B80 std | 0.81 | 0.66 | -0.15 |
 | Two-sided MWU p | 0.142 | **0.002** | Significant |
-| Causal wins | 3/5 pairwise | 9/10 | Decisive |
+| Causal wins | 4/5 pairwise | 9/10 | Decisive |
 | Cohen's d | ~1.5 | 1.46 | Stable |
 
 **Seeds 0-4 reproduced exactly** for causal (0.22, 0.17, 0.23, 0.20,
