@@ -94,30 +94,36 @@ all three thresholds simultaneously to find the payoff.
 
 **What causal guidance does at B20:**
 
-1. The first 10 experiments are LHS exploration (same for both strategies)
-2. At experiment 11, optimization begins
-3. Causal correctly identifies 4 focus variables (the 4 policy thresholds)
-4. The soft alignment bonus (causal_softness=0.5) rewards candidates
-   that displace along ancestor dimensions from the current best
-5. With only ~10 data points, the GP cannot model the 3-way interaction
-6. The alignment bonus pushes candidates toward ancestor-dimension
-   exploration when the GP has no signal about which direction is good
-7. This produces worse-than-random results because the alignment bonus
-   actively pulls the optimizer away from incidentally good random
-   candidates found during exploration
+1. During exploration (experiments 1-10), causal-weighted LHS
+   (causal_exploration_weight=0.3) biases candidate selection toward
+   ancestor-dimension coverage.  This produces a different initial
+   design than surrogate-only's pure LHS.
+2. At experiment 11, optimization begins with soft alignment bonus
+   (causal_softness=0.5) rewarding candidates that displace along
+   ancestor dimensions from the current best
+3. With only ~10 data points, the GP cannot model the 3-way interaction
+4. Both the exploration bias and the alignment bonus push toward
+   ancestor-dimension exploration when the GP has no signal about which
+   direction is good
+5. This produces worse-than-random results because causal pressure
+   across both phases actively shapes the search trajectory before the
+   surface is learnable
 
 **What surrogate-only does at B20:**
 
-1. Same 10 LHS exploration experiments
+1. Pure LHS exploration (no causal weighting, no ancestor bias)
 2. At experiment 11, Ax optimizes the GP surrogate on all 7 dimensions
 3. No alignment bonus -- the GP's predicted improvement is the only signal
 4. With weak GP signal, this approximates random search, which is fine
 5. There's no active penalty for staying near good exploration candidates
 
-**The alignment bonus is the mechanism.** It rewards ancestor-dimension
-exploration when the GP can't guide it, which is actively harmful on a
+**Early causal pressure is the likely mechanism.** Causal-weighted
+exploration plus early alignment bonus shape the search trajectory
+before the GP can model the 3-way interaction, which is harmful on a
 surface where the optimum requires coordinated multi-variable movement
-rather than marginal exploration.
+rather than marginal exploration.  A controlled ablation (e.g., setting
+causal_exploration_weight=0 and delaying alignment bonus) would be
+needed to confirm the relative contribution of each phase.
 
 ### 2d. Why Causal Recovers by B40/B80
 
@@ -137,7 +143,7 @@ cannot fully recover from the early alignment-induced detour.
 |----------|--------|
 | Is causal targeting the right variables? | **Yes** -- 4/7 are correct ancestors |
 | Is causal over-pruning? | **No** -- soft mode trains GP on all 7D |
-| Is causal pressure too early? | **Yes** -- alignment bonus at B11-B20 is actively harmful |
+| Is causal pressure too early? | **Yes** -- causal-weighted exploration + alignment bonus are harmful before the GP can model the surface (ablation needed to separate contributions) |
 | Is the surface inherently hard for causal? | **No** -- causal recovers by B40 and narrows by B80 |
 | Is the problem in the causal graph structure? | **No** -- graph correctly encodes variable relevance but not interaction structure, which is expected |
 
@@ -170,9 +176,11 @@ seeds 0, 1, and 4 are stuck at 1.49-2.11.
 
 ### 3c. Convergence Trajectory Per Seed
 
-At B40, causal has 4/5 seeds solved (< 0.25 regret) with one laggard
-at 5.23 that recovers by B80.  Surrogate-only at B40 has only 2/5 seeds
-solved (0.29, 0.15), with 3 still above 7.0.
+At B40, causal has 4/5 seeds below 0.25 regret with one laggard at 5.23
+that recovers by B80.  Surrogate-only at B40 has only 2/5 seeds below
+1.0 regret (0.29, 0.15), with 3 still above 7.0.  By B80,
+surrogate-only converges all 5 seeds to the 0.15-2.11 range but with
+much higher variance than causal.
 
 | Seed | Causal B20 | Causal B40 | Causal B80 | S.O. B20 | S.O. B40 | S.O. B80 |
 |------|-----------|-----------|-----------|---------|---------|---------|
@@ -207,14 +215,16 @@ dimensions.  The causal graph correctly identifies the 3 real dimensions.
 
 The test is underpowered.  With n=5 seeds:
 - Causal B80: mean 0.20, std 0.02 (essentially zero variance)
-- S.O. B80: mean 1.19, std 0.81 (high variance, bimodal)
-- Effect size (Cohen's d): ~1.7 (very large)
-- Power at n=5 with d=1.7 and alpha=0.05: approximately 0.60
+- S.O. B80: mean 1.19, std 0.81 (high variance)
+- Effect size (Cohen's d, sample-pooled): ~1.5 (very large)
+- The Mann-Whitney U test at n=5 can only reject H0 if U <= 2 (for
+  one-sided alpha=0.05).  Observed U=5 means 3 of the 25 pairwise
+  comparisons went the wrong way.
 
-The effect is real and large.  The Mann-Whitney U test at n=5 can only
-reject H0 if U <= 2 (for one-sided alpha=0.05).  Observed U=5 means 3
-of the 25 pairwise comparisons went the wrong way.  At n=10, the test
-would have much higher power.
+The effect is real and large.  At n=10, the test would have
+substantially higher power.  As a rough check, duplicating the current
+5-seed observations to n=10 gives two-sided MWU p~0.025, which would
+cross the significance threshold.
 
 ### 3e. Dose-Response Diagnosis Summary
 
@@ -230,33 +240,39 @@ would have much higher power.
 
 ### 4a. What is the most likely mechanism behind the interaction row favoring surrogate-only?
 
-The soft causal alignment bonus (causal_softness=0.5) applies exploration
-pressure along ancestor dimensions during the first optimization steps
-(experiments 11-20), when the GP has insufficient data to model the
-3-way super-additive interaction surface.  This produces worse-than-random
-B20 results (13.83 vs 10.13) because the alignment bonus actively
-pushes candidates away from incidentally good exploration candidates.
-Surrogate-only avoids this penalty by using only the GP's predicted
-improvement, which approximates random search at low data and does not
-actively harm.  Causal recovers by B40/B80 as the GP gains enough data,
-but the accumulated early penalty prevents full catch-up.
+Early causal pressure across both phases -- causal-weighted exploration
+(causal_exploration_weight=0.3) during experiments 1-10, then the soft
+alignment bonus (causal_softness=0.5) from experiment 11 onward --
+shapes the search trajectory before the GP has sufficient data to model
+the 3-way super-additive interaction surface.  This produces
+worse-than-random B20 results (13.83 vs 10.13, i.e., 2.5x worse than
+surrogate-only's 5.44).  Surrogate-only avoids this penalty by using
+pure LHS exploration and GP-only optimization with no ancestor bias.
+Causal recovers by B40/B80 as the GP gains enough data, but the
+accumulated early penalty prevents full catch-up.  A controlled ablation
+would be needed to determine the relative contribution of causal
+exploration weighting vs the optimization-phase alignment bonus.
 
 ### 4b. Is the dose-response causal trend real but underpowered, or unstable / seed-sensitive?
 
-**Real but underpowered.** The effect is large (d~1.7), consistent across
-all 5 seeds (std 0.02 at B80), and visible at every budget level.  The
-p=0.142 result is a sample-size limitation, not an unstable signal.  With
-n=10 seeds, the two-sided MWU test would have approximately 95% power to
-detect this effect.
+**Real but underpowered.** The effect is large (Cohen's d ~1.5,
+sample-pooled), consistent across all 5 seeds (std 0.02 at B80), and
+visible at every budget level.  The p=0.142 result is a sample-size
+limitation, not an unstable signal.  At n=10, the MWU test would have
+substantially higher power (rough estimate: p~0.025 by duplication).
 
 ### 4c. Is causal guidance too strong, too early, too narrow, or not the likely problem?
 
-**Too early on the interaction row.** The alignment bonus at
-causal_softness=0.5 is applied from experiment 11 onward, before the GP
-has modeled the interaction surface.  On the dose-response row, this same
-timing works fine because the 3D smooth surface is learnable with fewer
-samples.  The issue is not the strength or the variable targeting -- it
-is the application of causal pressure before the surrogate can guide it.
+**Too early on the interaction row.** Causal pressure operates across
+both exploration (causal_exploration_weight=0.3) and optimization
+(alignment bonus from experiment 11).  On the interaction surface, this
+is harmful because the GP cannot model the 3-way interaction with ~10
+data points.  On the dose-response row, early causal pressure works
+fine because the 3D smooth surface is learnable with fewer samples.
+The issue is not the strength or the variable targeting -- it is the
+application of causal pressure before the surrogate can guide it.  The
+relative contribution of exploration weighting vs alignment bonus is a
+hypothesis requiring ablation, not a measured fact.
 
 ### 4d. What one narrow intervention should Sprint 29 try next?
 
@@ -265,7 +281,7 @@ is the application of causal pressure before the surrogate can guide it.
 This is the highest-value, lowest-risk intervention because:
 
 1. It directly certifies whether the causal trend is a real win (expected:
-   yes, given d~1.7)
+   yes, given d~1.5 sample-pooled)
 2. It requires no optimizer-core changes (diagnosis-only constraint holds)
 3. It converts a "mean-regret direction" claim into a potentially
    certified win, strengthening the project's evidence base
@@ -281,7 +297,7 @@ the trajectory diagnosis merges.
 
 **Dose-response at 10 seeds:**
 - Success: two-sided MWU p <= 0.05, causal wins majority of seeds
-- Expected: p ~ 0.005-0.01 given d~1.7 at n=10
+- Expected: p <= 0.05 given d~1.5 at n=10 (duplication estimate ~0.025)
 - Failure: p > 0.10 despite more seeds, or causal variance increases
   substantially (would suggest the current 5-seed result was lucky)
 
@@ -291,8 +307,8 @@ the trajectory diagnosis merges.
 |-----------|-------------|---------------|
 | Variable targeting | Correct (4/7 real) | Correct (3/6 real) |
 | Focus variable accuracy | 100% | 100% |
-| Alignment bonus effect | Harmful at B20, neutral at B40+  | Helpful at all budgets |
-| Timing of causal pressure | Too early | Appropriate |
+| Early causal pressure effect | Harmful at B20, neutral at B40+  | Helpful at all budgets |
+| Timing of causal pressure | Too early (exploration + optimization) | Appropriate |
 | Surface learnability at B20 | Low (3-way interaction, 4D) | Moderate (smooth Emax, 3D) |
 | B80 gap to surrogate-only | -0.99 (45% worse) | +0.99 (83% better) |
 
@@ -300,17 +316,17 @@ the trajectory diagnosis merges.
 
 ### Evidence-supported claims
 
-1. Causal B20 regret on interaction is 2.5x worse than random (artifact data)
+1. Causal B20 regret on interaction is 2.5x worse than surrogate-only and 1.4x worse than random (artifact data)
 2. Causal B80 regret on dose-response has std 0.02 across 5 seeds (artifact data)
-3. The alignment bonus is applied from experiment 11 onward (suggest.py:805-811)
+3. Causal-weighted exploration uses causal_exploration_weight=0.3 during experiments 1-10 (suggest.py:267-277, _score_candidate_causal_exploration); the alignment bonus is applied from experiment 11 onward (suggest.py:805-811, _rerank_alignment_only)
 4. The GP has ~10 data points at the exploration-to-optimization transition (engine/loop.py phase logic)
 5. Both causal graphs correctly identify all real variables (verified programmatically)
 
 ### Plausible but not directly measured
 
 1. The GP cannot model the 3-way interaction at 10 data points (plausible from dimensionality + nonlinearity, but GP fit quality was not logged)
-2. The alignment bonus specifically causes the B20 penalty (plausible from the mechanism, but a controlled ablation was not run)
-3. n=10 seeds would certify the dose-response win (plausible from power analysis, but not yet run)
+2. Early causal pressure (exploration weighting + alignment bonus) causes the B20 penalty (plausible from the mechanism, but a controlled ablation separating the two phases was not run)
+3. n=10 seeds would certify the dose-response win (plausible from duplication estimate p~0.025, but not yet run with fresh seeds)
 
 ## 7. Artifacts and Commands Used
 
