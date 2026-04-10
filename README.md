@@ -54,7 +54,7 @@ Sprint 27 completed a noise-dimension gradient study across the demand-response 
 
 Causal pruning provides stable performance across noise levels (B80 mean regret: 1.13, 1.87, 2.57). Surrogate-only degrades sharply (4.98, 9.61, 15.23). On the smooth dose-response landscape (6D, no categoricals), the winner depends on backend: surrogate-only wins under RF fallback, but causal converges to near-zero regret (0.20) under Ax/BoTorch.
 
-The crossover is structural: noisy + categorical = causal wins; smooth + continuous = surrogate wins.
+The crossover is structural: noisy + categorical = causal wins; smooth + continuous = backend-dependent (surrogate wins under RF fallback, causal trends toward winning under Ax/BoTorch).
 
 ### 3. Real predictive wins are still unproven
 
