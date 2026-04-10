@@ -142,6 +142,9 @@ def main() -> None:
     budgets = [int(b) for b in args.budgets.split(",")]
     seeds = [int(s) for s in args.seeds.split(",")]
     arm_names = [a.strip() for a in args.arms.split(",")]
+    for name in arm_names:
+        if name not in ARMS:
+            parser.error(f"Unknown arm: {name}. Options: {','.join(ARMS.keys())}")
 
     df = pd.read_parquet(args.data_path)
     scenario = InteractionPolicyScenario(covariates=df, seed=0)

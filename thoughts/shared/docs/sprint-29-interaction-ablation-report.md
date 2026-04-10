@@ -155,16 +155,17 @@ at every budget:
 | B80 | 1.80 | 2.18 | -0.38 (17% better) |
 
 Graph-only at B80 has std 0.02 — near-zero variance across all 10
-seeds.  This means the causal graph's variable-relevance information
-(pruning 3 noise dimensions) is valuable on this surface, but only
-when it does not distort the exploration or optimization phases.
+seeds.  This means the presence of the causal graph is empirically
+beneficial on this surface when early pressure is removed.
 
-The GP trains on all 7 dimensions but uses ancestor information
-during surrogate-based candidate generation (targeted parent
-perturbation in `_suggest_surrogate()`).  Without the exploration
-weighting and alignment bonus, the optimizer benefits from knowing
-which variables matter without paying the penalty of forced
-ancestor-dimension exploration.
+The exact Ax-path mechanism is not isolated by this ablation.  On the
+Ax path with `causal_softness=0.0`, `_suggest_bayesian()` runs in
+soft mode with `ax_focus=None`, so Ax optimizes all 7 variables during
+the optimization phase.  The graph's presence may influence candidate
+generation or phase-transition logic in ways this study does not
+measure.  What we can say: graph_only empirically outperforms
+surrogate_only at every budget, and the benefit is not due to
+exploration weighting or alignment bonus (both are zero).
 
 ## 5. Mechanism Verdict
 
@@ -200,9 +201,10 @@ eliminate the catastrophe; removing both produces the best overall arm.
 1. The exploration weighting harms this surface specifically because of
    the 3-way interaction structure (plausible from surface analysis, but
    not tested on other interaction surfaces)
-2. The improvement from graph-only comes primarily from noise-dimension
-   pruning in candidate generation (plausible from the code path, but
-   surrogate quality was not logged)
+2. The improvement from graph-only comes from some graph-aware code path
+   in the Ax optimization pipeline (plausible, but the exact mechanism
+   is not isolated by this ablation — on the Ax path with softness=0.0,
+   Ax optimizes all 7 variables with ax_focus=None)
 
 ## 7. Recommendation for Issue #153
 
@@ -215,9 +217,9 @@ Justification:
    runs with the default (w=0.3, s=0.5) — a regression gate is needed
    to verify that demand-response wins are preserved under the new
    defaults
-2. The causal graph's variable-relevance information provides value
-   through candidate generation targeting, without needing to distort
-   exploration or optimization scoring
+2. The causal graph's presence is empirically beneficial on the
+   interaction row when early pressure is removed (exact Ax-path
+   mechanism not isolated by this ablation)
 3. This is a narrow, testable change: modify two defaults, rerun the
    Ax-primary regression gate
 
