@@ -79,7 +79,7 @@ Merged PRs:
 
 Sprint 28 is complete.  If resuming:
 
-1. read the [Sprint 28 backend baseline scorecard](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-28-backend-baseline-scorecard.md)
+1. read the [Sprint 28 backend baseline scorecard](thoughts/shared/docs/sprint-28-backend-baseline-scorecard.md)
 2. plan Sprint 29 -- return to optimizer-core work
 3. use the characterized boundary to guide optimizer improvements
 
@@ -374,6 +374,6 @@ Sprint 28 is **complete**.  The scorecard answered all five questions:
 
 If resuming from here:
 
-1. read the [Sprint 28 backend baseline scorecard](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-28-backend-baseline-scorecard.md) for the full verdict
+1. read the [Sprint 28 backend baseline scorecard](thoughts/shared/docs/sprint-28-backend-baseline-scorecard.md) for the full verdict
 2. plan Sprint 29 -- the scorecard recommends returning to optimizer-core work
 3. the benchmark suite is ready to evaluate optimizer changes with confidence

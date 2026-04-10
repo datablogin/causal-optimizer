@@ -139,6 +139,13 @@ Ax path, all reproduced in Sprint 28:
 | Medium | 9 | 6 | 1.87 | 9.61 | 10/10 | 0.007 |
 | High | 15 | 12 | 2.57 | 15.23 | 8/10 | 0.014 |
 
+Note: the base s.o. mean is 4.98 in the Sprint 28 Ax rerun (per-seed
+data in the regression gate report).  The Sprint 27 crossover scorecard
+reported 4.90 from the earlier Sprint 25 Ax run.  The difference is in
+the surrogate-only seeds, not in the causal seeds (which reproduce
+exactly).  Both values are within normal seed-level variation for the
+non-deterministic surrogate-only path.
+
 The gradient tells a clean story:
 - Causal regret degrades gently (1.13 -> 1.87 -> 2.57) as noise increases
 - Surrogate-only regret degrades sharply (4.98 -> 9.61 -> 15.23)
