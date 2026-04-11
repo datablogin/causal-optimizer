@@ -408,7 +408,12 @@ def test_engine_accepts_causal_config_params() -> None:
 
 
 def test_engine_default_causal_config() -> None:
-    """Default causal config should be weight=0.3, softness=0.5."""
+    """Default causal config should be weight=0.0, softness=0.5.
+
+    Sprint 29 changed weight from 0.3 to 0.0 based on ablation evidence
+    showing exploration weighting is the primary cause of the interaction
+    benchmark B20 catastrophe (PR #159).
+    """
     ss = SearchSpace(
         variables=[
             Variable(name="x", variable_type=VariableType.CONTINUOUS, lower=0.0, upper=10.0),
@@ -418,7 +423,7 @@ def test_engine_default_causal_config() -> None:
         search_space=ss,
         runner=_DummyRunner(),
     )
-    assert engine.causal_exploration_weight == 0.3
+    assert engine.causal_exploration_weight == 0.0
     assert engine.causal_softness == 0.5
 
 

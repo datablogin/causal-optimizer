@@ -120,7 +120,7 @@ class ExperimentEngine:
         experiment_id: str | None = None,
         strategy: str = "bayesian",
         audit_skip_rate: float = 0.0,
-        causal_exploration_weight: float = 0.3,
+        causal_exploration_weight: float = 0.0,
         causal_softness: float = 0.5,
     ) -> None:
         """Initialize the experiment engine.
@@ -165,7 +165,9 @@ class ExperimentEngine:
                 Must be in ``[0.0, 1.0]``.
             causal_exploration_weight: Strength of causal bias during
                 exploration (0.0 = pure LHS, higher = more ancestor emphasis).
-                Default 0.3.  Set to 0.0 to recover Sprint 18 behavior.
+                Default 0.0 (changed from 0.3 in Sprint 29 after ablation
+                showed exploration weighting causes B20 penalty on interaction
+                surfaces).
             causal_softness: Strength of causal alignment bonus during
                 optimization (0.0 = no bonus, large = approximates hard focus).
                 Default 0.5.  ``causal_exploration_weight=0.0`` +

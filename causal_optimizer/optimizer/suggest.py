@@ -115,7 +115,7 @@ def suggest_parameters(
     objectives: list[ObjectiveSpec] | None = None,
     strategy: str = "bayesian",
     seed: int | None = None,
-    causal_exploration_weight: float = 0.3,
+    causal_exploration_weight: float = 0.0,
     causal_softness: float = 0.5,
 ) -> dict[str, Any]:
     """Suggest next experiment parameters based on current phase and history.
