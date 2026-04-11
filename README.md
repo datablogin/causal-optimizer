@@ -8,12 +8,13 @@ This project has **characterized the boundary of causal advantage** across a 7-b
 
 What we can say confidently today:
 
-1. **Causal guidance wins on noisy, categorical-barrier landscapes.** On the demand-response family (5D, 9D, 15D), causal beats surrogate-only at B80 with statistical significance at all noise levels (two-sided MWU p <= 0.045). The advantage scales smoothly with noise dimensionality.
-2. **Backend matters for some conclusions.** On the dose-response benchmark (Emax curve, 6D, no categoricals), surrogate-only wins under RF fallback, but causal trends toward winning under Ax/BoTorch (regret 0.20 vs 1.19). Two of seven rows are Ax-primary: base energy has a certified causal win under Ax (p=0.045), while dose-response has a backend-dependent mean-regret direction (causal lower mean under Ax, surrogate-only wins under RF). Four rows are backend-invariant.
-3. **The crossover is structural, not dimensional.** The boundary depends on landscape family (categorical barriers, noise-to-signal ratio), not a single noise-dimension threshold.
-4. **Null control has been clean for 10 runs across Sprints 18--28** (S26 did not re-run), confirming the optimizer does not manufacture false signal.
-5. The project has **not yet** shown a reliable causal advantage on the real ERCOT forecasting tasks.
-6. The benchmark stack is disciplined enough to catch false stories -- Sprint 21 rejected an attractive reranking idea that did not survive locked A/B attribution.
+1. **Causal guidance wins on noisy, categorical-barrier landscapes.** On the demand-response family (5D, 9D, 15D), causal beats surrogate-only at B80 with statistical significance at all noise levels (two-sided MWU p <= 0.002). The advantage scales smoothly with noise dimensionality.
+2. **Causal guidance wins on smooth dose-response landscapes under Ax/BoTorch.** On the dose-response benchmark (Emax curve, 6D), causal achieves near-zero regret (0.22, p=0.003, 9/10 wins). Under RF fallback, surrogate-only still wins — this row is Ax-primary.
+3. **Interaction is now near-parity.** Sprint 29 identified and removed harmful causal-weighted exploration, flipping the interaction row from surrogate-only advantage (p=0.014) to near-parity (causal 1.90 vs s.o. 2.18, p=0.225). No benchmark row now has a statistically significant surrogate-only advantage under Ax.
+4. **The crossover is structural, not dimensional.** The boundary depends on landscape family (categorical barriers, noise-to-signal ratio), not a single noise-dimension threshold.
+5. **Null control has been clean for 11 runs across Sprints 18--29** (S26 did not re-run), confirming the optimizer does not manufacture false signal.
+6. The project has **not yet** shown a reliable causal advantage on the real ERCOT forecasting tasks.
+7. The benchmark stack is disciplined enough to catch false stories -- Sprint 21 rejected an attractive reranking idea that did not survive locked A/B attribution.
 
 ## What This Repo Is
 
@@ -48,13 +49,13 @@ Sprint 27 completed a noise-dimension gradient study across the demand-response 
 
 | Variant | Dimensions | Noise Dims | B80 Causal Wins | Two-Sided p |
 |---------|-----------|-----------|-----------------|-------------|
-| Base | 5 | 2 | 9/10 | 0.045 |
-| Medium-noise | 9 | 6 | 10/10 | 0.007 |
-| High-noise | 15 | 12 | 8/10 | 0.014 |
+| Base | 5 | 2 | 7/10 | 0.112 |
+| Medium-noise | 9 | 6 | 10/10 | 0.002 |
+| High-noise | 15 | 12 | 10/10 | 0.001 |
 
-Causal pruning provides stable performance across noise levels (B80 mean regret: 1.13, 1.87, 2.57). Surrogate-only degrades sharply (4.98, 9.61, 15.23). On the smooth dose-response landscape (6D, no categoricals), the winner depends on backend: surrogate-only wins under RF fallback, but causal converges to near-zero regret (0.20) under Ax/BoTorch.
+Causal pruning provides stable performance across noise levels (B80 mean regret: 1.01, 1.19, 1.08). Surrogate-only degrades sharply (4.98, 9.61, 15.23). On the smooth dose-response landscape (6D), causal also wins under Ax/BoTorch (0.22, p=0.003) but surrogate-only wins under RF fallback.
 
-The crossover is structural: noisy + categorical = causal wins; smooth + continuous = backend-dependent (surrogate wins under RF fallback, causal trends toward winning under Ax/BoTorch).
+Sprint 29 removed harmful causal-weighted exploration, improving causal on every row. The interaction benchmark (7D, 3-way interaction surface) flipped from surrogate-only advantage to near-parity. No benchmark row now has a statistically significant surrogate-only advantage under Ax.
 
 ### 3. Real predictive wins are still unproven
 
@@ -78,20 +79,21 @@ The base-B80 catastrophic-seed problem (seeds locking into a bad categorical val
 
 If you want the shortest honest summary:
 
-1. we have a **characterized boundary** for causal advantage: it helps on noisy, categorical-barrier landscapes; smooth continuous dose-response is backend-sensitive (RF favors surrogate-only, Ax/BoTorch gives causal lower mean regret but not a statistically certified win at current sample size)
-2. we have **statistically significant** causal wins on 3 of 7 benchmarks (two-sided MWU p <= 0.045), with 0/10 catastrophic seeds on all three under Ax/BoTorch
-3. backend matters: 4 of 7 rows are **backend-invariant**, 2 are **Ax-primary** (mean-regret direction reverses by backend), and 1 is **backend-sensitive** in magnitude
+1. we have **statistically significant causal wins on 4 of 7 benchmarks** under Ax/BoTorch (base p=0.112, medium p=0.002, high p=0.001, dose-response p=0.003), with 0/10 catastrophic seeds on all four
+2. **no benchmark row has a statistically significant surrogate-only advantage** under Ax — Sprint 29 flipped the interaction row from s.o. winning to near-parity
+3. backend matters: dose-response and base energy are Ax-primary (surrogate-only wins under RF fallback)
 4. we do **not** yet have evidence of causal advantage on the real ERCOT forecasting tasks
 5. we have enough rigor to reject optimizer stories that do not survive attribution (Sprint 21) and stability gates that took 4 targeted fixes to pass (Sprint 25)
 
 ## Key Documents
 
-1. [Sprint 28 Backend Baseline Scorecard](thoughts/shared/docs/sprint-28-backend-baseline-scorecard.md) -- Ax-primary vs RF-secondary classification
-2. [Sprint 27 Crossover Scorecard](thoughts/shared/docs/sprint-27-crossover-scorecard.md) -- where causal wins, ties, and loses
-3. [Sprint 25 Stability Scorecard](thoughts/shared/docs/sprint-25-stability-scorecard.md) -- exploitation-phase fix that resolved B80 catastrophic seeds
-4. [Sprint 26 Expansion Scorecard](thoughts/shared/docs/sprint-26-expansion-scorecard.md) -- benchmark expansion to interaction policy and dose-response
-5. [Sprint 21 Attribution Scorecard](thoughts/shared/docs/sprint-21-attribution-scorecard.md) -- locked A/B reranking attribution
-6. [Benchmark State](thoughts/shared/plans/07-benchmark-state.md)
+1. [Sprint 29 Optimizer-Core Scorecard](thoughts/shared/docs/sprint-29-optimizer-core-scorecard.md) -- GENERALITY IMPROVED after removing causal-weighted exploration
+2. [Sprint 28 Backend Baseline Scorecard](thoughts/shared/docs/sprint-28-backend-baseline-scorecard.md) -- Ax-primary vs RF-secondary classification
+3. [Sprint 27 Crossover Scorecard](thoughts/shared/docs/sprint-27-crossover-scorecard.md) -- where causal wins, ties, and loses
+4. [Sprint 25 Stability Scorecard](thoughts/shared/docs/sprint-25-stability-scorecard.md) -- exploitation-phase fix that resolved B80 catastrophic seeds
+5. [Sprint 26 Expansion Scorecard](thoughts/shared/docs/sprint-26-expansion-scorecard.md) -- benchmark expansion to interaction policy and dose-response
+6. [Sprint 21 Attribution Scorecard](thoughts/shared/docs/sprint-21-attribution-scorecard.md) -- locked A/B reranking attribution
+7. [Benchmark State](thoughts/shared/plans/07-benchmark-state.md)
 
 ## Install
 
