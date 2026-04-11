@@ -115,7 +115,7 @@ def suggest_parameters(
     objectives: list[ObjectiveSpec] | None = None,
     strategy: str = "bayesian",
     seed: int | None = None,
-    causal_exploration_weight: float = 0.3,
+    causal_exploration_weight: float = 0.0,
     causal_softness: float = 0.5,
 ) -> dict[str, Any]:
     """Suggest next experiment parameters based on current phase and history.
@@ -134,7 +134,8 @@ def suggest_parameters(
         seed: Random seed forwarded to strategy-specific optimizers for
             reproducibility.
         causal_exploration_weight: Strength of causal bias during exploration
-            (0.0 = pure LHS, higher = more ancestor emphasis). Default 0.3.
+            (0.0 = pure LHS, higher = more ancestor emphasis). Default 0.0
+            (changed from 0.3 in Sprint 29 after ablation evidence).
         causal_softness: Strength of causal alignment bonus during optimization
             (0.0 = no bonus, large = approximates hard focus). Default 0.5.
     """
