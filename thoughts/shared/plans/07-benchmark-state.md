@@ -1,6 +1,6 @@
 # Benchmark State
 
-Updated: 2026-04-09 (Sprint 28 complete -- AX PRIMARY, RF SECONDARY)
+Updated: 2026-04-11 (Sprint 29 diagnosis and intervention merged; scorecard pending)
 
 ## Purpose
 
@@ -27,19 +27,61 @@ What is true today:
 5. alignment-only remains the correct production default after Sprint 21 attribution and Sprint 22 confirmation
 6. Sprint 25 delivered the first mechanism-matched stability fix that actually met the base-B80 gate
 7. Sprint 26 and Sprint 27 expanded benchmark coverage to seven rows and clarified the causal-advantage boundary
-8. Sprint 28 is now tightening backend comparability so Ax/BoTorch and RF-fallback claims stop getting conflated
+8. Sprint 28 separated Ax/BoTorch primary claims from RF-fallback secondary checks
+9. Sprint 29 has now completed diagnosis and a narrow default change under the clean backend contract
 
 ## Current Goal
 
-Sprint 28 is complete.  The backend baseline scorecard verdict is
-**AX PRIMARY, RF SECONDARY**.
+Sprint 29 is now in its final verification phase.
 
-Sprint 29 should return to optimizer-core work.  The benchmark contract is
-clean enough to evaluate code changes with confidence.  The suite has explicit
-provenance, directly comparable Ax baselines, defined RF-fallback gates, and
-10 clean null-control runs.
+The benchmark contract remains clean enough to evaluate code changes with confidence.
+The suite has explicit provenance, directly comparable Ax baselines, defined
+RF-fallback gates, and 10 clean null-control runs.
+
+The Sprint 29 theme remains **Adaptive Causal Guidance Under Clean Backend Gates**.
+The diagnostic and intervention steps are complete.  The next step is the
+full Ax-primary regression gate and Sprint 29 scorecard.
 
 ## Current Sprint Status
+
+### Sprint 29
+
+Plan:
+
+1. [20-sprint-29-recommendation.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/20-sprint-29-recommendation.md)
+
+Issues:
+
+1. [#152](https://github.com/datablogin/causal-optimizer/issues/152) diagnose interaction and dose-response optimizer trajectories under Ax
+2. [#153](https://github.com/datablogin/causal-optimizer/issues/153) implement adaptive causal guidance under Ax-primary gates
+3. [#154](https://github.com/datablogin/causal-optimizer/issues/154) run optimizer-core regression gate and publish scorecard
+
+Prompts:
+
+1. [sprint-29-trajectory-diagnosis.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/prompts/sprint-29-trajectory-diagnosis.md)
+2. [sprint-29-adaptive-causal-guidance.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/prompts/sprint-29-adaptive-causal-guidance.md)
+3. [sprint-29-optimizer-core-scorecard.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/prompts/sprint-29-optimizer-core-scorecard.md)
+
+Merged PRs:
+
+1. `#155` merged
+   - PR: [#155](https://github.com/datablogin/causal-optimizer/pull/155)
+   - result: trajectory diagnosis found that interaction failure is early causal pressure and dose-response looked real but underpowered at 5 seeds
+2. `#158` merged
+   - PR: [#158](https://github.com/datablogin/causal-optimizer/pull/158)
+   - result: dose-response is now a certified Ax-primary causal win at 10 seeds (`p=0.002`, `9/10` wins)
+3. `#159` merged
+   - PR: [#159](https://github.com/datablogin/causal-optimizer/pull/159)
+   - result: interaction ablation showed exploration weighting is the primary cause of the B20 catastrophe; `graph_only` was empirically best on that row
+4. `#160` merged
+   - PR: [#160](https://github.com/datablogin/causal-optimizer/pull/160)
+   - result: production default `causal_exploration_weight` changed from `0.3` to `0.0`; `causal_softness` left unchanged at `0.5`
+
+Current Sprint 29 position:
+
+1. `#152` work is complete in substance, though the GitHub issue may still need manual closure
+2. `#153` work is complete in substance, though the GitHub issue may still need manual closure
+3. `#154` is the next required step and the current critical path
 
 ### Sprint 28
 
@@ -71,17 +113,22 @@ Merged PRs:
    - merge commit: `f765d31`
    - issue: `#147` closed
    - result: Ax/BoTorch 7-benchmark gate PASS, trusted priors reproduced exactly
-3. `#148` scorecard
-   - issue: `#148`
+3. `#151` merged
+   - PR: [#151](https://github.com/datablogin/causal-optimizer/pull/151)
+   - issue: `#148` closed
    - result: AX PRIMARY, RF SECONDARY verdict
 
 ## Immediate Next Step
 
-Sprint 28 is complete.  If resuming:
+Sprint 29 is no longer queued.  If resuming:
 
-1. read the [Sprint 28 backend baseline scorecard](thoughts/shared/docs/sprint-28-backend-baseline-scorecard.md)
-2. plan Sprint 29 -- return to optimizer-core work
-3. use the characterized boundary to guide optimizer improvements
+1. read the merged Sprint 29 docs in order:
+   - [sprint-29-trajectory-diagnosis-report.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-29-trajectory-diagnosis-report.md)
+   - [sprint-29-dose-response-10seed-report.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-29-dose-response-10seed-report.md)
+   - [sprint-29-interaction-ablation-report.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-29-interaction-ablation-report.md)
+   - [sprint-29-adaptive-causal-guidance-report.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-29-adaptive-causal-guidance-report.md)
+2. read the [Sprint 28 backend baseline scorecard](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-28-backend-baseline-scorecard.md)
+3. start [#154](https://github.com/datablogin/causal-optimizer/issues/154) using [sprint-29-optimizer-core-scorecard.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/prompts/sprint-29-optimizer-core-scorecard.md)
 
 ## Canonical Docs
 
@@ -106,7 +153,13 @@ Core references:
    - [PR #145](https://github.com/datablogin/causal-optimizer/pull/145) Sprint 27 crossover scorecard + README update
    - [PR #149](https://github.com/datablogin/causal-optimizer/pull/149) Sprint 28 optimizer-path provenance
    - [PR #150](https://github.com/datablogin/causal-optimizer/pull/150) Sprint 28 Ax/BoTorch regression gate (merged)
+   - [PR #151](https://github.com/datablogin/causal-optimizer/pull/151) Sprint 28 backend baseline scorecard
 16. [19-sprint-28-recommendation.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/19-sprint-28-recommendation.md)
+17. [20-sprint-29-recommendation.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/20-sprint-29-recommendation.md)
+18. [sprint-29-trajectory-diagnosis-report.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-29-trajectory-diagnosis-report.md)
+19. [sprint-29-dose-response-10seed-report.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-29-dose-response-10seed-report.md)
+20. [sprint-29-interaction-ablation-report.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-29-interaction-ablation-report.md)
+21. [sprint-29-adaptive-causal-guidance-report.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-29-adaptive-causal-guidance-report.md)
 
 ## Benchmark / Evidence Rules
 
@@ -299,6 +352,7 @@ Merged PRs:
 
 1. `#149` optimizer-path provenance (merged)
 2. `#150` Ax/BoTorch regression gate (merged)
+3. `#151` backend baseline scorecard (merged)
 
 What we learned:
 
@@ -312,6 +366,27 @@ What we learned:
 8. verdict: **AX PRIMARY, RF SECONDARY**
 9. RF fallback is useful for family-level drift detection but should not be used to certify or refute row-level causal-advantage claims
 10. Sprint 29 should return to optimizer-core work
+
+### Sprint 29 (Adaptive Causal Guidance Under Clean Backend Gates)
+
+Open issues:
+
+1. `#152` trajectory diagnosis for interaction and dose-response
+2. `#153` adaptive causal guidance intervention
+3. `#154` optimizer-core regression gate and scorecard
+
+Current plan:
+
+1. diagnose before changing optimizer behavior
+2. implement one narrow intervention only if the diagnosis supports it
+3. rerun the Ax-primary gate and publish the scorecard
+
+What must not drift:
+
+1. Ax/BoTorch remains the primary causal-advantage path
+2. RF fallback remains a secondary family-level drift signal
+3. dose-response must not be claimed as a statistically certified causal win from mean regret alone
+4. demand-response wins and null-control cleanliness are hard gates
 
 ## Current Best Evidence
 
@@ -375,5 +450,5 @@ Sprint 28 is **complete**.  The scorecard answered all five questions:
 If resuming from here:
 
 1. read the [Sprint 28 backend baseline scorecard](thoughts/shared/docs/sprint-28-backend-baseline-scorecard.md) for the full verdict
-2. plan Sprint 29 -- the scorecard recommends returning to optimizer-core work
-3. the benchmark suite is ready to evaluate optimizer changes with confidence
+2. read the [Sprint 29 recommendation](thoughts/shared/plans/20-sprint-29-recommendation.md)
+3. start [#152](https://github.com/datablogin/causal-optimizer/issues/152) using [sprint-29-trajectory-diagnosis.md](thoughts/shared/prompts/sprint-29-trajectory-diagnosis.md)
