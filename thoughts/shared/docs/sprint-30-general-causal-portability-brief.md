@@ -53,7 +53,12 @@ runner, and optionally a causal graph:
 | EnergyLoadAdapter | `domain_adapters/energy_load.py` | Shipped, tested | Energy forecasting |
 | MarketingLogAdapter | `domain_adapters/marketing_logs.py` | Shipped, tested | Marketing policy |
 | MLTrainingAdapter | `domain_adapters/ml_training.py` | Shipped | ML hyperparameter |
-| MarketingAdapter | `domain_adapters/marketing.py` | Shipped | Marketing (older) |
+| MarketingAdapter | `domain_adapters/marketing.py` | Shipped | Marketing (older, simulated) |
+
+Note: `MarketingAdapter` is an older simulated marketing adapter.
+`MarketingLogAdapter` is the newer logged-data / IPS-weighted adapter
+recommended for the next benchmark.  Both implement the `DomainAdapter`
+contract but serve different use cases (simulated vs logged data).
 
 Each adapter implements the same `DomainAdapter` contract:
 `get_search_space()`, `run_experiment()`, `get_prior_graph()`,
@@ -66,6 +71,7 @@ These are the components tied to energy data or ERCOT-specific logic:
 | Component | Path | Tied To |
 |-----------|------|---------|
 | DemandResponseScenario | `benchmarks/counterfactual_energy.py` | ERCOT energy covariates |
+| CounterfactualVariants | `benchmarks/counterfactual_variants.py` | ERCOT energy covariates |
 | InteractionPolicyScenario | `benchmarks/interaction_policy.py` | ERCOT energy covariates |
 | NullPredictiveEnergyBenchmark | `benchmarks/null_predictive_energy.py` | ERCOT energy data |
 | PredictiveEnergyBenchmark | `benchmarks/predictive_energy.py` | ERCOT energy data |
@@ -77,16 +83,25 @@ These are the components tied to energy data or ERCOT-specific logic:
 | Component | Path | Domain-Free? |
 |-----------|------|-------------|
 | DoseResponseScenario | `benchmarks/dose_response.py` | Yes — synthetic clinical |
+| CompleteGraphBenchmark | `benchmarks/complete_graph.py` | Yes — synthetic |
 | ToyGraphBenchmark | `benchmarks/toy_graph.py` | Yes — synthetic |
 | HighDimensionalBenchmark | `benchmarks/high_dimensional.py` | Yes — synthetic |
 | InteractionSCMBenchmark | `benchmarks/interaction_scm.py` | Yes — synthetic |
+| InteractionBenchmark | `benchmarks/interaction.py` | Yes — synthetic |
 
 ### 2e. Summary
 
 The core engine is **fully domain-portable**.  The benchmark portfolio
-is **heavily energy-weighted** (4 of 7 active benchmark rows use ERCOT
-covariates).  The dose-response benchmark is the only non-energy active
-row.  The MarketingLogAdapter exists and is tested but has no benchmark
+is **heavily energy-weighted**: of the 7 active rows in the Ax-primary
+regression gate, **6 use ERCOT energy data** (base, medium-noise,
+high-noise, confounded, null control, interaction — all built on ERCOT
+covariates).  Dose-response is the only non-energy active row.
+
+Several additional domain-portable benchmarks exist in the codebase
+(complete_graph, toy_graph, high_dimensional, interaction_scm,
+interaction) but are not part of the active regression gate.
+
+The MarketingLogAdapter exists and is extensively tested but has no benchmark
 contract or Sprint evidence attached to it.
 
 ## 3. Recommended Next Non-Energy Benchmark Contract
@@ -95,15 +110,16 @@ contract or Sprint evidence attached to it.
 
 **Why marketing:**
 
-1. The `MarketingLogAdapter` already exists, is tested (36 unit + 5
-   integration tests), and satisfies the full adapter contract
+1. The `MarketingLogAdapter` already exists, is extensively tested
+   (66 unit + 5 integration tests), and satisfies the full adapter
+   contract
 2. Marketing policy evaluation is intervention-oriented: the engine
    searches over treatment policies, not passive predictions
 3. The logged-action / IPS evaluation paradigm is a natural fit for the
    engine's causal framework — propensity scores, treatment effects, and
    policy value are first-class concepts
 4. The adapter already has a causal graph (14 edges), search space
-   (6 variables), and a fixture dataset (300 rows)
+   (6 continuous variables), and a fixture dataset (300 rows)
 5. This is the next non-energy domain recommended in the real-data
    adapter requirements doc (04-real-data-adapter-requirements.md)
 
@@ -121,8 +137,8 @@ contract or Sprint evidence attached to it.
 
 | Element | Specification |
 |---------|--------------|
-| Data | `tests/fixtures/marketing_log_fixture.csv` (300 rows) for CI; real marketing log for extended evaluation |
-| Search space | 6 continuous variables (eligibility threshold, channel allocation, propensity clip, regularization, treatment budget) |
+| Data | `tests/fixtures/marketing_log_fixture.csv` (300 rows) for CI; real marketing log for extended evaluation. **Known limitation:** 300 rows may be marginal for stable IPS-weighted policy evaluation across 10 seeds. The benchmark should report ESS (effective sample size) per seed and note variance if ESS is consistently low. |
+| Search space | 6 continuous variables: `eligibility_threshold`, `email_share`, `social_share_of_remainder`, `min_propensity_clip`, `regularization`, `treatment_budget_pct` |
 | Objective | `policy_value`, maximize |
 | Strategies | random, surrogate_only, causal |
 | Seeds | 10 |
@@ -136,7 +152,9 @@ contract or Sprint evidence attached to it.
 
 1. The benchmark must run on the committed fixture data without network
    access
-2. Results must be deterministic under fixed seed
+2. Results must be reproducible within tolerance under fixed seed (Ax/BoTorch
+   has known cross-platform non-determinism; strict determinism applies
+   only to the RF surrogate path)
 3. The null control must use outcome permutation, not label shuffling
 4. The report must separate observed policy improvement from causal
    attribution
@@ -151,8 +169,9 @@ demonstrate that:
 1. the intervention-oriented framing works on logged-action data
 2. the causal graph provides useful variable pruning on a non-energy
    search space
-3. the Sprint 29 default (causal_exploration_weight=0.0) is
-   domain-portable, not energy-tuned
+3. the Sprint 29 default (causal_exploration_weight=0.0) is not
+   harmful on non-energy surfaces and transfers without
+   domain-specific tuning
 
 A failing benchmark would be equally informative: it would identify
 whether the engine needs adaptation for IPS-weighted objectives,
