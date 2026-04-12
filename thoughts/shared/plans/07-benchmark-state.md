@@ -1,6 +1,6 @@
 # Benchmark State
 
-Updated: 2026-04-11 (Sprint 29 diagnosis and intervention merged; scorecard pending)
+Updated: 2026-04-12 (Sprint 29 complete — GENERALITY IMPROVED)
 
 ## Purpose
 
@@ -28,19 +28,16 @@ What is true today:
 6. Sprint 25 delivered the first mechanism-matched stability fix that actually met the base-B80 gate
 7. Sprint 26 and Sprint 27 expanded benchmark coverage to seven rows and clarified the causal-advantage boundary
 8. Sprint 28 separated Ax/BoTorch primary claims from RF-fallback secondary checks
-9. Sprint 29 has now completed diagnosis and a narrow default change under the clean backend contract
+9. Sprint 29 completed diagnosis, intervention, and regression gate — verdict GENERALITY IMPROVED
 
 ## Current Goal
 
-Sprint 29 is now in its final verification phase.
+Sprint 29 is **complete**.  The scorecard verdict is GENERALITY IMPROVED.
 
-The benchmark contract remains clean enough to evaluate code changes with confidence.
-The suite has explicit provenance, directly comparable Ax baselines, defined
-RF-fallback gates, and 10 clean null-control runs.
-
-The Sprint 29 theme remains **Adaptive Causal Guidance Under Clean Backend Gates**.
-The diagnostic and intervention steps are complete.  The next step is the
-full Ax-primary regression gate and Sprint 29 scorecard.
+Sprint 30 should decide whether to pursue the remaining interaction gap
+(certified win via `causal_softness=0.0` or more seeds) or return to
+real-world ERCOT benchmarks.  The base row's loss of significance
+(p=0.112) may also warrant investigation.
 
 ## Current Sprint Status
 
@@ -81,8 +78,8 @@ Current Sprint 29 position:
 
 1. `#152` trajectory diagnosis: **complete** (PR #155 merged)
 2. `#153` adaptive causal guidance: **complete** (PR #160 merged)
-3. `#154` regression gate and scorecard: **in review** (PR #161 open)
-4. verdict: **GENERALITY IMPROVED** — all rows improved or preserved,
+3. `#154` regression gate and scorecard: **complete** (PR #161 merged)
+4. verdict: **GENERALITY IMPROVED** — all rows improved in mean regret,
    interaction flipped to near-parity, but base B80 p loosened from
    0.045 to 0.112 (no longer statistically significant, mean improved)
 5. Sprint 29 produced 3 certified wins (medium, high, dose-response),

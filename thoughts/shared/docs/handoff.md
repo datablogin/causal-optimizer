@@ -51,14 +51,9 @@ The next task is Sprint 30 planning.
 4. [PR #160](https://github.com/datablogin/causal-optimizer/pull/160) merged
    - issue: [#153](https://github.com/datablogin/causal-optimizer/issues/153)
    - result: production default `causal_exploration_weight` changed from `0.3` to `0.0`; `causal_softness` left unchanged
-5. [Issue #154](https://github.com/datablogin/causal-optimizer/issues/154)
-   - still open
-   - this is the current critical path: Ax-primary regression gate + Sprint 29 scorecard
-
-Notes:
-
-1. `#152` and `#153` are complete in substance, though GitHub issue closure may still need cleanup
-2. the README is behind the latest merged Sprint 29 evidence and should not be treated as the source of truth until `#154` lands
+5. [PR #161](https://github.com/datablogin/causal-optimizer/pull/161) merged
+   - issue: [#154](https://github.com/datablogin/causal-optimizer/issues/154)
+   - result: Ax-primary regression gate passed with verdict **GENERALITY IMPROVED**
 
 ## Current Best Evidence
 
@@ -81,36 +76,24 @@ Remaining boundary rows:
 1. confounded demand-response: all strategies can still be misled
 2. null control: 11 clean runs across 12 sprint slots; Sprint 26 intentionally did not rerun it
 
-Important caution:
+Notes:
 
 1. `graph_only` was empirically best on interaction in PR #159, but the exact Ax-path mechanism is not isolated by that ablation alone
-2. Sprint 29 should not claim the interaction row is solved until `#154` reruns the full gate after the default change
+2. the regression gate (PR #161) confirmed the default change improved generality — interaction flipped to near-parity, all rows improved in mean regret
 
-## What Sprint 29 Must Do Now
+## What Sprint 30 Should Decide
 
-Sprint 29 should proceed in this order:
-
-1. rerun the Ax-primary regression gate after the `causal_exploration_weight=0.0` default change
-2. verify that the demand-response wins are preserved
-3. verify that dose-response remains a certified causal win
-4. measure whether interaction materially improves without breaking the rest of the suite
-5. confirm `optimizer_path: "ax_botorch"` on the compared artifacts
-6. confirm null control remains clean if it is rerun
-7. publish the Sprint 29 scorecard and update public-facing docs
-
-The first agent in a fresh session should start with [Issue #154](https://github.com/datablogin/causal-optimizer/issues/154) and use:
-
-1. [sprint-29-optimizer-core-scorecard.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/prompts/sprint-29-optimizer-core-scorecard.md)
+1. whether to pursue a certified interaction win (reduce `causal_softness` to 0.0, increase seeds to 20)
+2. whether to investigate the base row's loss of significance (p=0.112)
+3. whether to return to real-world ERCOT benchmarks instead of further synthetic tuning
 
 ## Files To Read First
 
 1. [07-benchmark-state.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/07-benchmark-state.md)
-2. [20-sprint-29-recommendation.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/20-sprint-29-recommendation.md)
-3. [sprint-28-backend-baseline-scorecard.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-28-backend-baseline-scorecard.md)
-4. [sprint-29-trajectory-diagnosis-report.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-29-trajectory-diagnosis-report.md)
-5. [sprint-29-dose-response-10seed-report.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-29-dose-response-10seed-report.md)
-6. [sprint-29-interaction-ablation-report.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-29-interaction-ablation-report.md)
-7. [sprint-29-adaptive-causal-guidance-report.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-29-adaptive-causal-guidance-report.md)
+2. [sprint-29-optimizer-core-scorecard.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-29-optimizer-core-scorecard.md)
+3. [sprint-29-optimizer-core-regression-report.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-29-optimizer-core-regression-report.md)
+4. [sprint-28-backend-baseline-scorecard.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-28-backend-baseline-scorecard.md)
+5. [20-sprint-29-recommendation.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/20-sprint-29-recommendation.md)
 
 ## Immediate Instructions For The Next Agent
 
