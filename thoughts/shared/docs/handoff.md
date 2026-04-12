@@ -61,18 +61,24 @@ Notes:
 
 ## Current Best Evidence
 
-Certified Ax-primary causal wins:
+Certified Ax-primary causal wins (Sprint 29, after `causal_exploration_weight=0.0`):
 
-1. base B80: causal mean/std `1.13 / 1.40`, catastrophic seeds `0/10`, causal wins `9/10`, two-sided `p=0.045`
-2. medium-noise B80: causal mean/std `1.87 / 1.74`, causal wins `10/10`, two-sided `p=0.007`
-3. high-noise B80: causal mean/std `2.57 / 2.28`, causal wins `8/10`, two-sided `p=0.014`
-4. dose-response B80: causal mean/std `0.19 / 0.03`, causal wins `9/10`, two-sided `p=0.002`
+1. medium-noise B80: causal mean/std `1.19 / 1.52`, causal wins `10/10`, two-sided `p=0.002`
+2. high-noise B80: causal mean/std `1.08 / 1.72`, causal wins `10/10`, two-sided `p=0.001`
+3. dose-response B80: causal mean/std `0.22 / 0.03`, causal wins `9/10`, two-sided `p=0.003`
+
+Trending (mean improved but p > 0.05):
+
+1. base B80: causal mean/std `1.01 / 1.10`, catastrophic seeds `0/10`, causal wins `7/10`, two-sided `p=0.112` (was `p=0.045` under old default)
+
+Near-parity (improved from s.o. advantage):
+
+1. interaction policy B80: causal mean `1.90` vs s.o. `2.18`, `p=0.225` (was s.o. winning at `p=0.014`)
 
 Remaining boundary rows:
 
-1. interaction policy: `surrogate_only` is still favored under the trusted Ax path; early causal pressure is the mechanism class, and exploration weighting was the primary harm in the ablation
-2. confounded demand-response: all strategies can still be misled
-3. null control: 10 clean Ax-era null runs across 11 sprint slots; Sprint 26 intentionally did not rerun it
+1. confounded demand-response: all strategies can still be misled
+2. null control: 11 clean runs across 12 sprint slots; Sprint 26 intentionally did not rerun it
 
 Important caution:
 

@@ -23,19 +23,21 @@ generality without moving wins around.
 
 ### 1a. Did base / medium / high demand-response preserve their trusted Ax wins?
 
-**Yes, all three preserved and improved.**
+**Medium-noise and high-noise preserved and improved.  Base improved in
+mean regret but lost statistical significance.**
 
 | Variant | S28 B80 Causal | S29 B80 Causal | S28 p | S29 p | Change |
 |---------|---------------|---------------|-------|-------|--------|
-| Base | 1.13 | **1.01** | 0.045 | 0.112 | Mean improved, p loosened |
+| Base | 1.13 | **1.01** | 0.045 | 0.112 | Mean improved, p loosened below threshold |
 | Medium | 1.87 | **1.19** | 0.007 | **0.002** | Mean improved, p strengthened |
 | High | 2.57 | **1.08** | 0.014 | **0.001** | Mean improved, p strengthened |
 
-Base B80 p loosened from 0.045 to 0.112 because causal seed variance
-shifted slightly while s.o. seeds are unchanged.  The stability gate
-(0/10 catastrophic, mean < 2.0, std < 3.0) remains fully met.
-Medium-noise and high-noise both improved substantially — p-values
-strengthened and causal means dropped.
+Base B80 p loosened from 0.045 to 0.112 — no longer statistically
+significant at the conventional two-sided 0.05 threshold.  The mean
+improved (1.13 → 1.01) and the stability gate (0/10 catastrophic,
+mean < 2.0, std < 3.0) remains fully met, but the base row should be
+classified as a **causal trend** rather than a certified win under the
+new default.  Medium-noise and high-noise both improved substantially.
 
 ### 1b. Did interaction improve, regress, or remain surrogate-only favored?
 
@@ -86,7 +88,7 @@ sufficient.
 
 | # | Benchmark | S28 Classification | S29 Classification |
 |---|-----------|-------------------|-------------------|
-| 1 | Base energy | Ax-primary (certified) | Ax-primary (certified, improved) |
+| 1 | Base energy | Ax-primary (certified) | Ax-primary (trending, mean improved but p=0.112) |
 | 2 | Medium-noise | Backend-invariant (certified) | Backend-invariant (certified, improved) |
 | 3 | High-noise | Backend-invariant (certified) | Backend-invariant (certified, improved) |
 | 4 | Confounded | Backend-invariant (all misled) | Not retested (no code path change) |
@@ -96,6 +98,8 @@ sufficient.
 
 The project now has **zero rows where surrogate-only is statistically
 significantly better than causal** under the Ax/BoTorch primary path.
+However, the base row traded a certified win (p=0.045) for a trending
+result (p=0.112) — this is a tradeoff the scorecard must acknowledge.
 
 ## 3. Base B80 p-Value Discussion
 

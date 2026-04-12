@@ -79,9 +79,14 @@ Merged PRs:
 
 Current Sprint 29 position:
 
-1. `#152` work is complete in substance, though the GitHub issue may still need manual closure
-2. `#153` work is complete in substance, though the GitHub issue may still need manual closure
-3. `#154` is the next required step and the current critical path
+1. `#152` trajectory diagnosis: **complete** (PR #155 merged)
+2. `#153` adaptive causal guidance: **complete** (PR #160 merged)
+3. `#154` regression gate and scorecard: **in review** (PR #161 open)
+4. verdict: **GENERALITY IMPROVED** — all rows improved or preserved,
+   interaction flipped to near-parity, but base B80 p loosened from
+   0.045 to 0.112 (no longer statistically significant, mean improved)
+5. Sprint 29 produced 3 certified wins (medium, high, dose-response),
+   1 trending (base), 1 near-parity (interaction), 1 PASS (null control)
 
 ### Sprint 28
 
@@ -128,7 +133,8 @@ Sprint 29 is no longer queued.  If resuming:
    - [sprint-29-interaction-ablation-report.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-29-interaction-ablation-report.md)
    - [sprint-29-adaptive-causal-guidance-report.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-29-adaptive-causal-guidance-report.md)
 2. read the [Sprint 28 backend baseline scorecard](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-28-backend-baseline-scorecard.md)
-3. start [#154](https://github.com/datablogin/causal-optimizer/issues/154) using [sprint-29-optimizer-core-scorecard.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/prompts/sprint-29-optimizer-core-scorecard.md)
+3. read the [Sprint 29 optimizer-core scorecard](thoughts/shared/docs/sprint-29-optimizer-core-scorecard.md) for the full regression gate results
+4. plan Sprint 30 — the scorecard recommends characterizing the new baseline and deciding whether to pursue the remaining interaction gap or return to real-world ERCOT benchmarks
 
 ## Canonical Docs
 

@@ -66,10 +66,11 @@ All runs confirmed `optimizer_path: "ax_botorch"` in provenance.
 
 B80 per-seed causal: 0.43, 3.20, 0.41, 0.44, 0.55, 0.44, 0.36, 0.65, 3.21, 0.44
 
-Causal mean improved from 1.13 to 1.01.  The p-value loosened
-from 0.045 to 0.112 because surrogate-only seeds are unchanged
-(same random state for s.o.) while causal seed variance shifted
-slightly.  All stability gate criteria remain met.
+Causal mean improved from 1.13 to 1.01, but the p-value loosened
+from 0.045 to 0.112 — no longer statistically significant at the
+two-sided 0.05 threshold.  The stability gate (0/10 catastrophic,
+mean < 2.0, std < 3.0) remains met, but the base row is now a
+**causal trend** rather than a certified win under the new default.
 
 ### 3b. Medium-Noise Energy
 
@@ -137,17 +138,19 @@ B80 causal 0.22 (std 0.03), essentially unchanged from the Sprint 29
 
 | Row | S28 (weight=0.3) | S29 (weight=0.0) | Change |
 |-----|-----------------|-----------------|--------|
-| Base B80 | 1.13 | **1.01** | -11% (improved) |
+| Base B80 | 1.13 | **1.01** | -11% (mean improved, p loosened 0.045→0.112) |
 | Medium B80 | 1.87 | **1.19** | -36% (improved) |
 | High B80 | 2.57 | **1.08** | -58% (improved) |
 | Interaction B80 | 3.17 (s.o. wins) | **1.90** (near parity) | -40% (flipped) |
 | Dose-response B80 | 0.19 | 0.22 | +16% (preserved, within noise) |
 | Null control | PASS | PASS | unchanged |
 
-The intervention improved every causal-win row while flipping the
-interaction row from surrogate-only advantage to near-parity.
-No row regressed.  The dose-response difference (0.19 → 0.22) is
-within seed-level noise (std 0.03).
+The intervention improved mean regret on every row and flipped the
+interaction row from surrogate-only advantage to near-parity.  The
+dose-response difference (0.19 → 0.22) is within seed-level noise.
+However, the base row traded a statistically significant win (p=0.045)
+for a trending result (p=0.112) — mean improved but significance was
+lost.
 
 ## 5. Provenance
 
@@ -170,10 +173,35 @@ within seed-level noise (std 0.03).
 ### Commands
 
 ```bash
-uv run python3 scripts/counterfactual_benchmark.py --variant base --seeds 0,...,9 --budgets 20,40,80
-uv run python3 scripts/counterfactual_benchmark.py --variant medium_noise --seeds 0,...,9 --budgets 20,40,80
-uv run python3 scripts/counterfactual_benchmark.py --variant high_noise --seeds 0,...,9 --budgets 20,40,80
-uv run python3 scripts/counterfactual_benchmark.py --variant interaction --seeds 0,...,9 --budgets 20,40,80
-uv run python3 scripts/dose_response_benchmark.py --seeds 0,...,9 --budgets 20,40,80
-uv run python3 scripts/null_energy_benchmark.py --seeds 0,1,2 --budgets 20,40
+DATA=/Users/robertwelborn/Projects/_local/causal-optimizer/data/ercot_north_c_dfw_2022_2024.parquet
+OUT=/Users/robertwelborn/Projects/_local/causal-optimizer/artifacts/sprint-29-optimizer-core-gate
+
+uv run python3 scripts/counterfactual_benchmark.py \
+  --data-path "$DATA" --variant base \
+  --seeds 0,1,2,3,4,5,6,7,8,9 --budgets 20,40,80 \
+  --output "$OUT/base_results.json"
+
+uv run python3 scripts/counterfactual_benchmark.py \
+  --data-path "$DATA" --variant medium_noise \
+  --seeds 0,1,2,3,4,5,6,7,8,9 --budgets 20,40,80 \
+  --output "$OUT/medium_noise_results.json"
+
+uv run python3 scripts/counterfactual_benchmark.py \
+  --data-path "$DATA" --variant high_noise \
+  --seeds 0,1,2,3,4,5,6,7,8,9 --budgets 20,40,80 \
+  --output "$OUT/high_noise_results.json"
+
+uv run python3 scripts/counterfactual_benchmark.py \
+  --data-path "$DATA" --variant interaction \
+  --seeds 0,1,2,3,4,5,6,7,8,9 --budgets 20,40,80 \
+  --output "$OUT/interaction_results.json"
+
+uv run python3 scripts/dose_response_benchmark.py \
+  --seeds 0,1,2,3,4,5,6,7,8,9 --budgets 20,40,80 \
+  --output "$OUT/dose_response_results.json"
+
+uv run python3 scripts/null_energy_benchmark.py \
+  --data-path "$DATA" \
+  --seeds 0,1,2 --budgets 20,40 \
+  --output "$OUT/null_control_results.json"
 ```

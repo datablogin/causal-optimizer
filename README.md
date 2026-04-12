@@ -79,7 +79,7 @@ The base-B80 catastrophic-seed problem (seeds locking into a bad categorical val
 
 If you want the shortest honest summary:
 
-1. we have **statistically significant causal wins on 4 of 7 benchmarks** under Ax/BoTorch (base p=0.112, medium p=0.002, high p=0.001, dose-response p=0.003), with 0/10 catastrophic seeds on all four
+1. we have **statistically significant causal wins on 3 of 7 benchmarks** under Ax/BoTorch (medium p=0.002, high p=0.001, dose-response p=0.003), with base trending (p=0.112, mean improved from 1.13 to 1.01 but no longer significant after the Sprint 29 default change)
 2. **no benchmark row has a statistically significant surrogate-only advantage** under Ax — Sprint 29 flipped the interaction row from s.o. winning to near-parity
 3. backend matters: dose-response and base energy are Ax-primary (surrogate-only wins under RF fallback)
 4. we do **not** yet have evidence of causal advantage on the real ERCOT forecasting tasks
