@@ -73,8 +73,8 @@ These are the components tied to energy data or ERCOT-specific logic:
 | DemandResponseScenario | `benchmarks/counterfactual_energy.py` | ERCOT energy covariates |
 | CounterfactualVariants | `benchmarks/counterfactual_variants.py` | ERCOT energy covariates |
 | InteractionPolicyScenario | `benchmarks/interaction_policy.py` | ERCOT energy covariates |
-| NullPredictiveEnergyBenchmark | `benchmarks/null_predictive_energy.py` | ERCOT energy data |
-| PredictiveEnergyBenchmark | `benchmarks/predictive_energy.py` | ERCOT energy data |
+| NullSignalResult (module) | `benchmarks/null_predictive_energy.py` | ERCOT energy data |
+| ValidationEnergyRunner / PredictiveBenchmarkResult | `benchmarks/predictive_energy.py` | ERCOT energy data |
 | counterfactual_benchmark.py | `scripts/counterfactual_benchmark.py` | Energy CLI |
 | null_energy_benchmark.py | `scripts/null_energy_benchmark.py` | Energy CLI |
 
@@ -85,8 +85,8 @@ These are the components tied to energy data or ERCOT-specific logic:
 | DoseResponseScenario | `benchmarks/dose_response.py` | Yes — synthetic clinical |
 | CompleteGraphBenchmark | `benchmarks/complete_graph.py` | Yes — synthetic |
 | ToyGraphBenchmark | `benchmarks/toy_graph.py` | Yes — synthetic |
-| HighDimensionalBenchmark | `benchmarks/high_dimensional.py` | Yes — synthetic |
-| InteractionSCMBenchmark | `benchmarks/interaction_scm.py` | Yes — synthetic |
+| HighDimensionalSparseBenchmark | `benchmarks/high_dimensional.py` | Yes — synthetic |
+| InteractionSCM | `benchmarks/interaction_scm.py` | Yes — synthetic |
 | InteractionBenchmark | `benchmarks/interaction.py` | Yes — synthetic |
 
 ### 2e. Summary
@@ -230,7 +230,7 @@ synthetic manufacturing yield optimization.
 |------|---------|--------|
 | Predictive real-data | 1 domain (energy) | 2+ domains |
 | Intervention / offline-policy | 0 active | 1+ active |
-| Controlled positive/negative | 7 rows (5 energy-tied) | 7+ rows (3+ non-energy) |
+| Controlled positive/negative | 7 rows (6 energy-tied) | 7+ rows (3+ non-energy) |
 
 ## 5. Sprint 31 Recommendation
 
@@ -254,7 +254,7 @@ whether the engine's causal advantage is domain-portable.
 
 If the marketing benchmark passes, the project will have demonstrated
 causal advantage on three domain families (energy demand-response,
-clinical dose-response, marketing policy) instead of one.
+clinical dose-response, marketing policy) instead of the current two.
 
 If it fails, the failure will be specific and diagnosable — and the
 project will have honestly tested its generality claim instead of
