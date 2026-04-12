@@ -2,26 +2,27 @@
 
 **Date:** 2026-04-11  
 **Current sprint:** 29  
-**Current state:** Sprint 29 diagnosis and intervention merged; regression gate and scorecard pending  
+**Current state:** Sprint 29 complete — GENERALITY IMPROVED  
 **Main repo status:** safe restart point is this doc + benchmark state file
 
 ## What The Next Agent Needs To Know
 
-The project is no longer deciding whether Sprint 29 should start.
-Sprint 29 is already in its final verification phase.
+Sprint 29 is complete.  The verdict is **GENERALITY IMPROVED**.
 
-What is established now:
+What Sprint 29 established:
 
 1. Ax/BoTorch remains the primary backend for row-level causal-advantage claims
 2. RF fallback remains a secondary drift-detection signal, not a substitute baseline
-3. dose-response is now a certified Ax-primary causal win after the 10-seed rerun
-4. interaction is the last remaining surrogate-only advantage
-5. the interaction failure mode is early causal pressure, with exploration weighting as the primary culprit
-6. production default `causal_exploration_weight` is now `0.0`
-7. `causal_softness` is intentionally still `0.5`
+3. dose-response is a certified Ax-primary causal win (p=0.003)
+4. medium-noise and high-noise are certified and improved (p=0.002, p=0.001)
+5. base mean improved (1.13→1.01) but lost significance (p=0.112, was 0.045) — now trending
+6. interaction flipped from surrogate-only advantage to near-parity (1.90 vs 2.18, p=0.225)
+7. production default `causal_exploration_weight` is now `0.0`
+8. `causal_softness` is intentionally still `0.5`
+9. null control: 11th clean run (0.2%)
+10. no benchmark row has a statistically significant surrogate-only advantage under Ax
 
-The next task is no longer diagnosis.
-The next task is the full Ax-primary regression gate and Sprint 29 scorecard.
+The next task is Sprint 30 planning.
 
 ## Current GitHub Status
 
@@ -113,15 +114,13 @@ The first agent in a fresh session should start with [Issue #154](https://github
 
 ## Immediate Instructions For The Next Agent
 
-Start [Issue #154](https://github.com/datablogin/causal-optimizer/issues/154):
+Sprint 29 is complete.  Plan Sprint 30:
 
-1. use [sprint-29-optimizer-core-scorecard.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/prompts/sprint-29-optimizer-core-scorecard.md) as the contract
-2. run the full Ax-primary gate after the merged `causal_exploration_weight=0.0` default change
-3. preserve the demand-response wins if they are still real
-4. check whether interaction improves enough to change the cross-family boundary story
-5. update the README and benchmark-state documents only after the gate result is established
-6. publish the Sprint 29 scorecard with explicit backend and statistical language
+1. read the [Sprint 29 optimizer-core scorecard](thoughts/shared/docs/sprint-29-optimizer-core-scorecard.md) for the full verdict
+2. decide whether to pursue a certified interaction win (reduce `causal_softness`, increase seeds) or return to real-world ERCOT benchmarks
+3. the benchmark suite is ready to evaluate further optimizer changes
+4. the base row's loss of significance (p=0.112) may warrant investigation in Sprint 30
 
 ## One-Line Situation Summary
 
-Sprint 29 has already diagnosed the failure mode, certified dose-response, and merged the narrow default change; the only remaining step is the full Ax-primary regression gate and scorecard.
+Sprint 29 is complete with verdict GENERALITY IMPROVED: all rows improved in mean regret, interaction flipped to near-parity, but base lost significance — Sprint 30 should decide the next direction.

@@ -412,49 +412,51 @@ Interpretation:
 
 ### Positive / Negative Benchmark Boundary
 
-Trusted Ax-primary demand-response references:
+Trusted Ax-primary references (Sprint 29, after `causal_exploration_weight=0.0`):
 
-1. base B80 (Sprint 25 / reproduced in Sprint 28): causal mean/std `1.13 / 1.40`, catastrophic seeds `0/10`
-2. medium-noise B80 (Sprint 27 / reproduced in Sprint 28): causal mean/std `1.87 / 1.74`, causal wins `10/10`, two-sided `p=0.007`
-3. high-noise B80 (Sprint 25 / reproduced in Sprint 28): causal mean/std `2.57 / 2.28`, causal wins `8/10`, two-sided `p=0.014`
+1. base B80: causal mean/std `1.01 / 1.10`, catastrophic seeds `0/10`, wins `7/10`, two-sided `p=0.112` (trending, no longer significant)
+2. medium-noise B80: causal mean/std `1.19 / 1.52`, wins `10/10`, two-sided `p=0.002` (certified)
+3. high-noise B80: causal mean/std `1.08 / 1.72`, wins `10/10`, two-sided `p=0.001` (certified)
 
 Cross-family rows:
 
 1. confounded demand-response: all strategies can be misled; not a clean causal win row (backend-invariant)
-2. interaction policy: `surrogate_only` wins under both backends, magnitude is backend-sensitive (backend-sensitive)
-3. dose-response clinical: causal trends toward winning under Ax (regret 0.20 vs 1.19), s.o. wins under RF (Ax-primary)
+2. interaction policy: near-parity (causal `1.90` vs s.o. `2.18`, `p=0.225`), flipped from s.o. advantage after Sprint 29 intervention
+3. dose-response clinical: certified Ax-primary causal win (`0.22`, `p=0.003`, `9/10` wins); s.o. wins under RF
 
 Negative control:
 
-1. null control clean across `10` runs over `11` sprint slots (backend-invariant)
+1. null control clean across `11` runs over `12` sprint slots (backend-invariant)
 2. Sprint 26 intentionally did not rerun null control
 3. latest clean reruns stay within the `2%` tolerance
 
 ## Current Conclusion
 
-The project is a **trustworthy automated research harness with a characterized causal boundary and clean backend separation**.
+The project is a **trustworthy automated research harness with improved causal generality after Sprint 29**.
 
 What is now established:
 
-1. causal guidance clearly helps in the demand-response family under the trusted Ax path (3/3 variants, all statistically significant)
-2. four of seven benchmark rows are backend-invariant; two are Ax-primary (mean-regret direction reverses by backend); one is backend-sensitive in magnitude
-3. RF fallback is a secondary family-level regression signal, not a drop-in substitute for Ax-primary baselines
-4. the benchmark contract is clean enough to evaluate optimizer-core changes
+1. causal guidance helps in the demand-response family: medium-noise and high-noise are certified under Ax; base mean improved but lost significance (p=0.112)
+2. dose-response is a certified Ax-primary causal win (p=0.003)
+3. interaction is near-parity after removing harmful causal-weighted exploration
+4. no benchmark row has a statistically significant surrogate-only advantage under Ax
+5. RF fallback is a secondary family-level regression signal, not a drop-in substitute for Ax-primary baselines
 
-## Sprint 28 Exit Condition
+## Sprint 29 Exit Condition
 
-Sprint 28 is **complete**.  The scorecard answered all five questions:
+Sprint 29 is **complete**.  The scorecard verdict is GENERALITY IMPROVED:
 
-1. backend-invariant: medium-noise, high-noise, confounded, null control
-2. Ax-primary: base energy, dose-response
-3. backend-sensitive: interaction (magnitude)
-4. RF fallback role: family-level drift detection, not row-level certification
-5. Sprint 29: return to optimizer-core work
+1. medium-noise and high-noise: preserved and improved
+2. base: mean improved, lost significance (trending)
+3. dose-response: preserved (certified win)
+4. interaction: flipped from s.o. advantage to near-parity
+5. null control: 11th clean run
+6. Sprint 30: characterize new baseline, decide whether to pursue remaining interaction gap or return to real-world ERCOT
 
 ## Practical Next Step
 
 If resuming from here:
 
-1. read the [Sprint 28 backend baseline scorecard](thoughts/shared/docs/sprint-28-backend-baseline-scorecard.md) for the full verdict
-2. read the [Sprint 29 recommendation](thoughts/shared/plans/20-sprint-29-recommendation.md)
-3. start [#152](https://github.com/datablogin/causal-optimizer/issues/152) using [sprint-29-trajectory-diagnosis.md](thoughts/shared/prompts/sprint-29-trajectory-diagnosis.md)
+1. read the [Sprint 29 optimizer-core scorecard](thoughts/shared/docs/sprint-29-optimizer-core-scorecard.md) for the full verdict
+2. plan Sprint 30 — decide whether to pursue certified interaction win or return to ERCOT
+3. the benchmark suite is ready to evaluate further optimizer changes

@@ -12,12 +12,12 @@
 
 ## Verdict
 
-**GENERALITY IMPROVED** -- removing causal-weighted exploration preserved
-all demand-response wins (three improved, none regressed), preserved
-the dose-response certified win, flipped the interaction row from
-surrogate-only advantage to near-parity, and kept null control clean.
-This is the first Sprint 29 optimizer-core change that improved
-generality without moving wins around.
+**GENERALITY IMPROVED** -- removing causal-weighted exploration improved
+mean regret on every row, flipped the interaction row from
+surrogate-only advantage to near-parity, preserved the dose-response
+certified win, and kept null control clean.  Medium-noise and high-noise
+wins are preserved and strengthened.  Base mean improved but lost
+statistical significance (p=0.112).  No row regressed in mean regret.
 
 ## 1. Answers to Required Questions
 

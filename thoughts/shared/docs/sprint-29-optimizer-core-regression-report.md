@@ -10,10 +10,11 @@
 
 ## Verdict
 
-**NO REGRESSIONS.** All six benchmarks pass under the new default.
-Demand-response wins are preserved and strengthened.  Interaction
-improves dramatically.  Dose-response is preserved.  Null control
-is clean.
+**NO MEAN-REGRET REGRESSIONS.** All six benchmarks improved or held in
+mean regret.  Medium-noise and high-noise wins are preserved and
+strengthened.  Base mean improved but lost statistical significance
+(p=0.112).  Interaction improves dramatically.  Dose-response is
+preserved.  Null control is clean.
 
 ## 1. Suite Coverage
 

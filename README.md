@@ -8,7 +8,7 @@ This project has **characterized the boundary of causal advantage** across a 7-b
 
 What we can say confidently today:
 
-1. **Causal guidance wins on noisy, categorical-barrier landscapes.** On the demand-response family (5D, 9D, 15D), causal beats surrogate-only at B80 with statistical significance at all noise levels (two-sided MWU p <= 0.002). The advantage scales smoothly with noise dimensionality.
+1. **Causal guidance wins on noisy, categorical-barrier landscapes.** On the demand-response family, medium-noise (9D, p=0.002) and high-noise (15D, p=0.001) show statistically significant causal wins. Base (5D) has an improved mean (1.01) but lost significance after the Sprint 29 default change (p=0.112, was 0.045).
 2. **Causal guidance wins on smooth dose-response landscapes under Ax/BoTorch.** On the dose-response benchmark (Emax curve, 6D), causal achieves near-zero regret (0.22, p=0.003, 9/10 wins). Under RF fallback, surrogate-only still wins — this row is Ax-primary.
 3. **Interaction is now near-parity.** Sprint 29 identified and removed harmful causal-weighted exploration, flipping the interaction row from surrogate-only advantage (p=0.014) to near-parity (causal 1.90 vs s.o. 2.18, p=0.225). No benchmark row now has a statistically significant surrogate-only advantage under Ax.
 4. **The crossover is structural, not dimensional.** The boundary depends on landscape family (categorical barriers, noise-to-signal ratio), not a single noise-dimension threshold.
