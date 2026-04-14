@@ -43,8 +43,9 @@ contract.
 **Std convention:** all Sprint 30 std values use population std
 (ddof=0).  The Sprint 16 comparison columns preserve the values from
 the prior reports, which may have used sample std (ddof=1) — small
-discrepancies in random std between the two columns (e.g., 0.36 vs
-0.32) reflect this convention difference, not a re-run of random.
+discrepancies in random std visible in the COAST section (section 3a,
+e.g., 0.36 vs 0.32) reflect this convention difference, not a re-run
+of random.  NORTH_C random std is unchanged between sprint columns.
 
 ### 2a. Test MAE (mean ± std across 5 seeds)
 
@@ -115,7 +116,7 @@ B40 and B20 causal-vs-random were not formally tested.
 
 | Strategy | Val MAE | Test MAE | Gap |
 |----------|---------|----------|-----|
-| causal | 90.124 | 104.876 | **14.753** |
+| causal | 90.124 | 104.876 | **14.752** |
 | random | 90.200 | 105.208 | 15.008 |
 | surrogate_only | 90.368 | 105.719 | 15.351 |
 
