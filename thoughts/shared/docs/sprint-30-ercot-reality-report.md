@@ -101,7 +101,7 @@ Causal has a slightly smaller val-test gap than surrogate_only (7.65 vs
 
 Causal is now **distinct from surrogate_only** and improved by 0.36-0.81
 MAE across budgets.  Causal beats random in mean at `B40` and `B80`
-(104.88 and 105.03 vs random 105.20 and 105.21) but not at `B20`
+(105.03 and 104.88 vs random 105.20 and 105.21) but not at `B20`
 (105.48 vs random 105.14).  The causal-vs-random MWU at `B80` is
 p=0.690 (not significant).  B40 and B20 causal-vs-random were not
 formally tested.

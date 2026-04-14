@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-14
 **Sprint:** 31 (General Causal Autoresearch: First Non-Energy Real-Data Benchmark)
-**Issue:** follow-on to [22-sprint-31-generalization-research-plan.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/22-sprint-31-generalization-research-plan.md)
+**Issue:** follow-on to [22-sprint-31-generalization-research-plan.md](../plans/22-sprint-31-generalization-research-plan.md)
 **Primary source:** <https://blog.minethatdata.com/2008/03/minethatdata-e-mail-analytics-and-data.html>
 **Status:** Contract and execution brief. Not an implementation PR.
 
@@ -195,7 +195,7 @@ objective. The benchmark should fix the cost constant, not tune it.
 |----------------|------------------|-----------|
 | `propensity` (float) | known | Constant `0.5` for every row in the binary slice (Hillstrom treatment is randomized; the slice is balanced by construction). |
 | `channel` (str) | constant | Set to `"email"` for all rows. Hillstrom has a `channel` column but it describes the customer's past purchase channel, not the marketing send channel. It must not be used as the adapter's `channel` field. |
-| `segment` (str) | `history_segment` | Bucket map: `"$500 - $750" / "$750 - $1,000" / "$1,000 +"` → `"high_value"`; `"$200 - $350" / "$350 - $500"` → `"medium"`; `"$0 - $100" / "$100 - $200"` → `"low"`. Document the mapping in the wrapper. |
+| `segment` (str) | `history_segment` | Bucket map using the raw Hillstrom CSV strings (numeric prefix is part of the value): `"5) $500 - $750" / "6) $750 - $1,000" / "7) $1,000 +"` → `"high_value"`; `"3) $200 - $350" / "4) $350 - $500"` → `"medium"`; `"1) $0 - $100" / "2) $100 - $200"` → `"low"`. Document the mapping in the wrapper. The wrapper must match the raw string; stripping the numeric prefix first is also acceptable but must be explicit. |
 | `timestamp` (datetime) | not used | Hillstrom does not provide send-time timestamps. Omit. |
 
 ### 3d. Features Dropped On First Run
@@ -216,21 +216,23 @@ The `MarketingLogAdapter` has 6 continuous variables. On Hillstrom:
 | `eligibility_threshold` | Tuned by the optimizer (in `[0.0, 1.0]`) |
 | `email_share` | **Fixed at `1.0`**. All treatment is e-mail. Not tuned. |
 | `social_share_of_remainder` | **Fixed at `0.0`**. Degenerate on Hillstrom. Not tuned. |
-| `min_propensity_clip` | Tuned (in `[0.01, 0.5]`). Low values expected because propensity is constant `0.5`. |
+| `min_propensity_clip` | **Fixed at `0.01`**. Degenerate on Hillstrom: propensity is constant `0.5`, which is always ≥ any value in the adapter range `[0.01, 0.5]`, so the clip never activates and the optimizer sees a flat response surface. Not tuned. |
 | `regularization` | Tuned (in `[0.001, 10.0]`) |
 | `treatment_budget_pct` | Tuned (in `[0.1, 1.0]`) |
 
-The effective search space for the first run is **4 tuned continuous
-variables** (`eligibility_threshold`, `min_propensity_clip`,
-`regularization`, `treatment_budget_pct`). This is smaller than any
-current active regression gate row and smaller than the dose-response
-row (6D). That is intentional: the first non-energy benchmark should
-not also be the first high-dimensional one.
+The effective search space for the first run is **3 tuned continuous
+variables** (`eligibility_threshold`, `regularization`,
+`treatment_budget_pct`). This is smaller than any current active
+regression gate row and smaller than the dose-response row (6D). That
+is intentional: the first non-energy benchmark should not also be the
+first high-dimensional one, and dimensions that are degenerate on the
+dataset should be pre-baked rather than wasted as search bandwidth.
 
 Implementation note: the launch contract prefers a small
-`HillstromLoader` wrapper that pre-bakes `email_share=1.0` and
-`social_share_of_remainder=0.0` into the parameter dict, rather than
-modifying `MarketingLogAdapter` to support partial search spaces.
+`HillstromLoader` wrapper that pre-bakes `email_share=1.0`,
+`social_share_of_remainder=0.0`, and `min_propensity_clip=0.01` into
+the parameter dict, rather than modifying `MarketingLogAdapter` to
+support partial search spaces.
 
 ## 4. Gap Analysis
 
@@ -531,12 +533,12 @@ follow-on:
 
 ## 10. References
 
-1. [22-sprint-31-generalization-research-plan.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/22-sprint-31-generalization-research-plan.md)
-2. [sprint-30-general-causal-portability-brief.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-30-general-causal-portability-brief.md)
-3. [sprint-30-ercot-reality-report.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-30-ercot-reality-report.md)
-4. [04-real-data-adapter-requirements.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/04-real-data-adapter-requirements.md)
-5. [marketing-log-adapter.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/marketing-log-adapter.md)
-6. [00-origin.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/00-origin.md)
+1. [22-sprint-31-generalization-research-plan.md](../plans/22-sprint-31-generalization-research-plan.md)
+2. [sprint-30-general-causal-portability-brief.md](sprint-30-general-causal-portability-brief.md)
+3. [sprint-30-ercot-reality-report.md](sprint-30-ercot-reality-report.md)
+4. [04-real-data-adapter-requirements.md](../plans/04-real-data-adapter-requirements.md)
+5. [marketing-log-adapter.md](marketing-log-adapter.md)
+6. [00-origin.md](../../00-origin.md)
 7. MineThatData E-Mail Analytics And Data Mining Challenge — <https://blog.minethatdata.com/2008/03/minethatdata-e-mail-analytics-and-data.html>
 8. Criteo Uplift Prediction Dataset — <https://ailab.criteo.com/criteo-uplift-prediction-dataset/>
 9. Open Bandit Dataset — <https://research.zozo.com/data.html>
