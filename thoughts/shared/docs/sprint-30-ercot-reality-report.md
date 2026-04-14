@@ -40,7 +40,11 @@ contract.
 
 ## 2. NORTH_C Results (Sprint 30 vs Sprint 16)
 
-**Std convention:** all std values use population std (ddof=0).
+**Std convention:** all Sprint 30 std values use population std
+(ddof=0).  The Sprint 16 comparison columns preserve the values from
+the prior reports, which may have used sample std (ddof=1) — small
+discrepancies in random std between the two columns (e.g., 0.36 vs
+0.32) reflect this convention difference, not a re-run of random.
 
 ### 2a. Test MAE (mean ± std across 5 seeds)
 
@@ -95,8 +99,9 @@ Causal has a slightly smaller val-test gap than surrogate_only (7.65 vs
 | causal | 80 | 105.58 ± 0.15 | **104.88** ± 0.54 | -0.70 |
 
 Causal is now **distinct from surrogate_only** and improved by 0.36-0.81
-MAE across budgets.  Causal also beats random in mean at every budget
-(though only significantly at B40).
+MAE across budgets.  Causal also beats random in mean at every budget,
+though the causal-vs-random MWU at B80 is p=0.690 (not significant).
+B40 and B20 causal-vs-random were not formally tested.
 
 ### 3b. COAST B80 Head-to-Head (5 Seeds)
 
