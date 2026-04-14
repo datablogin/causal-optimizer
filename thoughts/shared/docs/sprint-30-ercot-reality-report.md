@@ -100,9 +100,11 @@ Causal has a slightly smaller val-test gap than surrogate_only (7.65 vs
 | causal | 80 | 105.58 ± 0.15 | **104.88** ± 0.54 | -0.70 |
 
 Causal is now **distinct from surrogate_only** and improved by 0.36-0.81
-MAE across budgets.  Causal also beats random in mean at every budget,
-though the causal-vs-random MWU at B80 is p=0.690 (not significant).
-B40 and B20 causal-vs-random were not formally tested.
+MAE across budgets.  Causal beats random in mean at `B40` and `B80`
+(104.88 and 105.03 vs random 105.20 and 105.21) but not at `B20`
+(105.48 vs random 105.14).  The causal-vs-random MWU at `B80` is
+p=0.690 (not significant).  B40 and B20 causal-vs-random were not
+formally tested.
 
 ### 3b. COAST B80 Head-to-Head (5 Seeds)
 
@@ -218,8 +220,10 @@ Important caveats to stay honest:
 Three things should happen in parallel in Sprint 31:
 
 1. **Rerun ERCOT with 10 seeds** to firm up the NORTH_C p=0.059 result
-   and the COAST causal vs random question.  This is a low-cost
-   experiment (45 runs per dataset).
+   and the COAST causal vs random question.  A full 10-seed rerun is
+   `90 runs per dataset` (3 strategies × 3 budgets × 10 seeds); if
+   the first 5 seeds are reused, this reduces to `45 incremental
+   runs per dataset`.
 2. **Start the marketing offline policy benchmark** recommended in the
    Sprint 30 portability brief.  This tests whether the Sprint 29
    default transfers to a non-energy domain with intervention-oriented
