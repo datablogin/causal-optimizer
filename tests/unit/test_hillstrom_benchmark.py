@@ -388,12 +388,12 @@ class TestDefensiveGuards:
     def test_secondary_outcomes_empty_when_visit_or_conversion_missing(
         self, raw_hillstrom: pd.DataFrame
     ) -> None:
-        from causal_optimizer.benchmarks.hillstrom import _secondary_outcomes_under_policy
+        from causal_optimizer.benchmarks.hillstrom import _secondary_arm_aggregates
 
         df = load_hillstrom_slice(raw_hillstrom, slice_type=HillstromSliceType.PRIMARY)
         # Drop the retained secondary outcome columns; the guard must
         # return an empty dict rather than raising or silently producing
         # garbage aggregates.
         without_secondary = df.drop(columns=["visit", "conversion"])
-        result = _secondary_outcomes_under_policy(without_secondary)
+        result = _secondary_arm_aggregates(without_secondary)
         assert result == {}

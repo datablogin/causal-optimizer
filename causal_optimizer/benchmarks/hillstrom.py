@@ -50,6 +50,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from enum import Enum
+from functools import lru_cache
 from typing import Any
 
 import numpy as np
@@ -68,10 +69,18 @@ from causal_optimizer.types import (
 # ── Contract constants ──────────────────────────────────────────────
 
 HILLSTROM_PRIMARY_PROPENSITY: float = 0.5
-"""Primary slice propensity: ``(1/3) / (2/3) = 0.5`` exactly."""
+"""Primary slice propensity: ``P(treated | row in primary slice) = 0.5``.
+
+Derivation: each of Hillstrom's three arms (``Mens E-Mail``,
+``Womens E-Mail``, ``No E-Mail``) is randomized at ``P = 1/3``. After
+dropping the ``Mens E-Mail`` arm, the primary slice contains the
+``Womens E-Mail`` and ``No E-Mail`` arms. Conditional on a row being in
+the slice, ``P(treated) = P(Womens) / (P(Womens) + P(None)) =
+(1/3) / (1/3 + 1/3) = 0.5``.
+"""
 
 HILLSTROM_POOLED_PROPENSITY: float = 2.0 / 3.0
-"""Pooled slice propensity: ``(1/3 + 1/3) / 1 = 2/3`` exactly.
+"""Pooled slice propensity: ``P(treated | row in pooled slice) = 2/3`` exactly.
 
 Computed as ``2.0 / 3.0`` rather than a rounded constant like ``0.667``
 so the Sprint 31 smoke-test invariant ``propensity == 2.0 / 3.0`` is
@@ -235,6 +244,7 @@ _ACTIVE_VAR_NAMES: tuple[str, ...] = (
 )
 
 
+@lru_cache(maxsize=1)
 def hillstrom_active_search_space() -> SearchSpace:
     """Return the 3-variable active search space for Hillstrom.
 
@@ -244,9 +254,16 @@ def hillstrom_active_search_space() -> SearchSpace:
     dimensions (``email_share``, ``social_share_of_remainder``,
     ``min_propensity_clip``) are pre-baked by
     :class:`HillstromPolicyRunner` and do not appear in this space.
+
+    The result is cached at module level (``lru_cache(maxsize=1)``)
+    because the adapter's native bounds are constants — there is no
+    per-call state to recompute. ``HillstromScenario.run_strategy``
+    calls this on every ``(strategy, budget, seed)`` combination, so
+    caching avoids rebuilding a throwaway adapter each time.
     """
     # Build a throwaway adapter against a minimal placeholder frame to
-    # extract the canonical bounds. Note: the adapter's __init__ requires
+    # extract the canonical bounds. Runs exactly once per process thanks
+    # to the lru_cache decorator. The adapter's __init__ requires
     # non-empty data with treatment/outcome/cost columns, so we use a
     # 2-row stub. This is not a data dependency — it only reads the
     # adapter's static variable bounds.
@@ -537,6 +554,22 @@ class HillstromScenario:
                 best_params = best_result.parameters
                 best_policy_value = best_result.metrics.get("policy_value", float("-inf"))
 
+        # Invariant: the engine-logged best parameters must contain only the
+        # 3 active-only dimensions. Frozen dimensions are injected by
+        # HillstromPolicyRunner before the adapter call and must never leak
+        # back into the experiment log — if they did, downstream readers
+        # would mis-identify the Hillstrom search scope. This assertion
+        # guards the "loader + wrapped runner" contract boundary against a
+        # future engine change that could start forwarding runner-side
+        # metadata back into the logged parameters.
+        if best_params is not None:
+            assert set(best_params) == set(_ACTIVE_VAR_NAMES), (
+                f"HillstromScenario: best_params has unexpected keys "
+                f"{sorted(best_params)!r}; expected exactly "
+                f"{sorted(_ACTIVE_VAR_NAMES)!r}. Frozen Hillstrom dimensions "
+                f"must not appear in the experiment log."
+            )
+
         runtime = time.perf_counter() - t_start
 
         secondary: dict[str, float] = {}
@@ -546,7 +579,7 @@ class HillstromScenario:
             # These are report-time diagnostics, not policy-filtered —
             # policy-conditioned secondary outcomes are deferred to a later
             # sprint (Sprint 32+) when uplift/CATE scoring is in scope.
-            secondary = _secondary_outcomes_under_policy(frame)
+            secondary = _secondary_arm_aggregates(frame)
 
         return HillstromBenchmarkResult(
             strategy=strategy,
@@ -564,7 +597,7 @@ class HillstromScenario:
         )
 
 
-def _secondary_outcomes_under_policy(frame: pd.DataFrame) -> dict[str, float]:
+def _secondary_arm_aggregates(frame: pd.DataFrame) -> dict[str, float]:
     """Compute in-sample treated/control-arm aggregates for secondary outcomes.
 
     The Sprint 31 contract (Section 4c) says ``visit`` and ``conversion``
