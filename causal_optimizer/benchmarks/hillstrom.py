@@ -389,7 +389,13 @@ def hillstrom_null_baseline(reshaped: pd.DataFrame, *, outcome_col: str = "outco
 # ── Benchmark scenario ───────────────────────────────────────────────
 
 
-_VALID_STRATEGIES: frozenset[str] = frozenset({"random", "surrogate_only", "causal"})
+VALID_STRATEGIES: frozenset[str] = frozenset({"random", "surrogate_only", "causal"})
+"""Public set of strategy names accepted by :class:`HillstromScenario`.
+
+Exported so that CLI wrappers and downstream callers import the same
+source of truth rather than redefining their own frozenset — a local
+copy would drift silently if a new strategy were added here.
+"""
 
 
 @dataclass
@@ -486,10 +492,10 @@ class HillstromScenario:
             A :class:`HillstromBenchmarkResult`.
 
         Raises:
-            ValueError: If ``strategy`` is not in ``_VALID_STRATEGIES``.
+            ValueError: If ``strategy`` is not in ``VALID_STRATEGIES``.
         """
-        if strategy not in _VALID_STRATEGIES:
-            msg = f"Unknown strategy {strategy!r}. Must be one of {sorted(_VALID_STRATEGIES)}."
+        if strategy not in VALID_STRATEGIES:
+            msg = f"Unknown strategy {strategy!r}. Must be one of {sorted(VALID_STRATEGIES)}."
             raise ValueError(msg)
 
         t_start = time.perf_counter()
@@ -535,11 +541,12 @@ class HillstromScenario:
 
         secondary: dict[str, float] = {}
         if best_params is not None and not null_control:
-            # Secondary outcomes: IPS-unweighted treated-arm means of the
-            # retained Hillstrom columns, taken over the rows actually
-            # selected by the best policy. This is a report-time
-            # diagnostic, not an optimization target.
-            secondary = _secondary_outcomes_under_policy(frame, best_params)
+            # Secondary outcomes: IPS-unweighted in-sample treated/control-arm
+            # means of the retained Hillstrom columns on the reshaped frame.
+            # These are report-time diagnostics, not policy-filtered —
+            # policy-conditioned secondary outcomes are deferred to a later
+            # sprint (Sprint 32+) when uplift/CATE scoring is in scope.
+            secondary = _secondary_outcomes_under_policy(frame)
 
         return HillstromBenchmarkResult(
             strategy=strategy,
@@ -557,19 +564,20 @@ class HillstromScenario:
         )
 
 
-def _secondary_outcomes_under_policy(
-    frame: pd.DataFrame, params: dict[str, Any]
-) -> dict[str, float]:
-    """Compute IPS-unweighted per-strategy aggregates for secondary outcomes.
+def _secondary_outcomes_under_policy(frame: pd.DataFrame) -> dict[str, float]:
+    """Compute in-sample treated/control-arm aggregates for secondary outcomes.
 
-    The contract (Section 4c) says ``visit`` and ``conversion`` should
-    be tracked as secondary reported outcomes on the observations matched
-    by each seed's best policy. We approximate "matched by the policy" at
-    report time as "treatment == 1 AND selected by the adapter's
-    threshold+budget rule for the given params," which is the same
-    match-treat set the adapter uses internally. For the Sprint 31 smoke
-    harness we report the simple in-sample treated-arm means as a
-    diagnostic.
+    The Sprint 31 contract (Section 4c) says ``visit`` and ``conversion``
+    should be tracked as secondary reported outcomes. The Sprint 31
+    harness reports simple in-sample treated-arm and control-arm means
+    on the reshaped frame as a diagnostic — it does **not** filter to
+    the policy's selected observations. Policy-conditioned secondary
+    outcomes (uplift- or CATE-filtered subpopulations) are deferred to a
+    later sprint when learned uplift scoring is in scope.
+
+    These aggregates are adapter-independent and do not re-run the
+    adapter; they are derived purely from the reshaped frame's
+    ``treatment``, ``visit``, and ``conversion`` columns.
     """
     if "visit" not in frame.columns or "conversion" not in frame.columns:
         return {}

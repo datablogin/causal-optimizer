@@ -395,5 +395,5 @@ class TestDefensiveGuards:
         # return an empty dict rather than raising or silently producing
         # garbage aggregates.
         without_secondary = df.drop(columns=["visit", "conversion"])
-        result = _secondary_outcomes_under_policy(without_secondary, {})
+        result = _secondary_outcomes_under_policy(without_secondary)
         assert result == {}

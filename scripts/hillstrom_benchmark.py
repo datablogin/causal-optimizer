@@ -37,6 +37,7 @@ import numpy as np
 import pandas as pd
 
 from causal_optimizer.benchmarks.hillstrom import (
+    VALID_STRATEGIES,
     HillstromBenchmarkResult,
     HillstromScenario,
     HillstromSliceType,
@@ -46,7 +47,6 @@ from causal_optimizer.benchmarks.provenance import collect_provenance
 
 logger = logging.getLogger(__name__)
 
-_VALID_STRATEGIES: frozenset[str] = frozenset({"random", "surrogate_only", "causal"})
 _VALID_SLICES: frozenset[str] = frozenset({"primary", "pooled"})
 
 
@@ -110,7 +110,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help=(
             "When set, also run each strategy on a permuted-outcome copy of the "
-            "primary slice at B20 and B40. Null-control seeds are taken from --seeds."
+            "primary slice. Null-control uses the subset of --budgets that are "
+            "<= 40 (typically B20 and B40); if no budget in --budgets is <= 40, "
+            "the null pass falls back to min(--budgets). Null-control seeds are "
+            "taken from --seeds."
         ),
     )
     parser.add_argument(
@@ -141,9 +144,9 @@ def _validate_budgets(budgets: list[int]) -> None:
 
 def _validate_strategies(strategies: list[str]) -> None:
     for s in strategies:
-        if s not in _VALID_STRATEGIES:
+        if s not in VALID_STRATEGIES:
             print(
-                f"ERROR: Unknown strategy {s!r}. Must be one of {sorted(_VALID_STRATEGIES)}.",
+                f"ERROR: Unknown strategy {s!r}. Must be one of {sorted(VALID_STRATEGIES)}.",
                 file=sys.stderr,
             )
             sys.exit(1)
