@@ -193,7 +193,7 @@ objective. The benchmark should fix the cost constant, not tune it.
 
 | Adapter column | Hillstrom source | Transform |
 |----------------|------------------|-----------|
-| `propensity` (float) | known | Constant `0.5` for every row in the binary slice (Hillstrom treatment is randomized; the slice is balanced by construction). |
+| `propensity` (float) | known | **Primary `Womens E-Mail vs No E-Mail` slice:** constant `0.5` on every row. Each of the three Hillstrom arms has `P = 1/3`, so within the two-arm primary slice `P(treated) = (1/3) / (2/3) = 0.5`. **Secondary pooled `Any E-Mail vs No E-Mail` slice:** constant `≈ 0.667` on every row, derived from `P(any email) = 1/3 + 1/3 = 2/3` in the full three-arm RCT. Using `0.5` on the pooled slice would produce biased IPS weights (treated over-weighted, control under-weighted) and inflate pooled `policy_value`. The `HillstromLoader` must select the correct constant per slice, not a single global `0.5`. |
 | `channel` (str) | constant | Set to `"email"` for all rows. Hillstrom has a `channel` column but it describes the customer's past purchase channel, not the marketing send channel. It must not be used as the adapter's `channel` field. |
 | `segment` (str) | `history_segment` | Bucket map using the raw Hillstrom CSV strings (numeric prefix is part of the value): `"5) $500 - $750" / "6) $750 - $1,000" / "7) $1,000 +"` → `"high_value"`; `"3) $200 - $350" / "4) $350 - $500"` → `"medium"`; `"1) $0 - $100" / "2) $100 - $200"` → `"low"`. Document the mapping in the wrapper. The wrapper must match the raw string; stripping the numeric prefix first is also acceptable but must be explicit. |
 | `timestamp` (datetime) | not used | Hillstrom does not provide send-time timestamps. Omit. |
@@ -216,7 +216,7 @@ The `MarketingLogAdapter` has 6 continuous variables. On Hillstrom:
 | `eligibility_threshold` | Tuned by the optimizer (in `[0.0, 1.0]`) |
 | `email_share` | **Fixed at `1.0`**. All treatment is e-mail. Not tuned. |
 | `social_share_of_remainder` | **Fixed at `0.0`**. Degenerate on Hillstrom. Not tuned. |
-| `min_propensity_clip` | **Fixed at `0.01`**. Degenerate on Hillstrom: propensity is constant `0.5`, which is always ≥ any value in the adapter range `[0.01, 0.5]`, so the clip never activates and the optimizer sees a flat response surface. Not tuned. |
+| `min_propensity_clip` | **Fixed at `0.01`**. Degenerate on Hillstrom: propensity is a per-slice constant (`0.5` on the primary slice, `≈ 0.667` on the pooled slice), and both are always ≥ any value in the adapter range `[0.01, 0.5]`, so the clip never activates on either slice and the optimizer sees a flat response surface along this dimension. Not tuned. |
 | `regularization` | Tuned (in `[0.001, 10.0]`) |
 | `treatment_budget_pct` | Tuned (in `[0.1, 1.0]`) |
 
@@ -258,13 +258,19 @@ Single new module, nothing invasive:
    - downloads the CSV from the official MineThatData source (or
      consumes a locally cached copy)
    - filters to `{"Womens E-Mail", "No E-Mail"}` for the primary slice
-   - remaps `segment` → `treatment`
+     and to `{"Mens E-Mail", "Womens E-Mail", "No E-Mail"}` for the
+     pooled secondary slice
+   - remaps `segment` → `treatment` (pooled: `1` if either e-mail arm,
+     `0` if no e-mail)
    - pass-through `spend` → `outcome`
    - assigns constant `cost` (e.g., `0.10` treated, `0.0` control)
-   - assigns constant `propensity = 0.5`
+   - assigns a **slice-specific** constant `propensity`: `0.5` on the
+     primary womens slice and `≈ 0.667` on the pooled slice
    - assigns constant `channel = "email"`
    - maps `history_segment` → `segment` per the bucket map above
+     (match the raw CSV strings including numeric prefix)
    - emits the reshaped DataFrame to an in-memory `MarketingLogAdapter`
+     once per slice
 2. A Hillstrom-specific benchmark scenario class modeled on
    `DoseResponseScenario`
 3. A permuted-outcome null control that operates on the reshaped frame
