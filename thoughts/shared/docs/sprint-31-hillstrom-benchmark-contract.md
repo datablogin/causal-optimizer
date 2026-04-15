@@ -253,7 +253,8 @@ support partial search spaces.
 1. `MarketingLogAdapter` binary treatment validation
 2. `MarketingLogAdapter` IPS / IPW policy evaluation math
 3. `MarketingLogAdapter` zero-support fallback
-4. `MarketingLogAdapter` 14-edge prior causal graph
+4. `MarketingLogAdapter` 14-edge prior causal graph — **projected**
+   to the active variables (see Section 4a.i below)
 5. `MarketingLogAdapter` objective definition (`policy_value`, maximize)
 6. `ExperimentEngine` loop, phase transitions, screening
 7. `suggest_parameters` strategy routing
@@ -261,6 +262,48 @@ support partial search spaces.
 9. `OffPolicyPredictor` and all optimizer-core defaults from Sprint 29
 10. Per-seed reporting, MWU testing, Cohen's d, population-std
     conventions from the Sprint 30 ERCOT report
+
+#### 4a.i. Prior Graph Projection To Active Variables
+
+The full adapter graph has 14 directed edges across 6 search
+variables and 4 metric nodes. Because Hillstrom freezes
+`email_share`, `social_share_of_remainder`, and `min_propensity_clip`
+to degenerate constants (see Section 3e), the experiment log on
+Hillstrom contains **no observations that vary those three
+variables**. Any prior edge with a frozen variable as the tail has
+no interventional support in the log, and any causal estimator that
+tries to use those nodes would fall back to an observational
+estimate on a constant — a degenerate calculation.
+
+**Contract decision:** `HillstromLoader` must pass the engine a
+**projected** prior graph that drops the three frozen variables and
+all 7 edges incident to them. The result is a 7-edge sub-DAG over
+the active nodes (`eligibility_threshold`, `regularization`,
+`treatment_budget_pct`, `treated_fraction`, `total_cost`,
+`policy_value`, `effective_sample_size`):
+
+```text
+eligibility_threshold  --> treated_fraction
+treatment_budget_pct   --> treated_fraction
+regularization         --> treated_fraction
+regularization         --> policy_value
+treated_fraction       --> total_cost
+treated_fraction       --> policy_value
+treated_fraction       --> effective_sample_size
+```
+
+Dropped edges (7 total): `email_share → {total_cost, policy_value}`,
+`social_share_of_remainder → {total_cost, policy_value}`,
+`min_propensity_clip → {total_cost, policy_value,
+effective_sample_size}`. The projection is **not** an adapter code
+change: the adapter's `get_prior_graph()` remains the full 14-edge
+graph, and the loader (or benchmark scenario) wraps the adapter and
+overrides the prior-graph pathway so the engine receives the
+projected subgraph. This is the same wrapper pattern used for the
+pre-baked parameter dict in Section 3e. Recording the projected
+graph (not the full graph) in provenance is required so the
+benchmark report can distinguish Hillstrom's narrower causal scope
+from the full adapter's.
 
 ### 4b. Small Wrapper Required (In-Sprint Work, Doc + Script)
 
@@ -308,11 +351,22 @@ Nothing in this list requires a change to
    (`recency`, `history`, `zip_code`, `newbie`) — interesting but
    out of the first-run scope. Sprint 32 follow-on candidate.
 6. **Binary classification outcome (conversion) as primary** — the
-   first run should optimize continuous `spend` (larger dynamic range,
-   smoother IPS estimates). `conversion` and `visit` should be
-   recorded as descriptors only. A future sprint can re-run with
-   conversion as the primary to test whether the optimizer picks the
-   same policy under a binary objective.
+   first run should optimize continuous `spend` (larger dynamic
+   range, smoother IPS estimates). `conversion` and `visit` should
+   be tracked as **secondary reported outcomes** in the Sprint 31
+   benchmark report, not as MAP-Elites descriptors: the unchanged
+   `MarketingLogAdapter.get_descriptor_names()` returns
+   `["total_cost", "treated_fraction"]`, so `conversion` and `visit`
+   cannot become adapter descriptors without adapter code changes,
+   which are out of scope for Sprint 31. Instead, the
+   `HillstromLoader` should retain the `visit` and `conversion`
+   columns on `D` (and `D_null`) and the benchmark report should
+   compute per-strategy, per-budget aggregates (e.g.,
+   IPS-unweighted treated-arm means of `visit` and `conversion`)
+   post-hoc from the logged observations matched by the best policy
+   found per seed. A future sprint can then re-run with `conversion`
+   or `visit` as the primary objective to test whether the optimizer
+   picks the same policy under a binary objective.
 
 ## 5. Evidence Contract
 
@@ -389,33 +443,52 @@ metrics are required on the first run.
 
 Permuted-outcome null control:
 
-1. Shuffle the `spend` column across rows while preserving treatment
-   assignment and all other columns.
-2. Rerun all three strategies on the shuffled frame at B20 and B40.
-   `B80` is not required for the null control.
-3. Expected behavior: all three strategies should return `policy_value`
-   statistically indistinguishable from the shuffled baseline mean.
-4. Null control fails if any strategy achieves `policy_value` more
-   than `2%` above the **shuffled-frame IPS-weighted grand mean of
-   `spend`** (i.e., the `policy_value` returned by the adapter on the
-   shuffled frame under a uniform-treatment policy — not the raw
-   mean of the `spend` column). The `2%` tolerance mirrors the
-   existing ERCOT and synthetic null-control gates (Sprint 18
-   onward), which have passed 11 clean runs under this threshold. Caveat: Hillstrom `spend` is right-skewed and
-   zero-inflated (most customers spend `$0`), so a 2% relative
-   threshold on IPS-weighted mean spend may be small in absolute
+1. Shuffle the `spend` column across rows (a deterministic
+   permutation seeded per null-control seed) while preserving
+   treatment assignment, propensities, and all covariates. Call the
+   shuffled frame `D_null`.
+2. Rerun all three strategies on `D_null` at B20 and B40. `B80` is
+   not required for the null control.
+3. **Null baseline (precise, adapter-consistent):** the baseline is
+   the raw sample mean of the `spend` column, `μ = mean(spend)`.
+   Because shuffling is a permutation of the same column values, `μ`
+   is identical on `D` and `D_null`, so it can be computed once from
+   the original frame and used across all null-control seeds. This
+   baseline is explicitly **not** "the adapter's `policy_value` under
+   a uniform-treatment policy," because `MarketingLogAdapter.
+   run_experiment` computes `policy_value` as a self-normalized IPS
+   average over observations whose logged action matches the
+   proposed policy (see `marketing_logs.py:322`). On randomized data,
+   an always-treat policy therefore recovers the treated-arm mean,
+   not the full-sample grand mean — the two are not interchangeable.
+   The contract fixes the baseline at the raw scalar `μ` to keep the
+   test unambiguous under the current adapter math.
+4. **Expected behavior:** under the null, each strategy's per-seed
+   `policy_value` on `D_null` is an unbiased estimator of `μ` plus
+   adapter-specific finite-sample noise.
+5. **Failure criterion:** the null control fails if any strategy's
+   mean `policy_value` across the 10 null-control seeds exceeds
+   `1.02 * μ` at any budget. The `2%` tolerance mirrors the existing
+   ERCOT and synthetic null-control gates (Sprint 18 onward), which
+   have passed 11 clean runs under this threshold. Caveat: Hillstrom
+   `spend` is right-skewed and zero-inflated (most customers spend
+   `$0`), so a 2% relative tolerance on `μ` may be small in absolute
    dollars and noisier across permutation seeds than the energy-MAE
    gates. **Pre-committed fallback ladder** (so threshold selection
    cannot be negotiated mid-sprint after seeing results):
-   (a) if more than 3 of 10 null-control seeds exceed the `2%`
-   threshold purely from permutation noise, widen to `5%` and
-   **re-evaluate the same 10 null-control seeds** against the new
-   threshold (no new runs — this is a threshold change on the
-   existing results, not a resample);
+   (a) if more than 3 of 10 null-control seeds for any strategy
+   exceed `1.02 * μ` purely from permutation noise, widen to
+   `1.05 * μ` and **re-evaluate the same 10 null-control seeds**
+   against the new threshold (no new runs — this is a threshold
+   change on the existing results, not a resample);
    (b) if the widened `5%` threshold still fails to discriminate,
-   switch the baseline statistic from IPS-weighted mean to
-   IPS-weighted trimmed mean (trim top/bottom 1%) and re-evaluate
-   the same 10 seeds one more time;
+   switch both the baseline and the test statistic to trimmed-mean
+   form — recompute `μ_trim` as the trimmed mean of `spend` (trim
+   top and bottom 1%) and recompute each seed's per-strategy
+   outcome as the trimmed mean of the per-observation
+   `normalized_weights * outcome` contributions returned by the
+   adapter (trim top and bottom 1%), then re-evaluate the same 10
+   seeds against `1.05 * μ_trim`;
    (c) any outcome beyond step (b) constitutes a Sprint 31
    null-control failure and blocks the real-slice verdict.
 
