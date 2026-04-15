@@ -47,6 +47,7 @@ Public API
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -473,7 +474,10 @@ class HillstromScenario:
         *,
         slice_type: HillstromSliceType,
     ) -> None:
-        self._raw = raw
+        # The raw frame is only used here to produce the reshaped slice;
+        # it is not stored because it can be substantially larger than
+        # the slice (especially for the primary slice, which drops the
+        # Mens arm) and the scenario never needs to re-read it.
         self._slice_type = slice_type
         self._real_slice = load_hillstrom_slice(raw, slice_type=slice_type)
         # The null-baseline μ is a scalar computed once from the real
@@ -588,9 +592,7 @@ class HillstromScenario:
             seed=seed,
             slice_type=self._slice_type.value,
             is_null_control=null_control,
-            policy_value=(
-                best_policy_value if best_policy_value != float("-inf") else float("nan")
-            ),
+            policy_value=(best_policy_value if math.isfinite(best_policy_value) else float("nan")),
             selected_parameters=best_params,
             runtime_seconds=runtime,
             null_baseline=self._null_baseline,

@@ -180,6 +180,45 @@ class TestSharedStrategiesSourceOfTruth:
         assert hb.VALID_STRATEGIES is VALID_STRATEGIES
 
 
+class TestLoadRaw:
+    """``_load_raw`` dispatches on file extension."""
+
+    def test_csv_path(self, tmp_path: Path) -> None:
+        import pandas as pd
+
+        csv_path = tmp_path / "data.csv"
+        pd.DataFrame({"a": [1, 2], "b": ["x", "y"]}).to_csv(csv_path, index=False)
+        df = hb._load_raw(str(csv_path))
+        assert list(df.columns) == ["a", "b"]
+        assert len(df) == 2
+
+    def test_parquet_path(self, tmp_path: Path) -> None:
+        """The ``.parquet`` branch must route to ``pd.read_parquet``.
+
+        We monkey-patch ``pd.read_parquet`` rather than writing a real
+        parquet file because parquet support may not be installed in
+        every test environment (it requires ``pyarrow`` or ``fastparquet``).
+        """
+        import pandas as pd
+
+        fake_frame = pd.DataFrame({"segment": ["Womens E-Mail"], "spend": [10.0]})
+        original = pd.read_parquet
+        calls: list[str] = []
+
+        def fake_read_parquet(path: str) -> pd.DataFrame:  # type: ignore[no-untyped-def]
+            calls.append(str(path))
+            return fake_frame
+
+        pd.read_parquet = fake_read_parquet  # type: ignore[assignment]
+        try:
+            df = hb._load_raw(str(tmp_path / "data.parquet"))
+        finally:
+            pd.read_parquet = original  # type: ignore[assignment]
+
+        assert calls == [str(tmp_path / "data.parquet")]
+        assert list(df.columns) == ["segment", "spend"]
+
+
 class TestFmtMeanStd:
     """Summary-table formatting helper."""
 
