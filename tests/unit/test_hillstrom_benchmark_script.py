@@ -180,6 +180,64 @@ class TestSharedStrategiesSourceOfTruth:
         assert hb.VALID_STRATEGIES is VALID_STRATEGIES
 
 
+class TestMainEndToEnd:
+    """End-to-end CLI smoke test: exercises ``main()`` on the fixture.
+
+    The individual CLI helpers are covered by the tests above; this test
+    covers the I/O orchestration path that stitches them together
+    (scenario construction, strategy loop, JSON write). A ``random``
+    strategy with budget 3 and seeds 0 keeps the runtime well under a
+    second so it is safe to include in the fast suite.
+    """
+
+    def test_main_writes_json_artifact_with_results_and_provenance(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import json
+
+        fixture_path = Path(__file__).resolve().parent.parent / "fixtures" / "hillstrom_fixture.csv"
+        output_path = tmp_path / "smoke.json"
+
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "hillstrom_benchmark.py",
+                "--data-path",
+                str(fixture_path),
+                "--slices",
+                "primary",
+                "--budgets",
+                "3",
+                "--seeds",
+                "0",
+                "--strategies",
+                "random",
+                "--output",
+                str(output_path),
+            ],
+        )
+
+        hb.main()
+
+        assert output_path.exists()
+        payload = json.loads(output_path.read_text())
+        assert payload["benchmark"] == "sprint_31_hillstrom"
+        assert len(payload["results"]) == 1
+        result = payload["results"][0]
+        assert result["strategy"] == "random"
+        assert result["slice_type"] == "primary"
+        assert result["is_null_control"] is False
+        assert result["budget"] == 3
+        assert result["seed"] == 0
+        # Provenance must include Hillstrom-specific fields
+        assert "hillstrom" in payload["provenance"]
+        hillstrom_prov = payload["provenance"]["hillstrom"]
+        assert hillstrom_prov["projected_graph_edge_count"] == 7
+        assert "primary" in hillstrom_prov["null_baselines"]
+        assert hillstrom_prov["null_control_enabled"] is False
+
+
 class TestLoadRaw:
     """``_load_raw`` dispatches on file extension."""
 
@@ -205,15 +263,15 @@ class TestLoadRaw:
         original = pd.read_parquet
         calls: list[str] = []
 
-        def fake_read_parquet(path: str) -> pd.DataFrame:  # type: ignore[no-untyped-def]
+        def fake_read_parquet(path: str) -> pd.DataFrame:
             calls.append(str(path))
             return fake_frame
 
-        pd.read_parquet = fake_read_parquet  # type: ignore[assignment]
+        pd.read_parquet = fake_read_parquet
         try:
             df = hb._load_raw(str(tmp_path / "data.parquet"))
         finally:
-            pd.read_parquet = original  # type: ignore[assignment]
+            pd.read_parquet = original
 
         assert calls == [str(tmp_path / "data.parquet")]
         assert list(df.columns) == ["segment", "spend"]

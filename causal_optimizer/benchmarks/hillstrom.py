@@ -284,6 +284,17 @@ def hillstrom_active_search_space() -> SearchSpace:
     )
     full = MarketingLogAdapter(data=stub).get_search_space()
     by_name = {v.name: v for v in full.variables}
+    missing = [name for name in _ACTIVE_VAR_NAMES if name not in by_name]
+    if missing:
+        # Clearer failure mode than an opaque KeyError if MarketingLogAdapter
+        # ever renames or drops one of the 3 active Hillstrom dimensions.
+        msg = (
+            f"MarketingLogAdapter.get_search_space() is missing expected "
+            f"Hillstrom active variables {missing!r}. This breaks the "
+            f"Sprint 31 Hillstrom benchmark contract — the adapter must "
+            f"expose {sorted(_ACTIVE_VAR_NAMES)!r}."
+        )
+        raise RuntimeError(msg)
     variables = [
         Variable(
             name=name,

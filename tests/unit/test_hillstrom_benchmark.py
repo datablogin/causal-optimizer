@@ -226,6 +226,47 @@ class TestActiveSearchSpace:
         assert "social_share_of_remainder" not in names
         assert "min_propensity_clip" not in names
 
+    def test_active_space_raises_if_adapter_drops_expected_variable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Defensive guard: a future MarketingLogAdapter change that
+        renames or drops one of the 3 active Hillstrom dimensions must
+        fail with a clear RuntimeError pointing at the contract, not an
+        opaque KeyError deep inside a list comprehension.
+        """
+        from causal_optimizer.benchmarks import hillstrom as hb
+        from causal_optimizer.types import SearchSpace, Variable, VariableType
+
+        def fake_get_search_space(self: object) -> SearchSpace:
+            # Returns a search space missing "regularization" entirely.
+            return SearchSpace(
+                variables=[
+                    Variable(
+                        name="eligibility_threshold",
+                        variable_type=VariableType.CONTINUOUS,
+                        lower=0.0,
+                        upper=1.0,
+                    ),
+                    Variable(
+                        name="treatment_budget_pct",
+                        variable_type=VariableType.CONTINUOUS,
+                        lower=0.1,
+                        upper=1.0,
+                    ),
+                ]
+            )
+
+        monkeypatch.setattr(MarketingLogAdapter, "get_search_space", fake_get_search_space)
+        # Clear the lru_cache so the next call actually re-invokes the
+        # patched get_search_space rather than returning a cached result
+        # built against the real adapter.
+        hb.hillstrom_active_search_space.cache_clear()
+        try:
+            with pytest.raises(RuntimeError, match="missing expected Hillstrom active variables"):
+                hb.hillstrom_active_search_space()
+        finally:
+            hb.hillstrom_active_search_space.cache_clear()
+
     def test_active_space_bounds_match_adapter(self) -> None:
         # Bounds must be inherited from MarketingLogAdapter to keep the
         # search space numerically identical to the adapter's native ranges
