@@ -200,6 +200,46 @@ class TestProjectedPriorGraph:
         # And the projection must drop exactly 7 edges (14 - 7 = 7)
         assert len(full - projected) == 7
 
+    def test_graph_sink_node_is_the_engine_objective(self) -> None:
+        """Regression guard: the projected graph's sink node must be the
+        same string the engine uses as ``objective_name``. If these ever
+        drift again, ``graph.ancestors(objective_name)`` and
+        ``graph.parents(objective_name)`` will return empty sets and the
+        causal optimizer will silently lose its graph signal — the
+        causal path collapses to surrogate-only behavior without any
+        test failure. Pin the coupling explicitly.
+        """
+        from causal_optimizer.benchmarks.hillstrom import _HILLSTROM_ENGINE_OBJECTIVE
+
+        graph = hillstrom_projected_prior_graph()
+        # ``policy_value`` is the Hillstrom objective — the same name
+        # the adapter reports and the engine consumes.
+        assert _HILLSTROM_ENGINE_OBJECTIVE == "policy_value"
+        assert _HILLSTROM_ENGINE_OBJECTIVE in graph.nodes
+        # The objective must have both ancestors and direct parents in
+        # the projected graph; any of the active search variables must
+        # reach it, or the causal path is a no-op.
+        ancestors = graph.ancestors(_HILLSTROM_ENGINE_OBJECTIVE)
+        parents = graph.parents(_HILLSTROM_ENGINE_OBJECTIVE)
+        assert ancestors, (
+            f"projected graph has no ancestors for objective "
+            f"{_HILLSTROM_ENGINE_OBJECTIVE!r}; the causal path would "
+            f"lose its graph signal"
+        )
+        assert parents, (
+            f"projected graph has no direct parents for objective "
+            f"{_HILLSTROM_ENGINE_OBJECTIVE!r}; the causal path would "
+            f"lose its graph signal"
+        )
+        # At least one active search variable must appear in the
+        # ancestor set — otherwise the causal optimizer's focus-variable
+        # pruning has nothing to work with.
+        active = {"eligibility_threshold", "regularization", "treatment_budget_pct"}
+        assert active & ancestors, (
+            f"no active search variable in ancestors("
+            f"{_HILLSTROM_ENGINE_OBJECTIVE!r}): {sorted(ancestors)!r}"
+        )
+
 
 # ── Active search space ──────────────────────────────────────────────
 

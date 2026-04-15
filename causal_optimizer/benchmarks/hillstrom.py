@@ -244,6 +244,25 @@ _ACTIVE_VAR_NAMES: tuple[str, ...] = (
     "treatment_budget_pct",
 )
 
+_HILLSTROM_ENGINE_OBJECTIVE: str = "policy_value"
+"""The string passed to ``ExperimentEngine`` as ``objective_name``.
+
+This constant is the single source of truth that couples:
+
+1. the engine's ``objective_name`` argument in
+   :meth:`HillstromScenario.run_strategy`,
+2. the sink node of :func:`hillstrom_projected_prior_graph`,
+3. the metric key :class:`HillstromPolicyRunner` returns unmodified
+   from :class:`MarketingLogAdapter`.
+
+If the projected graph's sink node and the engine's objective_name
+ever drift, the causal optimizer's ancestor/parent lookups in
+``optimizer/suggest.py`` and ``predictor/off_policy.py`` return empty
+sets and the causal path silently degrades to surrogate-only
+behavior without any test failure. Pinning this as a shared constant
+makes the coupling explicit and testable.
+"""
+
 
 @lru_cache(maxsize=1)
 def hillstrom_active_search_space() -> SearchSpace:
@@ -343,12 +362,17 @@ class HillstromPolicyRunner:
     :data:`HILLSTROM_FROZEN_PARAMS`. Does not mutate the caller's dict
     and does not modify the adapter.
 
-    The returned metrics include ``MarketingLogAdapter``'s full
-    per-run dict (``policy_value``, ``total_cost``, ``treated_fraction``,
+    The returned metrics are ``MarketingLogAdapter``'s full per-run
+    dict (``policy_value``, ``total_cost``, ``treated_fraction``,
     ``effective_sample_size``, ``propensity_clip_fraction``,
-    ``max_ips_weight``, ``weight_cv``, ``zero_support``) plus an
-    ``objective`` alias equal to the negated ``policy_value`` — because
-    ``policy_value`` is maximized but the engine minimizes ``objective``.
+    ``max_ips_weight``, ``weight_cv``, ``zero_support``). The
+    :class:`HillstromScenario` runs the engine with
+    ``objective_name="policy_value"`` and ``minimize=False``, matching
+    the adapter's native ``get_minimize()`` semantics. No sign flip —
+    the engine maximizes ``policy_value`` directly, and the projected
+    prior graph's ``policy_value`` sink node is therefore the engine's
+    ``objective_name``, so the causal optimizer's ancestor/parent/focus
+    lookups receive the intended graph signal.
     """
 
     def __init__(self, adapter: MarketingLogAdapter) -> None:
@@ -367,10 +391,7 @@ class HillstromPolicyRunner:
     def run(self, parameters: dict[str, Any]) -> dict[str, float]:
         """Evaluate one active-only parameter dict on the wrapped adapter."""
         forwarded = self._forward_params(parameters)
-        metrics = self._adapter.run_experiment(forwarded)
-        # Engine minimizes "objective"; Hillstrom maximizes policy_value.
-        metrics["objective"] = -metrics["policy_value"]
-        return metrics
+        return self._adapter.run_experiment(forwarded)
 
 
 # ── Null control helpers ─────────────────────────────────────────────
@@ -461,8 +482,15 @@ class HillstromBenchmarkResult:
     selected_parameters: dict[str, Any] | None = None
     runtime_seconds: float = 0.0
     null_baseline: float | None = None
-    # Secondary reported outcomes — IPS-unweighted per-strategy aggregates
-    # taken over the logged observations matched by the best policy.
+    # Secondary reported outcomes: **full-slice** treated/control-arm
+    # means of ``visit`` and ``conversion`` on the reshaped frame.
+    # These are *not* policy-conditioned — they are properties of the
+    # dataset, not of the optimizer output, and they are therefore
+    # identical across strategies and seeds on the same slice.
+    # Policy-filtered secondary outcomes (uplift- or CATE-conditioned
+    # subpopulations) are deferred to a later sprint per Sprint 31
+    # contract Section 4c. See :func:`_secondary_arm_aggregates` for
+    # the exact computation.
     secondary_outcomes: dict[str, float] = field(default_factory=dict)
 
 
@@ -561,17 +589,26 @@ class HillstromScenario:
                     best_policy_value = pv
                     best_params = params
         else:
+            # Run the engine directly on ``policy_value`` with
+            # ``minimize=False`` so that the engine's objective_name
+            # matches the projected prior graph's sink node. This is
+            # load-bearing for the causal path: optimizer/suggest.py
+            # uses ``graph.ancestors(objective_name)`` and
+            # ``graph.parents(objective_name)`` to compute causal focus
+            # variables, and off_policy.py's observational estimator
+            # skips its causal path entirely when the objective node
+            # is missing from the graph.
             graph = hillstrom_projected_prior_graph() if strategy == "causal" else None
             engine = ExperimentEngine(
                 search_space=space,
                 runner=runner,
                 causal_graph=graph,
-                objective_name="objective",
-                minimize=True,
+                objective_name=_HILLSTROM_ENGINE_OBJECTIVE,
+                minimize=False,
                 seed=seed,
             )
             engine.run_loop(budget)
-            best_result = engine.log.best_result("objective", minimize=True)
+            best_result = engine.log.best_result(_HILLSTROM_ENGINE_OBJECTIVE, minimize=False)
             if best_result is not None:
                 best_params = best_result.parameters
                 best_policy_value = best_result.metrics.get("policy_value", float("-inf"))
