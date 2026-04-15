@@ -216,7 +216,7 @@ The `MarketingLogAdapter` has 6 continuous variables. On Hillstrom:
 | `eligibility_threshold` | Tuned by the optimizer (in `[0.0, 1.0]`) |
 | `email_share` | **Fixed at `1.0`**. All treatment is e-mail. Not tuned. |
 | `social_share_of_remainder` | **Fixed at `0.0`**. Degenerate on Hillstrom. Not tuned. |
-| `min_propensity_clip` | **Fixed at `0.01`**. Degenerate on Hillstrom: propensity is a per-slice constant (`0.5` on the primary slice, `≈ 0.667` on the pooled slice), and both are always ≥ any value in the adapter range `[0.01, 0.5]`, so the clip never activates on either slice and the optimizer sees a flat response surface along this dimension. Not tuned. |
+| `min_propensity_clip` | **Fixed at `0.01`**. Degenerate on Hillstrom: propensity is a per-slice constant (`0.5` on the primary slice, `≈ 0.667` on the pooled slice). Both are ≥ every value in the adapter range `[0.01, 0.5]`, so the floor never rewrites a propensity — the worst case is the boundary `clip = 0.5` on the primary slice, which clips `0.5` to `0.5` (a no-op). The optimizer therefore sees a flat response surface along this dimension on both slices. Not tuned. |
 | `regularization` | Tuned (in `[0.001, 10.0]`) |
 | `treatment_budget_pct` | Tuned (in `[0.1, 1.0]`) |
 
@@ -375,7 +375,17 @@ Permuted-outcome null control:
 3. Expected behavior: all three strategies should return `policy_value`
    statistically indistinguishable from the shuffled baseline mean.
 4. Null control fails if any strategy achieves `policy_value` more
-   than 2% above the shuffled baseline mean at any budget.
+   than 2% above the shuffled baseline mean at any budget. The 2%
+   tolerance mirrors the existing ERCOT and synthetic null-control
+   gates (Sprint 18 onward), which have passed 11 clean runs under
+   this threshold. Caveat: Hillstrom `spend` is right-skewed and
+   zero-inflated (most customers spend `$0`), so a 2% relative
+   threshold on IPS-weighted mean spend may be small in absolute
+   dollars and noisier across permutation seeds than the energy-MAE
+   gates. If the first-run permutation shows signal-to-noise too low
+   to resolve a 2% gap, the threshold and/or the baseline statistic
+   (e.g., switch from mean to trimmed mean) must be revisited before
+   publishing the Sprint 31 verdict.
 
 If the null control fails, Sprint 31 must stop and diagnose before
 reporting the real-slice verdict.
@@ -384,14 +394,13 @@ reporting the real-slice verdict.
 
 Success (Sprint 31 certified Hillstrom win):
 
-1. causal `policy_value` at `B80` is greater than or equal to
-   surrogate_only `policy_value` at `B80`
-2. the causal-vs-surrogate-only comparison has `p <= 0.05` under
-   two-sided MWU on the primary slice
-3. causal is not statistically worse than random at `B80` on the
+1. causal `policy_value` at `B80` is strictly greater than
+   surrogate_only `policy_value` at `B80` on the primary slice, with
+   `p <= 0.05` under two-sided Mann-Whitney U
+2. causal is not statistically worse than random at `B80` on the
    primary slice
-4. the null control passes on the primary slice
-5. the pooled secondary slice does not show a statistically
+3. the null control passes on the primary slice
+4. the pooled secondary slice does not show a statistically
    significant reversal (i.e., s.o. does not beat causal at `p <=
    0.05` on the pooled slice)
 
@@ -438,7 +447,8 @@ uplift evaluation.
 
 **Why after Hillstrom, not before:**
 
-1. ~13M rows. Ingestion, caching, and per-run cost are real concerns.
+1. ~25M rows (the official dataset is 25,309,483 records). Ingestion,
+   caching, and per-run cost are real concerns.
 2. License is CC-BY-NC-SA 4.0 — usable for research but not for
    arbitrary redistribution. Dataset access audit required before
    commit.
@@ -513,7 +523,10 @@ follow-on:
 3. stand up a Hillstrom benchmark scenario class modeled on
    `DoseResponseScenario`
 4. run 5-seed smoke test (primary slice only, B40 only) to verify
-   wrapper correctness end-to-end
+   wrapper correctness end-to-end; in the same smoke test, verify on
+   a pooled-slice sample that `HillstromLoader` emits `propensity ≈
+   0.667` (not `0.5`) — this is the single most likely implementation
+   bug for a reader who skims section 3c
 5. run full 10-seed, 3-budget primary + secondary + null control
    benchmark
 6. publish the Sprint 31 Hillstrom report
