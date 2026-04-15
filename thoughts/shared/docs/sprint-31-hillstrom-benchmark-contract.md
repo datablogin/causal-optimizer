@@ -343,9 +343,10 @@ matching the Sprint 29 optimizer-core regression gate and the
 Sprint 30 ERCOT reality rerun. Per-slice per-budget experiment
 count on Hillstrom: 3 strategies × 3 budgets × 10 seeds = 90
 experiments per slice (primary or pooled); 2 budgets × 3 strategies
-× 10 seeds = 60 experiments for the null control (B80 not
-required). Total full-benchmark experiment count on Hillstrom:
-`90 + 90 + 60 = 240 adapter evaluations per HillstromLoader build`.
+× 10 seeds = 60 experiments for the null control (**primary slice
+only**, B80 not required). Total full-benchmark experiment count on
+Hillstrom: `90 (primary) + 90 (pooled) + 60 (null on primary) =
+240 adapter evaluations per HillstromLoader build`.
 Claim language is locked on `B80` by convention.
 
 ### 5d. Primary Objective
@@ -407,12 +408,14 @@ Permuted-outcome null control:
    gates. **Pre-committed fallback ladder** (so threshold selection
    cannot be negotiated mid-sprint after seeing results):
    (a) if more than 3 of 10 null-control seeds exceed the `2%`
-   threshold purely from permutation noise, widen to `5%` and rerun
-   the null control once;
+   threshold purely from permutation noise, widen to `5%` and
+   **re-evaluate the same 10 null-control seeds** against the new
+   threshold (no new runs — this is a threshold change on the
+   existing results, not a resample);
    (b) if the widened `5%` threshold still fails to discriminate,
    switch the baseline statistic from IPS-weighted mean to
-   IPS-weighted trimmed mean (trim top/bottom 1%) and rerun once
-   more;
+   IPS-weighted trimmed mean (trim top/bottom 1%) and re-evaluate
+   the same 10 seeds one more time;
    (c) any outcome beyond step (b) constitutes a Sprint 31
    null-control failure and blocks the real-slice verdict.
 
