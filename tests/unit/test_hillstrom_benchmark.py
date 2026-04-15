@@ -397,3 +397,62 @@ class TestDefensiveGuards:
         without_secondary = df.drop(columns=["visit", "conversion"])
         result = _secondary_arm_aggregates(without_secondary)
         assert result == {}
+
+
+class TestActiveParamsInvariant:
+    """The active-only-parameter invariant guard."""
+
+    def test_none_is_accepted(self) -> None:
+        from causal_optimizer.benchmarks.hillstrom import _check_active_params_invariant
+
+        # When the engine produces no best result, None is passed
+        # through without raising.
+        _check_active_params_invariant(None)
+
+    def test_active_only_params_are_accepted(self) -> None:
+        from causal_optimizer.benchmarks.hillstrom import _check_active_params_invariant
+
+        _check_active_params_invariant(
+            {
+                "eligibility_threshold": 0.3,
+                "regularization": 1.0,
+                "treatment_budget_pct": 0.5,
+            }
+        )
+
+    def test_frozen_param_leak_raises(self) -> None:
+        from causal_optimizer.benchmarks.hillstrom import _check_active_params_invariant
+
+        # Simulate a hypothetical future engine change that leaks
+        # a frozen Hillstrom dimension back into the experiment log.
+        leaked = {
+            "eligibility_threshold": 0.3,
+            "regularization": 1.0,
+            "treatment_budget_pct": 0.5,
+            "email_share": 1.0,  # leaked frozen dimension
+        }
+        with pytest.raises(RuntimeError, match="unexpected keys"):
+            _check_active_params_invariant(leaked)
+
+    def test_missing_active_key_raises(self) -> None:
+        from causal_optimizer.benchmarks.hillstrom import _check_active_params_invariant
+
+        # A subset of the active dims is also a violation — the log
+        # is supposed to be exactly the 3 active keys, no more and
+        # no less.
+        with pytest.raises(RuntimeError, match="unexpected keys"):
+            _check_active_params_invariant({"eligibility_threshold": 0.3})
+
+    def test_error_message_names_the_frozen_dim(self) -> None:
+        from causal_optimizer.benchmarks.hillstrom import _check_active_params_invariant
+
+        leaked = {
+            "eligibility_threshold": 0.3,
+            "regularization": 1.0,
+            "treatment_budget_pct": 0.5,
+            "min_propensity_clip": 0.01,
+        }
+        with pytest.raises(RuntimeError) as excinfo:
+            _check_active_params_invariant(leaked)
+        assert "min_propensity_clip" in str(excinfo.value)
+        assert "Frozen Hillstrom dimensions" in str(excinfo.value)

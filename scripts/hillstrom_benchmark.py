@@ -281,6 +281,14 @@ def main() -> None:
                         )
 
     # Null-control runs (primary slice only per Sprint 31 contract)
+    if args.null_control and "primary" not in scenarios:
+        logger.warning(
+            "--null-control was set but 'primary' is not in --slices %s; "
+            "null-control runs are scoped to the primary slice per Sprint 31 "
+            "contract Section 5g and will be skipped. Add 'primary' to --slices "
+            "to enable the null-control pass.",
+            slices,
+        )
     if args.null_control and "primary" in scenarios:
         null_budgets = [b for b in budgets if b <= 40] or [min(budgets)]
         primary = scenarios["primary"]

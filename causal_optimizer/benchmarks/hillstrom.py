@@ -260,6 +260,13 @@ def hillstrom_active_search_space() -> SearchSpace:
     per-call state to recompute. ``HillstromScenario.run_strategy``
     calls this on every ``(strategy, budget, seed)`` combination, so
     caching avoids rebuilding a throwaway adapter each time.
+
+    **Do not mutate the returned object.** Every caller shares the
+    same cached :class:`SearchSpace` instance. Appending or reassigning
+    ``variables`` on the returned space would corrupt it for all
+    subsequent callers in the process. Treat the returned search space
+    as read-only; if you need a modified copy, construct a new
+    :class:`SearchSpace` from its ``variables`` list.
     """
     # Build a throwaway adapter against a minimal placeholder frame to
     # extract the canonical bounds. Runs exactly once per process thanks
@@ -558,17 +565,11 @@ class HillstromScenario:
         # 3 active-only dimensions. Frozen dimensions are injected by
         # HillstromPolicyRunner before the adapter call and must never leak
         # back into the experiment log — if they did, downstream readers
-        # would mis-identify the Hillstrom search scope. This assertion
-        # guards the "loader + wrapped runner" contract boundary against a
-        # future engine change that could start forwarding runner-side
-        # metadata back into the logged parameters.
-        if best_params is not None:
-            assert set(best_params) == set(_ACTIVE_VAR_NAMES), (
-                f"HillstromScenario: best_params has unexpected keys "
-                f"{sorted(best_params)!r}; expected exactly "
-                f"{sorted(_ACTIVE_VAR_NAMES)!r}. Frozen Hillstrom dimensions "
-                f"must not appear in the experiment log."
-            )
+        # would mis-identify the Hillstrom search scope. This guards the
+        # "loader + wrapped runner" contract boundary against a future
+        # engine change that could start forwarding runner-side metadata
+        # back into the logged parameters.
+        _check_active_params_invariant(best_params)
 
         runtime = time.perf_counter() - t_start
 
@@ -595,6 +596,38 @@ class HillstromScenario:
             null_baseline=self._null_baseline,
             secondary_outcomes=secondary,
         )
+
+
+def _check_active_params_invariant(best_params: dict[str, Any] | None) -> None:
+    """Raise ``RuntimeError`` if ``best_params`` contains non-active keys.
+
+    Guards the "loader + wrapped runner" contract boundary: the
+    experiment log must only ever contain the 3 active Hillstrom
+    dimensions. Frozen dimensions are injected by
+    :class:`HillstromPolicyRunner` before the adapter call and must
+    never leak back into the optimizer log.
+
+    Raised as :class:`RuntimeError` (not :keyword:`assert`) so the
+    check still fires under ``python -O`` / ``PYTHONOPTIMIZE=1``.
+
+    Args:
+        best_params: The best parameter dict returned by the engine
+            log, or ``None`` if no valid result was produced.
+
+    Raises:
+        RuntimeError: If ``best_params`` is non-``None`` and contains
+            any key that is not in :data:`_ACTIVE_VAR_NAMES`.
+    """
+    if best_params is None:
+        return
+    if set(best_params) != set(_ACTIVE_VAR_NAMES):
+        msg = (
+            f"HillstromScenario: best_params has unexpected keys "
+            f"{sorted(best_params)!r}; expected exactly "
+            f"{sorted(_ACTIVE_VAR_NAMES)!r}. Frozen Hillstrom dimensions "
+            f"must not appear in the experiment log."
+        )
+        raise RuntimeError(msg)
 
 
 def _secondary_arm_aggregates(frame: pd.DataFrame) -> dict[str, float]:
