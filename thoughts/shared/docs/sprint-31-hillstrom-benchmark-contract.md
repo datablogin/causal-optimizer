@@ -193,7 +193,7 @@ objective. The benchmark should fix the cost constant, not tune it.
 
 | Adapter column | Hillstrom source | Transform |
 |----------------|------------------|-----------|
-| `propensity` (float) | known | **Primary `Womens E-Mail vs No E-Mail` slice:** constant `0.5` on every row. Each of the three Hillstrom arms has `P = 1/3`, so within the two-arm primary slice `P(treated) = (1/3) / (2/3) = 0.5`. **Secondary pooled `Any E-Mail vs No E-Mail` slice:** constant `≈ 0.667` on every row, derived from `P(any email) = 1/3 + 1/3 = 2/3` in the full three-arm RCT. Using `0.5` on the pooled slice would produce biased IPS weights (treated over-weighted, control under-weighted) and inflate pooled `policy_value`. The `HillstromLoader` must select the correct constant per slice, not a single global `0.5`. |
+| `propensity` (float) | known | **Primary `Womens E-Mail vs No E-Mail` slice:** exactly `0.5` on every row. Each of the three Hillstrom arms has `P = 1/3`, so within the two-arm primary slice `P(treated) = (1/3) / (2/3) = 0.5`. **Secondary pooled `Any E-Mail vs No E-Mail` slice:** exactly `2/3` on every row (computed as `2.0 / 3.0`, not a rounded constant), derived from `P(any email) = 1/3 + 1/3 = 2/3` in the full three-arm RCT. Using `0.5` on the pooled slice would produce biased IPS weights (treated over-weighted, control under-weighted) and inflate pooled `policy_value`. The `HillstromLoader` must select the correct constant per slice, not a single global `0.5`. |
 | `channel` (str) | constant | Set to `"email"` for all rows. Hillstrom has a `channel` column but it describes the customer's past purchase channel, not the marketing send channel. It must not be used as the adapter's `channel` field. |
 | `segment` (str) | `history_segment` | Bucket map using the raw Hillstrom CSV strings (numeric prefix is part of the value): `"5) $500 - $750" / "6) $750 - $1,000" / "7) $1,000 +"` → `"high_value"`; `"3) $200 - $350" / "4) $350 - $500"` → `"medium"`; `"1) $0 - $100" / "2) $100 - $200"` → `"low"`. Document the mapping in the wrapper. The wrapper must match the raw string; stripping the numeric prefix first is also acceptable but must be explicit. |
 | `timestamp` (datetime) | not used | Hillstrom does not provide send-time timestamps. Omit. |
@@ -216,7 +216,7 @@ The `MarketingLogAdapter` has 6 continuous variables. On Hillstrom:
 | `eligibility_threshold` | Tuned by the optimizer (in `[0.0, 1.0]`) |
 | `email_share` | **Fixed at `1.0`**. All treatment is e-mail. Not tuned. |
 | `social_share_of_remainder` | **Fixed at `0.0`**. Degenerate on Hillstrom. Not tuned. |
-| `min_propensity_clip` | **Fixed at `0.01`**. Degenerate on Hillstrom: propensity is a per-slice constant (`0.5` on the primary slice, `≈ 0.667` on the pooled slice). Both are ≥ every value in the adapter range `[0.01, 0.5]`, so the floor never rewrites a propensity — the worst case is the boundary `clip = 0.5` on the primary slice, which clips `0.5` to `0.5` (a no-op). The optimizer therefore sees a flat response surface along this dimension on both slices. Not tuned. |
+| `min_propensity_clip` | **Fixed at `0.01`**. Degenerate on Hillstrom: propensity is a per-slice constant (`0.5` on the primary slice, `2/3` on the pooled slice). Both are ≥ every value in the adapter range `[0.01, 0.5]`, so the floor never rewrites a propensity — the worst case is the boundary `clip = 0.5` on the primary slice, which clips `0.5` to `0.5` (a no-op). The optimizer therefore sees a flat response surface along this dimension on both slices. Not tuned. |
 | `regularization` | Tuned (in `[0.001, 10.0]`) |
 | `treatment_budget_pct` | Tuned (in `[0.1, 1.0]`) |
 
@@ -375,10 +375,12 @@ Permuted-outcome null control:
 3. Expected behavior: all three strategies should return `policy_value`
    statistically indistinguishable from the shuffled baseline mean.
 4. Null control fails if any strategy achieves `policy_value` more
-   than 2% above the shuffled baseline mean at any budget. The 2%
-   tolerance mirrors the existing ERCOT and synthetic null-control
-   gates (Sprint 18 onward), which have passed 11 clean runs under
-   this threshold. Caveat: Hillstrom `spend` is right-skewed and
+   than `2%` above the **shuffled-frame IPS-weighted grand mean of
+   `spend`** (i.e., the `policy_value` returned by the adapter on the
+   shuffled frame under a uniform-treatment policy — not the raw
+   mean of the `spend` column). The `2%` tolerance mirrors the
+   existing ERCOT and synthetic null-control gates (Sprint 18
+   onward), which have passed 11 clean runs under this threshold. Caveat: Hillstrom `spend` is right-skewed and
    zero-inflated (most customers spend `$0`), so a 2% relative
    threshold on IPS-weighted mean spend may be small in absolute
    dollars and noisier across permutation seeds than the energy-MAE
@@ -447,8 +449,8 @@ uplift evaluation.
 
 **Why after Hillstrom, not before:**
 
-1. ~25M rows (the official dataset is 25,309,483 records). Ingestion,
-   caching, and per-run cost are real concerns.
+1. 25,309,483 rows. Ingestion, caching, and per-run cost are real
+   concerns.
 2. License is CC-BY-NC-SA 4.0 — usable for research but not for
    arbitrary redistribution. Dataset access audit required before
    commit.
@@ -524,9 +526,10 @@ follow-on:
    `DoseResponseScenario`
 4. run 5-seed smoke test (primary slice only, B40 only) to verify
    wrapper correctness end-to-end; in the same smoke test, verify on
-   a pooled-slice sample that `HillstromLoader` emits `propensity ≈
-   0.667` (not `0.5`) — this is the single most likely implementation
-   bug for a reader who skims section 3c
+   a pooled-slice sample that `HillstromLoader` emits exactly
+   `propensity = 2/3` (computed as `2.0 / 3.0` in code, not a
+   rounded constant like `0.667`) and not `0.5` — this is the single
+   most likely implementation bug for a reader who skims section 3c
 5. run full 10-seed, 3-budget primary + secondary + null control
    benchmark
 6. publish the Sprint 31 Hillstrom report
