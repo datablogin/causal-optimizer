@@ -140,8 +140,14 @@ because it answers a different question:
 3. Does the optimizer discover that the effective lever is customer
    targeting rather than blanket treatment?
 
-The pooled slice is **not** a certification target. It is a read-only
-reference. The primary claim language is locked to the womens slice.
+The pooled slice is **not** a positive certification target — a
+Sprint 31 "certified causal win" claim is only ever attached to the
+primary womens slice. The pooled slice functions as a **one-way
+veto gate**: it cannot upgrade a near-parity primary result to a
+certified win, but a statistically significant surrogate-only
+advantage on the pooled slice (see Section 5h criterion 4) *can*
+block certification of the primary result. The primary claim
+language is locked to the womens slice in all cases.
 
 ### 2e. Explicit Exclusions
 
@@ -186,8 +192,14 @@ The canonical Hillstrom CSV has the following columns:
 Note on cost: Hillstrom has no per-customer send cost. A fixed constant
 is not "made up" — it represents a realistic marketing assumption and
 is recorded in provenance. The cost value does not affect the
-`policy_value` objective because `total_cost` is a descriptor, not the
-objective. The benchmark should fix the cost constant, not tune it.
+`policy_value` objective: verified against
+`causal_optimizer/domain_adapters/marketing_logs.py` where
+`policy_value` is computed purely from IPS-normalized weights and
+the `outcome` column (see the `self-normalized IPS-weighted average
+outcome` path in the adapter), while `cost` only appears in the
+`total_cost` descriptor. Any fixed per-send cost shifts `total_cost`
+but leaves `policy_value` unchanged across strategies. The benchmark
+should fix the cost constant, not tune it.
 
 ### 3c. Adapter Optional Columns And Hillstrom Source
 
@@ -325,8 +337,16 @@ but must not be published as a Sprint 31 verdict.
 
 ### 5c. Budgets
 
-`B20, B40, B80`. Same as the ERCOT and dose-response runs. Claim
-language is locked on `B80` by convention.
+`B20, B40, B80`, where the budget label is the exact number of
+experiments per strategy per seed (20, 40, and 80 respectively),
+matching the Sprint 29 optimizer-core regression gate and the
+Sprint 30 ERCOT reality rerun. Per-slice per-budget experiment
+count on Hillstrom: 3 strategies × 3 budgets × 10 seeds = 90
+experiments per slice (primary or pooled); 2 budgets × 3 strategies
+× 10 seeds = 60 experiments for the null control (B80 not
+required). Total full-benchmark experiment count on Hillstrom:
+`90 + 90 + 60 = 240 adapter evaluations per HillstromLoader build`.
+Claim language is locked on `B80` by convention.
 
 ### 5d. Primary Objective
 
@@ -384,10 +404,17 @@ Permuted-outcome null control:
    zero-inflated (most customers spend `$0`), so a 2% relative
    threshold on IPS-weighted mean spend may be small in absolute
    dollars and noisier across permutation seeds than the energy-MAE
-   gates. If the first-run permutation shows signal-to-noise too low
-   to resolve a 2% gap, the threshold and/or the baseline statistic
-   (e.g., switch from mean to trimmed mean) must be revisited before
-   publishing the Sprint 31 verdict.
+   gates. **Pre-committed fallback ladder** (so threshold selection
+   cannot be negotiated mid-sprint after seeing results):
+   (a) if more than 3 of 10 null-control seeds exceed the `2%`
+   threshold purely from permutation noise, widen to `5%` and rerun
+   the null control once;
+   (b) if the widened `5%` threshold still fails to discriminate,
+   switch the baseline statistic from IPS-weighted mean to
+   IPS-weighted trimmed mean (trim top/bottom 1%) and rerun once
+   more;
+   (c) any outcome beyond step (b) constitutes a Sprint 31
+   null-control failure and blocks the real-slice verdict.
 
 If the null control fails, Sprint 31 must stop and diagnose before
 reporting the real-slice verdict.
@@ -525,11 +552,15 @@ follow-on:
 3. stand up a Hillstrom benchmark scenario class modeled on
    `DoseResponseScenario`
 4. run 5-seed smoke test (primary slice only, B40 only) to verify
-   wrapper correctness end-to-end; in the same smoke test, verify on
-   a pooled-slice sample that `HillstromLoader` emits exactly
-   `propensity = 2/3` (computed as `2.0 / 3.0` in code, not a
-   rounded constant like `0.667`) and not `0.5` — this is the single
-   most likely implementation bug for a reader who skims section 3c
+   wrapper correctness end-to-end; in the same smoke test, assert
+   both per-slice propensity invariants on small samples:
+   (a) primary `Womens E-Mail vs No E-Mail` slice: every row has
+   `propensity == 0.5` exactly;
+   (b) pooled `Any E-Mail vs No E-Mail` slice: every row has
+   `propensity == 2.0 / 3.0` exactly (no rounded constants like
+   `0.667`).
+   Swapping `0.5` onto the pooled slice is the single most likely
+   implementation bug for a reader who skims section 3c
 5. run full 10-seed, 3-budget primary + secondary + null control
    benchmark
 6. publish the Sprint 31 Hillstrom report
