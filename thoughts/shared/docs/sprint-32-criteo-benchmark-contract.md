@@ -86,6 +86,15 @@ on the same data. **Criteo must attempt to run under the Ax/BoTorch
 backend.** If Ax is unavailable, the report must flag this as an open
 confound, exactly as the Hillstrom report did.
 
+**Mixed-backend policy:** if Ax/BoTorch is available but produces
+NaN/inf values or crashes on some seeds, the benchmark must not mix
+backends within a single verdict table. Either all 10 seeds run on Ax,
+or all 10 run on RF fallback. If Ax fails on any seed, rerun all 10
+seeds on RF and report the RF result as the primary verdict. If Ax
+succeeded on all seeds, report Ax as primary and optionally include RF
+as a secondary comparison. Mixed-backend results are not interpretable
+for strategy comparison because the surrogate quality differs.
+
 ### 2b. Null-Control Interpretation Matters
 
 Hillstrom's null-control pass showed that all three strategies can
@@ -385,6 +394,11 @@ problem before wasting 150 runs.
   propensities and add those as the `propensity` column, or
   (b) use a stratified constant propensity (per-decile treatment rate)
   as a coarser fix.
+  If option (a) is chosen, validate the fitted model with a calibration
+  check: compute predicted vs observed treatment rate by decile of
+  predicted propensity on a held-out fold. If any decile deviates by
+  more than 2pp, the model is miscalibrated and option (b) should be
+  used instead.
   Document whichever path is taken in the benchmark report provenance.
 
 Additionally, the first run should monitor `weight_cv` and
@@ -557,9 +571,14 @@ weight CV is ~1.3, giving `ESS_eff ≈ 1M / (1 + 1.69) ≈ 372K`. Per-seed
 SE ≈ `sqrt(0.047 * 0.953 / 372K) ≈ 0.00035`. Across 10 seeds, the SE
 of the mean is `0.00035 / sqrt(10) ≈ 0.00011`. The 5% band
 `±0.00235` is ~21 SEs wide, so the tolerance is conservative for
-well-behaved permuted data. If observed null-control variance is much
-larger than this (e.g., due to policy-search multiple comparisons or
-degenerate corner solutions), the fallback ladder handles it.
+well-behaved permuted data. This SE estimate assumes an always-treat policy (full weight
+distribution). Under policies with lower `treatment_budget_pct` or
+higher `eligibility_threshold`, the effective weight distribution
+changes and variance may increase. The estimate is therefore a
+best-case bound, not a worst-case bound. If observed null-control
+variance is much larger than this (e.g., due to policy-search multiple
+comparisons, degenerate corner solutions, or restrictive policies), the
+fallback ladder handles it.
 
 **Pre-committed fallback:** if more than 3 of 10 null-control seeds for
 any strategy fall outside `[0.95 * mu, 1.05 * mu]`:
@@ -624,6 +643,25 @@ This would mean: the IPS stack is under too much stress at 85:15
 imbalance with binary outcomes. The project should consider: (a) using
 the full 14M rows, (b) implementing doubly robust estimation, (c)
 tuning `min_propensity_clip` to a bias-accepting value.
+
+### 8e. Combined Run 1 + Run 2 Verdict Interpretation
+
+Because the contract requires a mandatory second batch with synthesized
+segments when Run 1 (degenerate surface) shows near-parity (Section 5f),
+the Criteo report may contain two sets of results. The combined verdict
+follows this table:
+
+| Run 1 (degenerate) | Run 2 (heterogeneous) | Combined verdict |
+|---------------------|-----------------------|------------------|
+| Certified causal win | N/A (not required) | **Certified Criteo win** |
+| Near-parity | Certified causal win | **Conditional Criteo win** — causal guidance adds value only when the search surface has structure to exploit |
+| Near-parity | Near-parity | **Criteo near-parity** — causal path does not differentiate on this dataset regardless of heterogeneity |
+| Near-parity | s.o. advantage | **Criteo negative** — synthesized heterogeneity hurts the causal path |
+| s.o. advantage | any | **Criteo s.o. advantage** — Run 1 dominates |
+
+The claim language must always specify which run (degenerate or
+heterogeneous) produced the result. A "conditional Criteo win" is not
+equivalent to a "certified Criteo win" and must not be reported as one.
 
 ## 9. What A Failure Would Mean
 
@@ -696,10 +734,11 @@ The Criteo v2.1 CSV must be downloaded locally. The implementation
 sprint must:
 
 1. Document the download path used.
-2. Compute and record the SHA-256 hash of the downloaded file in the
-   benchmark report provenance section. (The direct download URL
-   `go.criteo.net/...` is a redirect that Criteo could change; the hash
-   is the authoritative identifier.)
+2. Record the file size in bytes and the SHA-256 hash of the downloaded
+   file in the benchmark report provenance section. (The direct download
+   URL `go.criteo.net/...` is a redirect that Criteo could change; the
+   hash is the authoritative identifier. File size is a faster first
+   check that catches truncated downloads.)
 3. Verify the row count matches the expected 13,979,592.
 4. Not commit the raw file to the repository.
 
