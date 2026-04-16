@@ -273,8 +273,10 @@ propensities for low-performing items can be near zero, creating extreme IPS
 weights.
 
 **Mitigation**: use self-normalized estimators (SNIPW, SNDR) or DRos.
-Clipping alone (as the current `MarketingLogAdapter` does) is insufficient
-when propensities are structurally small rather than occasionally small.
+The current `MarketingLogAdapter` already uses SNIPW together with propensity clipping,
+but even SNIPW is insufficient when propensities are structurally small rather than
+occasionally small: the OBP paper reports that DRos outperforms SNIPW by 30-60% on
+this dataset.
 
 ### Risk 2: Very low reward signal
 
