@@ -203,10 +203,8 @@ away from the optimal corner.
 | Primary | 0.8654 |
 | Pooled | 1.0509 |
 
-The null baseline is the raw scalar mean of the `spend` column on the
-unshuffled reshaped frame — the expected per-customer spend under a
-uniform-treatment policy. It is computed before any optimization or
-policy conditioning.
+The null baseline is `μ = mean(spend)` on the unshuffled reshaped frame,
+computed before any optimization or policy conditioning.
 
 Most runs on the primary slice fall below the null baseline (0.8654), with the
 exception of causal B80 seeds 7--9 (0.926--0.966), which discover a higher-value
