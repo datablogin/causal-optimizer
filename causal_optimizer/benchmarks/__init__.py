@@ -27,6 +27,23 @@ from causal_optimizer.benchmarks.dose_response import (
     evaluate_protocol,
 )
 from causal_optimizer.benchmarks.high_dimensional import HighDimensionalSparseBenchmark
+from causal_optimizer.benchmarks.hillstrom import (
+    HILLSTROM_FROZEN_PARAMS,
+    HILLSTROM_POOLED_PROPENSITY,
+    HILLSTROM_PRIMARY_PROPENSITY,
+    HillstromBenchmarkResult,
+    HillstromPolicyRunner,
+    HillstromScenario,
+    HillstromSliceType,
+    hillstrom_active_search_space,
+    hillstrom_null_baseline,
+    hillstrom_projected_prior_graph,
+    load_hillstrom_slice,
+    permute_hillstrom_spend,
+)
+from causal_optimizer.benchmarks.hillstrom import (
+    VALID_STRATEGIES as HILLSTROM_VALID_STRATEGIES,
+)
 from causal_optimizer.benchmarks.interaction import InteractionBenchmark
 from causal_optimizer.benchmarks.interaction_policy import (
     InteractionPolicyScenario,
@@ -81,6 +98,10 @@ class BenchmarkSCM(Protocol):
 
 
 __all__ = [
+    "HILLSTROM_FROZEN_PARAMS",
+    "HILLSTROM_POOLED_PROPENSITY",
+    "HILLSTROM_PRIMARY_PROPENSITY",
+    "HILLSTROM_VALID_STRATEGIES",
     "BenchmarkResult",
     "BenchmarkRunner",
     "BenchmarkSCM",
@@ -92,10 +113,14 @@ __all__ = [
     "DoseResponseScenario",
     "HighDimensionalSparseBenchmark",
     "HighNoiseDemandResponse",
+    "HillstromBenchmarkResult",
+    "HillstromPolicyRunner",
+    "HillstromScenario",
+    "HillstromSliceType",
     "InteractionBenchmark",
     "InteractionPolicyScenario",
-    "MediumNoiseDemandResponse",
     "InteractionSCM",
+    "MediumNoiseDemandResponse",
     "NullSignalResult",
     "PolicyRunner",
     "PredictiveBenchmarkResult",
@@ -108,10 +133,15 @@ __all__ = [
     "evaluate_on_test",
     "evaluate_policy",
     "evaluate_protocol",
+    "hillstrom_active_search_space",
+    "hillstrom_null_baseline",
+    "hillstrom_projected_prior_graph",
     "interaction_propensity",
     "interaction_treatment_effect",
     "load_energy_frame",
+    "load_hillstrom_slice",
     "net_benefit",
+    "permute_hillstrom_spend",
     "permute_target",
     "propensity",
     "run_null_strategy",
