@@ -39,7 +39,7 @@ unauthenticated access and offers both CSV and Parquet formats.
 **Dataset versions:** The current recommended version is v2.1. The
 v2 release rebalanced the treatment ratio across multiple incrementality
 tests that were pooled into the dataset, eliminating hidden confounding
-from varying per-advertiser test designs. v2.1 is a minor update to v2.
+from varying per-advertiser test designs. v2.1 is a minor update to v2 and retains the v2 rebalancing.
 
 ## 2. License and Usage Restrictions
 
@@ -91,8 +91,11 @@ license tracking that Hillstrom did not need.
 1. Download: ~300 MB, one-time, no authentication
 2. Disk: ~300 MB compressed or ~311 MB uncompressed; both are small by
    modern standards
-3. Memory: loading the full 14M-row CSV into a pandas DataFrame will
-   consume approximately 1.7 GB. This is manageable on any modern
+3. Memory: loading the full 14M-row CSV into a pandas DataFrame at
+   default dtypes (float64) will consume approximately 1.7 GB. Using
+   int8 for the 4 binary columns and float32 for features would cut
+   this to ~850 MB, but the default estimate is the conservative
+   planning number. Either way, this is manageable on any modern
    development machine but is a meaningful step up from Hillstrom
    (64K rows, ~5 MB) or the marketing fixture (300 rows, ~30 KB).
 4. Per-run cost: a single `MarketingLogAdapter.run_experiment()` call
@@ -277,9 +280,15 @@ Hillstrom does not impose:
 1. **Extreme treatment imbalance (85:15).** Control observations have
    IPS weight `1 / (1 - 0.85) = 6.67`. This is higher than Hillstrom's
    maximum weight of 2.0 (from `1 / 0.5`). The `min_propensity_clip`
-   parameter does not help because `0.85` is within the adapter's
-   `[0.01, 0.5]` clip range (clipping the upper bound to `1 - 0.01 =
-   0.99` does not touch `0.85`). The 6.67x weight on 15% of
+   parameter does not help here. The adapter's `min_propensity_clip`
+   parameter range is `[0.01, 0.5]`, and the adapter clips propensities
+   symmetrically to `[clip, 1 - clip]`. At the default `clip = 0.01`,
+   propensities are clipped to `[0.01, 0.99]`. Since Criteo's constant
+   propensity of `0.85` falls inside this range, clipping never fires
+   and the control-arm weight remains `1 / (1 - 0.85) = 6.67`. Even at
+   the maximum `clip = 0.5`, the range becomes `[0.5, 0.5]`, which
+   would collapse all propensities to 0.5 — a distortion, not a fix.
+   The 6.67x weight on 15% of
    observations means control-arm observations dominate IPS estimates.
    This is not wrong, but it increases variance.
 
@@ -366,7 +375,9 @@ maximize `policy_value` relative to alternatives. It does not need to
 recover absolute incrementality. The non-uniform subsampling therefore
 does not invalidate the benchmark use case, but it means the project
 cannot compare Criteo effect sizes to Hillstrom or energy effect sizes
-in absolute terms. Claim language must note this.
+in absolute terms. The benchmark report's limitations section must
+state that absolute effect sizes are not comparable across datasets
+due to Criteo's non-uniform subsampling.
 
 ### 8d. Anonymized Features
 
