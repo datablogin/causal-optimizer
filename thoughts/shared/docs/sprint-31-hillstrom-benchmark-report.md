@@ -198,9 +198,9 @@ it in only 3/10 seeds (1 win + 2 ties).
 | Primary | 0.8654 |
 | Pooled | 1.0509 |
 
-All three strategies at all budgets find policy values below the null baseline
-on the primary slice (max=0.966 for causal B80 seed 9, which does exceed the
-baseline). On the pooled slice, surrogate-only B80 reliably exceeds the null
+Most runs on the primary slice fall below the null baseline (0.8654), with the
+exception of causal B80 seeds 7--9 (0.926--0.966), which discover a higher-value
+region. On the pooled slice, surrogate-only B80 reliably exceeds the null
 baseline (mean=1.164 vs baseline=1.051).
 
 ## Null Control (Primary Slice, Permuted Outcomes)
@@ -322,8 +322,8 @@ budget, even though it underperforms surrogate-only at low and medium budgets.
 
 ## Verdict Per Slice
 
-**Primary slice:** Near-parity at B20 and B80; certified surrogate-only
-advantage at B40. The causal path shows an interesting B80 tail where 3/10
+**Primary slice:** Trending s.o. advantage at B20, certified s.o. advantage
+at B40, near-parity at B80. The causal path shows an interesting B80 tail where 3/10
 seeds find a qualitatively better region, but this is not statistically
 significant. Overall verdict: **NEAR-PARITY WITH CAUSAL B80 TAIL**.
 
@@ -348,13 +348,13 @@ Surrogate-only more reliably finds the optimal corner at B80. Overall verdict:
 
 ```bash
 uv run python scripts/hillstrom_benchmark.py \
-    --data-path /Users/robertwelborn/Projects/_local/causal-optimizer/data/hillstrom.csv \
+    --data-path $DATA_DIR/hillstrom.csv \
     --slices primary,pooled \
     --budgets 20,40,80 \
     --seeds 0,1,2,3,4,5,6,7,8,9 \
     --strategies random,surrogate_only,causal \
     --null-control \
-    --output /Users/robertwelborn/Projects/_local/causal-optimizer/artifacts/sprint-31-hillstrom-benchmark/hillstrom_results.json
+    --output $ARTIFACTS_DIR/sprint-31-hillstrom-benchmark/hillstrom_results.json
 ```
 
 Suite runtime: 1302.8 seconds (21.7 minutes), 240 total runs (180 real + 60
