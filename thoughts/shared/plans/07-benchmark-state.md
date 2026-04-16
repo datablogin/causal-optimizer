@@ -161,16 +161,14 @@ Merged PRs:
 
 ## Immediate Next Step
 
-Sprint 29 is no longer queued.  If resuming:
+Sprint 30 is complete.  Verdict: **REAL-WORLD IMPROVED BUT DOMAIN-SPECIFIC**.
+Sprint 31 is in progress.  If resuming:
 
-1. read the merged Sprint 29 docs in order:
-   - [sprint-29-trajectory-diagnosis-report.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-29-trajectory-diagnosis-report.md)
-   - [sprint-29-dose-response-10seed-report.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-29-dose-response-10seed-report.md)
-   - [sprint-29-interaction-ablation-report.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-29-interaction-ablation-report.md)
-   - [sprint-29-adaptive-causal-guidance-report.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-29-adaptive-causal-guidance-report.md)
-2. read the [Sprint 28 backend baseline scorecard](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-28-backend-baseline-scorecard.md)
-3. read the [Sprint 29 optimizer-core scorecard](thoughts/shared/docs/sprint-29-optimizer-core-scorecard.md) for the full regression gate results
-4. plan Sprint 30 — the scorecard recommends characterizing the new baseline and deciding whether to pursue the remaining interaction gap or return to real-world ERCOT benchmarks
+1. read the [Sprint 30 reality-and-generalization scorecard](thoughts/shared/docs/sprint-30-reality-and-generalization-scorecard.md) for the full verdict
+2. read the [handoff document](thoughts/shared/docs/handoff.md) for Sprint 31 instructions
+3. run the Hillstrom benchmark harness with 10 seeds at B20/B40/B80 — first non-energy empirical test
+4. extend ERCOT to 10 seeds (5 incremental per strategy-budget-dataset)
+5. publish Sprint 31 generalization scorecard
 
 ## Canonical Docs
 
