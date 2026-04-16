@@ -13,7 +13,7 @@ What we can say confidently today:
 3. **Interaction is now near-parity.** Sprint 29 identified and removed harmful causal-weighted exploration, flipping the interaction row from surrogate-only advantage (p=0.014) to near-parity (causal 1.90 vs s.o. 2.18, p=0.225). No benchmark row now has a statistically significant surrogate-only advantage under Ax.
 4. **The crossover is structural, not dimensional.** The boundary depends on landscape family (categorical barriers, noise-to-signal ratio), not a single noise-dimension threshold.
 5. **Null control has been clean for 11 runs across Sprints 18--29** (S26 did not re-run), confirming the optimizer does not manufacture false signal.
-6. Sprint 30 produced the **first real-world causal vs surrogate-only differentiation** on ERCOT: COAST certified (p=0.008, two-sided MWU, 5 seeds) and NORTH_C trending (p=0.059). Causal still does not beat random. Results are at 5 seeds and confined to energy forecasting.
+6. Sprint 30 produced the **first real-world causal vs surrogate-only differentiation** on ERCOT: COAST statistically significant (p=0.008, two-sided MWU, 5 seeds) and NORTH_C trending (p=0.059). Causal still does not beat random. Results are at 5 seeds and confined to energy forecasting.
 7. The benchmark stack is disciplined enough to catch false stories -- Sprint 21 rejected an attractive reranking idea that did not survive locked A/B attribution.
 
 ## What This Repo Is

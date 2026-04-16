@@ -65,6 +65,12 @@ existing 5 seeds plus 5 new ones) to:
 3. Reduce the risk that the 5-seed COAST certification is a
    small-sample artifact
 
+Note: combining the original 5 seeds with 5 incremental seeds means
+the first 5 are not independent of the decision to continue testing
+(mild optional stopping).  At n=10 total this is unlikely to change
+conclusions in practice, but the Sprint 31 report should acknowledge
+it when presenting combined results.
+
 ### 1c. Does the project now have a credible non-energy path?
 
 **Yes, structurally.**
