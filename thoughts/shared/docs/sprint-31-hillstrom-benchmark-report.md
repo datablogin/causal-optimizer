@@ -158,7 +158,7 @@ it converges too tightly on the local plateau.
 
 Note: The optimal corner (eligibility_threshold=0.0, treatment_budget_pct=1.0)
 yields policy_value=1.2496 on the pooled slice, which exceeds the null baseline
-of 1.0509. Surrogate-only finds this corner in 8/10 seeds at B80; causal finds
+of 1.0509. Surrogate-only finds this corner in 7/10 seeds at B80; causal finds
 it in only 3/10 seeds (1 win + 2 ties).
 
 ## Summary Statistics
@@ -302,7 +302,7 @@ budget, even though it underperforms surrogate-only at low and medium budgets.
 3. **On the pooled slice, the optimal corner is easier to find without causal
    guidance.** The best pooled-slice policy (eligibility_threshold=0.0,
    treatment_budget_pct=1.0) gives policy_value=1.2496, which is 19% above
-   the null baseline. Surrogate-only finds this corner in 8/10 seeds at B80;
+   the null baseline. Surrogate-only finds this corner in 7/10 seeds at B80;
    causal finds it in only 3/10 seeds. The causal graph's variable-focusing
    behavior may be narrowing exploration away from the corner.
 
