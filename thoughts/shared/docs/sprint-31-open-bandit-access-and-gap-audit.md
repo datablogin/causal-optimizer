@@ -30,26 +30,32 @@ schema exploration and smoke tests but not for meaningful OPE benchmarks.
 
 ## 2. License and Usage Restrictions
 
+**Practical conclusion**: the causal-optimizer is an open-source research tool
+with no commercial redistribution of the data. Usage for non-commercial
+benchmarking is clearly within both the stated intent and the formal license
+terms. If the project ever redistributes a fixture subset, it should include
+attribution to Saito et al. (2021) and ZOZO, Inc.
+
 **Stated license**: CC BY 4.0
 
 **ZOZO's stated intent**: The dataset page and paper describe the data as available
-for "non-commercial research purposes."
+for "non-commercial research purposes." This framing is narrower than what
+CC BY 4.0 technically allows.
 
 **Actual CC BY 4.0 terms**: CC BY 4.0 permits copying, redistribution, adaptation,
 and commercial use, provided attribution is given. The non-commercial language
-on the ZOZO page is narrower than what CC BY 4.0 technically allows.
-
-**Practical guidance for this project**: The causal-optimizer is an open-source
-research tool with no commercial redistribution of the data. Usage for
-non-commercial benchmarking is clearly within both the stated intent and the
-license terms. If the project ever redistributes a fixture subset, it should
-include attribution to Saito et al. (2021) and ZOZO, Inc.
+reflects ZOZO's preferred use, not a formal license restriction.
 
 **OBP library license**: Apache 2.0. No restrictions on using the library code.
 
 ## 3. Approximate Dataset Size and Local Setup Cost
 
 ### Row counts by campaign and behavior policy
+
+The three campaigns (All, Men, Women) are separate, independently run
+experiments on different item catalogs within ZOZOTOWN, not nested subsets.
+Each campaign has its own item pool and was run concurrently during the same
+7-day collection period. Row counts from Saito et al. (2021), Table 1:
 
 | Campaign | Uniform Random | Bernoulli TS | Total |
 |----------|---------------|-------------|-------|
@@ -80,9 +86,13 @@ is negligible (a few MB).
 
 ### Download method
 
-Direct HTTP download of `open_bandit_dataset.zip`. No special tooling required.
-The OBP library's `OpenBanditDataset` class provides a Python loader that
-handles path configuration, but the raw CSVs are usable without OBP.
+**Preferred**: use the OBP library's `OpenBanditDataset` class (`pip install obp`),
+which handles download, path configuration, and schema loading. This is more
+resilient to URL changes than hardcoded links.
+
+**Fallback**: direct HTTP download of `open_bandit_dataset.zip` from the ZOZO
+Research page. Research dataset URLs tend to move; the OBP library is the more
+stable access path. The raw CSVs are usable without OBP once downloaded.
 
 ### Local setup cost
 
@@ -174,11 +184,13 @@ vanilla IPW for this reason.
 
 ### Click-through rates
 
-| Campaign | Random CTR | BTS CTR |
-|----------|-----------|---------|
-| All      | 0.35%     | 0.50%   |
-| Men      | 0.51%     | 0.67%   |
-| Women    | 0.48%     | 0.64%   |
+Empirical CTR values with 95% CIs, from Saito et al. (2021), Table 1:
+
+| Campaign | Random CTR           | BTS CTR              |
+|----------|----------------------|----------------------|
+| All      | 0.35% (+/-0.010)     | 0.50% (+/-0.004)     |
+| Men      | 0.51% (+/-0.021)     | 0.67% (+/-0.008)     |
+| Women    | 0.48% (+/-0.014)     | 0.64% (+/-0.056)     |
 
 ### What is absent
 
@@ -298,10 +310,11 @@ de-bias for position effects. An adapter would need to either:
 
 ### Risk 5: Benchmark runtime
 
-The paper reports that OPE benchmark experiments with T=200 bootstrap iterations
-on a high-end MacBook Pro required 221-750 minutes per campaign at n=300,000.
-A full 10-seed benchmark at scale would require careful subsetting or
-substantial compute time.
+Saito et al. (2021), Section 5.1, report that OPE benchmark experiments with
+T=200 bootstrap iterations on a MacBook Pro (2.4 GHz Intel Core i9, 64 GB RAM)
+required 221-750 minutes per campaign at n=300,000. At the smaller n=10,000
+setting, runtimes were 22-48 minutes per campaign. A full 10-seed benchmark
+at scale would require careful subsetting or substantial compute time.
 
 ## 9. Recommendation for When It Should Enter the Benchmark Queue
 
@@ -367,6 +380,37 @@ should be made explicitly, not deferred to implementation time.
 2. Whether the failure is in the search space parameterization (fixable)
 3. Whether the engine's optimization loop fundamentally assumes binary
    treatment (architectural limit that would require redesign)
+
+## 10. Minimum Viable Feasibility Check
+
+Before committing to a full adapter implementation in Sprint 34, a 2-4 hour
+spike can validate the data access path and confirm the dataset matches
+expectations. This spike does not require any engine changes.
+
+### Steps
+
+1. `pip install obp` and load the Men/Random slice (~453K rows) via
+   `OpenBanditDataset(behavior_policy="random", campaign="men")`
+2. Confirm schema: verify `action`, `position`, `reward`, `pscore`, `context`,
+   and `action_context` keys are present in the bandit feedback dict
+3. Compute vanilla IPW CTR using OBP's built-in `InverseProbabilityWeighting`
+   estimator
+4. Compare the estimated CTR to the paper's reported value (0.51% +/-0.021)
+5. Repeat with the BTS slice to confirm cross-policy estimation works
+
+### What this proves
+
+- Data is accessible and loadable without issues
+- Schema matches documentation
+- OBP estimators produce values consistent with published results
+- The project has a working local copy before committing to adapter design
+
+### What this does not prove
+
+- That the engine can optimize over this data (requires adapter work)
+- That a search space parameterization exists (requires design work)
+- That the causal graph provides value in a multi-action setting (requires
+  the full benchmark)
 
 ## Summary
 
