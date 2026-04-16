@@ -29,10 +29,12 @@ at certified significance (p=0.019, two-sided MWU).
 |-------|--------|--------------------------|-------------------------|---------|-----------|
 | Primary | B20 | s.o. wins 8/10 seeds | 0.060 | Trending | s.o. > causal |
 | Primary | B40 | s.o. wins 10/10 seeds | 0.0001 | Certified | s.o. > causal |
-| Primary | B80 | s.o. wins 7/10 seeds | 0.817 | Near-parity | causal mean > s.o. mean |
+| Primary | B80 | s.o. wins 7/10 seeds | 0.817 | Near-parity (bimodal) | causal mean > s.o. mean |
 | Pooled | B20 | s.o. wins 8/10 seeds | 0.017 | Certified | s.o. > causal |
 | Pooled | B40 | s.o. wins 9/10 seeds | 0.002 | Certified | s.o. > causal |
 | Pooled | B80 | s.o. wins 7/10 seeds | 0.019 | Certified | s.o. > causal |
+
+Abbreviation: **s.o.** = `surrogate_only` throughout this report.
 
 **Overall Hillstrom verdict: surrogate-only advantage.** The causal path does
 not show a consistent advantage over surrogate-only on this dataset under the
@@ -159,7 +161,10 @@ it converges too tightly on the local plateau.
 Note: The optimal corner (eligibility_threshold=0.0, treatment_budget_pct=1.0)
 yields policy_value=1.2496 on the pooled slice, which exceeds the null baseline
 of 1.0509. Surrogate-only finds this corner in 7/10 seeds at B80; causal finds
-it in only 3/10 seeds (1 win + 2 ties).
+it in only 3/10 seeds (1 win + 2 ties). Seed 2 is a consistently difficult
+seed for surrogate-only on the pooled slice (worst s.o. value at B20, B40,
+and B80), suggesting a seed-specific initialization that steers the surrogate
+away from the optimal corner.
 
 ## Summary Statistics
 
@@ -193,10 +198,15 @@ it in only 3/10 seeds (1 win + 2 ties).
 
 ## Null Baseline
 
-| Slice | mu (mean spend) |
-|-------|-----------------|
+| Slice | Null baseline mu |
+|-------|------------------|
 | Primary | 0.8654 |
 | Pooled | 1.0509 |
+
+The null baseline is the raw scalar mean of the `spend` column on the
+unshuffled reshaped frame — the expected per-customer spend under a
+uniform-treatment policy. It is computed before any optimization or
+policy conditioning.
 
 Most runs on the primary slice fall below the null baseline (0.8654), with the
 exception of causal B80 seeds 7--9 (0.926--0.966), which discover a higher-value
@@ -248,13 +258,17 @@ baseline (mean=1.164 vs baseline=1.051).
 
 The null-control pass shows that all three strategies produce policy values that
 exceed the null baseline in 8/10 permuted-outcome seeds, with similar means and
-standard deviations. This is consistent with the optimizer finding the same
-parameter region on the permuted data as on the real data -- the optimizer is
-successfully maximizing the IPS-weighted policy value even when the outcome is
-permuted (breaking the treatment-outcome link). The null-control pass confirms
-that the primary-slice policy values are dominated by the allocation policy's
-mechanics (which segment to treat, at what budget fraction) rather than by a
-true treatment effect signal.
+standard deviations. **This means high policy values can still arise after
+permuting outcomes (breaking the treatment-outcome link).** The optimizer finds
+different parameter regions on the permuted data than on the real data —
+selected parameters diverge substantially between real and null runs — so the
+null pass does not show that the optimizer converges to the same solution
+regardless of signal. What it does show is that the IPS-weighted objective can
+be optimized above baseline even on noise, due to some combination of
+finite-sample IPS variance, multiple-comparison effects across the search
+trajectory, and allocation-policy mechanics. The primary-slice gains should
+therefore not be interpreted as clean treatment-effect evidence on their own
+without additional analysis to separate these factors.
 
 ## Secondary Outcomes (Full-Slice Arm Aggregates)
 
@@ -343,6 +357,18 @@ Surrogate-only more reliably finds the optimal corner at B80. Overall verdict:
 4. This report does not claim a product-level generality win or loss from
    Hillstrom alone. It is one data point in a broader generalization research
    program.
+
+## Reproducibility
+
+The benchmark script is committed at `scripts/hillstrom_benchmark.py`. The
+Hillstrom CSV is available from the official MineThatData source:
+<https://blog.minethatdata.com/2008/03/minethatdata-e-mail-analytics-and-data.html>
+
+The full Hillstrom dataset is local-only (not committed). The committed fixture
+at `tests/fixtures/hillstrom_fixture.csv` is a small synthetic,
+Hillstrom-shaped file for CI smoke tests — it does not reproduce benchmark
+results. The JSON artifact from this run is stored locally at
+`$ARTIFACTS_DIR/sprint-31-hillstrom-benchmark/hillstrom_results.json`.
 
 ## Commands Run
 
