@@ -184,13 +184,15 @@ vanilla IPW for this reason.
 
 ### Click-through rates
 
-Empirical CTR values with 95% CIs, from Saito et al. (2021), Table 1:
+Empirical CTR values from Saito et al. (2021), Table 1. Intervals are 95%
+confidence intervals in percentage points (e.g., 0.35% +/- 0.010 pp means
+the true CTR is estimated between 0.340% and 0.360%):
 
-| Campaign | Random CTR           | BTS CTR              |
-|----------|----------------------|----------------------|
-| All      | 0.35% (+/-0.010)     | 0.50% (+/-0.004)     |
-| Men      | 0.51% (+/-0.021)     | 0.67% (+/-0.008)     |
-| Women    | 0.48% (+/-0.014)     | 0.64% (+/-0.056)     |
+| Campaign | Random CTR             | BTS CTR                |
+|----------|------------------------|------------------------|
+| All      | 0.35% (+/-0.010 pp)    | 0.50% (+/-0.004 pp)    |
+| Men      | 0.51% (+/-0.021 pp)    | 0.67% (+/-0.008 pp)    |
+| Women    | 0.48% (+/-0.014 pp)    | 0.64% (+/-0.056 pp)    |
 
 ### What is absent
 
@@ -311,10 +313,12 @@ de-bias for position effects. An adapter would need to either:
 ### Risk 5: Benchmark runtime
 
 Saito et al. (2021), Section 5.1, report that OPE benchmark experiments with
-T=200 bootstrap iterations on a MacBook Pro (2.4 GHz Intel Core i9, 64 GB RAM)
-required 221-750 minutes per campaign at n=300,000. At the smaller n=10,000
-setting, runtimes were 22-48 minutes per campaign. A full 10-seed benchmark
-at scale would require careful subsetting or substantial compute time.
+T=200 bootstrap iterations on a 2019-era MacBook Pro (2.4 GHz Intel Core i9,
+64 GB RAM) required 221-750 minutes per campaign at n=300,000. At the smaller
+n=10,000 setting, runtimes were 22-48 minutes per campaign. Modern hardware
+(Apple Silicon or current-gen x86) would likely reduce these times by 3-5x,
+but a full 10-seed benchmark at scale would still require careful subsetting
+or meaningful compute time.
 
 ## 9. Recommendation for When It Should Enter the Benchmark Queue
 
