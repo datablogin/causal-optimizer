@@ -83,7 +83,8 @@ license tracking that Hillstrom did not need.
 | Rows | 13,979,592 |
 | Columns | 16 (12 features + 4 labels/indicators) |
 | Compressed size (gzip CSV) | ~297 MB |
-| Uncompressed CSV | ~311 MB (per Hugging Face metadata) |
+| Parquet (Hugging Face) | ~311 MB (columnar + compressed; not uncompressed CSV) |
+| Uncompressed CSV | ~900 MB - 1.5 GB estimated (typical 3-5x gzip ratio on numeric CSV) |
 | In-memory (pandas float64) | ~1.7 GB estimated (14M rows x 16 cols x 8 bytes) |
 
 **Local setup cost:**
@@ -250,8 +251,10 @@ onto the adapter contract:
 3. Synthesizing a `segment` column from anonymized features (or omitting
    it and accepting the adapter's uniform segment scoring)
 4. Fixing degenerate search variables (`email_share = 1.0`,
-   `social_share_of_remainder = 0.0`, `min_propensity_clip = 0.01`)
-   as was done for Hillstrom
+   `social_share_of_remainder = 0.0`) as was done for Hillstrom.
+   Unlike Hillstrom, `min_propensity_clip` is not degenerate on Criteo
+   (see Section 7c) and may be tuned or pre-baked depending on the
+   Sprint 33 contract decision.
 5. Projecting the prior causal graph to active variables
 
 ### 7b. Does It Need a New Adapter?
@@ -279,21 +282,33 @@ Hillstrom does not impose:
 
 1. **Extreme treatment imbalance (85:15).** Control observations have
    IPS weight `1 / (1 - 0.85) = 6.67`. This is higher than Hillstrom's
-   maximum weight of 2.0 (from `1 / 0.5`). The `min_propensity_clip`
-   parameter does not help here. The adapter's `min_propensity_clip`
-   parameter range is `[0.01, 0.5]`, and the adapter clips propensities
-   symmetrically to `[clip, 1 - clip]`. At the default `clip = 0.01`,
-   propensities are clipped to `[0.01, 0.99]`. Since Criteo's constant
-   propensity of `0.85` falls inside this range, clipping never fires
-   and the control-arm weight remains `1 / (1 - 0.85) = 6.67`. Even at
-   the maximum `clip = 0.5`, the range becomes `[0.5, 0.5]`, which
-   would collapse all propensities to 0.5 — a distortion, not a fix.
-   The 6.67x weight on 15% of
+   maximum weight of 2.0 (from `1 / 0.5`). The adapter's
+   `min_propensity_clip` parameter clips propensities symmetrically to
+   `[clip, 1 - clip]` (search range `[0.01, 0.5]`). At the default
+   `clip = 0.01`, the range is `[0.01, 0.99]` and clipping does not
+   fire because `0.85 < 0.99`. However, any `clip > 0.15` clips the
+   0.85 propensity downward because `1 - clip < 0.85`:
+
+   - `clip = 0.2` -> range `[0.2, 0.8]` -> 0.85 clipped to 0.80 ->
+     control weight drops from 6.67 to 5.0
+   - `clip = 0.3` -> range `[0.3, 0.7]` -> control weight drops to 3.33
+   - `clip = 0.5` -> range `[0.5, 0.5]` -> control weight drops to 2.0
+     (matching Hillstrom, but at the cost of collapsing all propensities)
+
+   This is a bias-variance tradeoff: higher clip values reduce IPS
+   variance but introduce bias by distorting the known propensity. On
+   the Hillstrom first run, `min_propensity_clip` is pre-baked to `0.01`
+   because propensities are 0.5 and clipping is a no-op. On Criteo, the
+   Sprint 33 contract should consider whether to tune `clip` as a fourth
+   search variable or pre-bake it to a fixed value (e.g., `0.15` to
+   avoid clipping, or `0.25` for modest variance reduction).
+
+   Note that this is structurally different from the typical clipping
+   use case (estimated propensities near 0 or 1): Criteo's propensity
+   of 0.85 is moderate, but its complement (0.15) creates high
+   control-arm weights. The 6.67x weight (at default clip) on 15% of
    observations means control-arm observations dominate IPS estimates.
-   This is not wrong, but it increases variance. Note that this is
-   structurally different from the typical clipping use case (estimated
-   propensities near 0 or 1): Criteo's propensity of 0.85 is moderate,
-   but its complement (0.15) creates high control-arm weights.
+   This increases variance but is not wrong.
 
 2. **Rare binary outcomes (0.29% conversion, 4.70% visit).** IPS
    weighting on a sparse binary outcome amplifies noise. A single
@@ -468,7 +483,7 @@ Sprint 33 starts Criteo.
 | Cost | Fixed synthetic (e.g., 0.01 treated, 0.0 control) |
 | Propensity | Constant 0.85 (from known randomization ratio) |
 | Segment | Omitted (uniform scoring) on first run |
-| Search space | 3 tuned variables (same as Hillstrom: `eligibility_threshold`, `regularization`, `treatment_budget_pct`) |
+| Search space | 3-4 tuned variables: `eligibility_threshold`, `regularization`, `treatment_budget_pct`, and optionally `min_propensity_clip` (see Section 7c bias-variance tradeoff) |
 | Strategies | random, surrogate_only, causal |
 | Seeds | 10 |
 | Budgets | B20, B40, B80 |
