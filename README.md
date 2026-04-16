@@ -13,7 +13,7 @@ What we can say confidently today:
 3. **Interaction is now near-parity.** Sprint 29 identified and removed harmful causal-weighted exploration, flipping the interaction row from surrogate-only advantage (p=0.014) to near-parity (causal 1.90 vs s.o. 2.18, p=0.225). No benchmark row now has a statistically significant surrogate-only advantage under Ax.
 4. **The crossover is structural, not dimensional.** The boundary depends on landscape family (categorical barriers, noise-to-signal ratio), not a single noise-dimension threshold.
 5. **Null control has been clean for 11 runs across Sprints 18--29** (S26 did not re-run), confirming the optimizer does not manufacture false signal.
-6. The project has **not yet** shown a reliable causal advantage on the real ERCOT forecasting tasks.
+6. Sprint 30 produced the **first real-world causal vs surrogate-only differentiation** on ERCOT: COAST statistically significant (p=0.008, two-sided MWU, 5 seeds) and NORTH_C trending (p=0.059). Causal still does not beat random. Results are at 5 seeds and confined to energy forecasting.
 7. The benchmark stack is disciplined enough to catch false stories -- Sprint 21 rejected an attractive reranking idea that did not survive locked A/B attribution.
 
 ## What This Repo Is
@@ -57,15 +57,17 @@ Causal pruning provides stable performance across noise levels (B80 mean regret:
 
 Sprint 29 removed harmful causal-weighted exploration, improving causal on every row. The interaction benchmark (7D, 3-way interaction surface) flipped from surrogate-only advantage to near-parity. No benchmark row now has a statistically significant surrogate-only advantage under Ax.
 
-### 3. Real predictive wins are still unproven
+### 3. First real-world signal on ERCOT (Sprint 30)
 
-On the two real ERCOT forecasting benchmarks:
+Sprint 30 retested the two real ERCOT forecasting benchmarks under the Sprint 29 default (`causal_exploration_weight=0.0`):
 
-1. `random` was marginally better than the engine-based strategies
-2. `causal` and `surrogate_only` were effectively identical
-3. all strategies converged to `ridge`
+1. **COAST B80**: causal certified better than surrogate-only (MAE 104.88 vs 105.72, p=0.008, 5/5 wins)
+2. **NORTH_C B80**: causal trending better than surrogate-only (MAE 132.48 vs 132.98, p=0.059, 4/5 wins)
+3. `causal` still does not statistically beat `random` on either dataset
+4. all strategies still converge to `ridge`; improvement is in hyperparameters, not model class
+5. results at 5 seeds only; 10-seed rerun recommended for Sprint 31
 
-Those results matter. They tell us the causal differentiation has not yet transferred to the real forecasting tasks.
+This breaks the long-standing "causal identical to surrogate-only on real data" result from Sprint 16. It is the first real-world evidence of causal vs surrogate-only differentiation, but not a full causal advantage claim.
 
 ### 4. Attribution discipline rejected a false story
 
@@ -82,18 +84,21 @@ If you want the shortest honest summary:
 1. we have **statistically significant causal wins on 3 of 7 benchmarks** under Ax/BoTorch (medium p=0.002, high p=0.001, dose-response p=0.003), with base trending (p=0.112, mean improved from 1.13 to 1.01 but no longer significant after the Sprint 29 default change)
 2. **no benchmark row has a statistically significant surrogate-only advantage** under Ax — Sprint 29 flipped the interaction row from s.o. winning to near-parity
 3. backend matters: dose-response and base energy are Ax-primary (surrogate-only wins under RF fallback)
-4. we do **not** yet have evidence of causal advantage on the real ERCOT forecasting tasks
+4. Sprint 30 produced the **first real-world causal vs surrogate-only differentiation** on ERCOT (COAST p=0.008, NORTH_C p=0.059) but causal does not yet beat random
 5. we have enough rigor to reject optimizer stories that do not survive attribution (Sprint 21) and stability gates that took 4 targeted fixes to pass (Sprint 25)
 
 ## Key Documents
 
-1. [Sprint 29 Optimizer-Core Scorecard](thoughts/shared/docs/sprint-29-optimizer-core-scorecard.md) -- GENERALITY IMPROVED after removing causal-weighted exploration
-2. [Sprint 28 Backend Baseline Scorecard](thoughts/shared/docs/sprint-28-backend-baseline-scorecard.md) -- Ax-primary vs RF-secondary classification
-3. [Sprint 27 Crossover Scorecard](thoughts/shared/docs/sprint-27-crossover-scorecard.md) -- where causal wins, ties, and loses
-4. [Sprint 25 Stability Scorecard](thoughts/shared/docs/sprint-25-stability-scorecard.md) -- exploitation-phase fix that resolved B80 catastrophic seeds
-5. [Sprint 26 Expansion Scorecard](thoughts/shared/docs/sprint-26-expansion-scorecard.md) -- benchmark expansion to interaction policy and dose-response
-6. [Sprint 21 Attribution Scorecard](thoughts/shared/docs/sprint-21-attribution-scorecard.md) -- locked A/B reranking attribution
-7. [Benchmark State](thoughts/shared/plans/07-benchmark-state.md)
+1. [Sprint 30 Reality-and-Generalization Scorecard](thoughts/shared/docs/sprint-30-reality-and-generalization-scorecard.md) -- REAL-WORLD IMPROVED BUT DOMAIN-SPECIFIC
+2. [Sprint 30 ERCOT Reality Report](thoughts/shared/docs/sprint-30-ercot-reality-report.md) -- first real-world causal vs s.o. differentiation
+3. [Sprint 30 Portability Brief](thoughts/shared/docs/sprint-30-general-causal-portability-brief.md) -- domain-agnostic re-anchoring
+4. [Sprint 29 Optimizer-Core Scorecard](thoughts/shared/docs/sprint-29-optimizer-core-scorecard.md) -- GENERALITY IMPROVED after removing causal-weighted exploration
+5. [Sprint 28 Backend Baseline Scorecard](thoughts/shared/docs/sprint-28-backend-baseline-scorecard.md) -- Ax-primary vs RF-secondary classification
+6. [Sprint 27 Crossover Scorecard](thoughts/shared/docs/sprint-27-crossover-scorecard.md) -- where causal wins, ties, and loses
+7. [Sprint 25 Stability Scorecard](thoughts/shared/docs/sprint-25-stability-scorecard.md) -- exploitation-phase fix that resolved B80 catastrophic seeds
+8. [Sprint 26 Expansion Scorecard](thoughts/shared/docs/sprint-26-expansion-scorecard.md) -- benchmark expansion to interaction policy and dose-response
+9. [Sprint 21 Attribution Scorecard](thoughts/shared/docs/sprint-21-attribution-scorecard.md) -- locked A/B reranking attribution
+10. [Benchmark State](thoughts/shared/plans/07-benchmark-state.md)
 
 ## Install
 

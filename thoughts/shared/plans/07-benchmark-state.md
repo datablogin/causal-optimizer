@@ -1,6 +1,6 @@
 # Benchmark State
 
-Updated: 2026-04-12 (Sprint 29 complete — GENERALITY IMPROVED)
+Updated: 2026-04-16 (Sprint 30 complete — REAL-WORLD IMPROVED BUT DOMAIN-SPECIFIC)
 
 ## Purpose
 
@@ -16,30 +16,69 @@ Use it when:
 
 ## Current Position
 
-The project is now strongest as a **trustworthy research harness with a clearer causal boundary claim**.
+The project is now strongest as a **trustworthy research harness with a first real-world signal and a defined generalization path**.
 
 What is true today:
 
 1. the benchmark stack is disciplined and reusable
 2. positive controls, negative controls, provenance, locked A/B reruns, stability gates, and boundary-mapping artifacts are all in place
 3. the project can demonstrate causal advantage on controlled benchmark families where noise burden and categorical barriers matter
-4. the project still has **not** demonstrated a reliable real-world causal advantage on the ERCOT forecasting benchmarks
+4. the Sprint 29 default change produced the first real-world causal vs surrogate-only differentiation on ERCOT (COAST p=0.008, NORTH_C p=0.059) — but causal still does not beat random
 5. alignment-only remains the correct production default after Sprint 21 attribution and Sprint 22 confirmation
 6. Sprint 25 delivered the first mechanism-matched stability fix that actually met the base-B80 gate
 7. Sprint 26 and Sprint 27 expanded benchmark coverage to seven rows and clarified the causal-advantage boundary
 8. Sprint 28 separated Ax/BoTorch primary claims from RF-fallback secondary checks
 9. Sprint 29 completed diagnosis, intervention, and regression gate — verdict GENERALITY IMPROVED
+10. Sprint 30 produced the ERCOT reality report, portability brief, and Hillstrom harness — verdict REAL-WORLD IMPROVED BUT DOMAIN-SPECIFIC
 
 ## Current Goal
 
-Sprint 29 is **complete**.  The scorecard verdict is GENERALITY IMPROVED.
+Sprint 30 is **complete**.  The scorecard verdict is REAL-WORLD IMPROVED BUT DOMAIN-SPECIFIC.
 
-Sprint 30 should decide whether to pursue the remaining interaction gap
-(certified win via `causal_softness=0.0` or more seeds) or return to
-real-world ERCOT benchmarks.  The base row's loss of significance
-(p=0.112) may also warrant investigation.
+Sprint 31 should run the Hillstrom benchmark as the first non-energy
+empirical test AND extend ERCOT to 10 seeds in parallel.  The ERCOT
+signal is real (COAST p=0.008) but confined to one domain.  The
+Hillstrom harness is merged and ready to run.
 
 ## Current Sprint Status
+
+### Sprint 30
+
+Issues:
+
+1. [#162](https://github.com/datablogin/causal-optimizer/issues/162) ERCOT reality gate
+2. [#163](https://github.com/datablogin/causal-optimizer/issues/163) general-causal portability brief
+3. [#164](https://github.com/datablogin/causal-optimizer/issues/164) reality-and-generalization scorecard
+4. [#168](https://github.com/datablogin/causal-optimizer/issues/168) Hillstrom benchmark harness
+
+Merged PRs:
+
+1. `#165` merged
+   - PR: [#165](https://github.com/datablogin/causal-optimizer/pull/165)
+   - issue: `#163` closed
+   - result: portability brief re-anchored project as domain-agnostic
+2. `#166` merged
+   - PR: [#166](https://github.com/datablogin/causal-optimizer/pull/166)
+   - issue: `#162` closed
+   - result: ERCOT reality report — COAST causal > s.o. (p=0.008), NORTH_C trending (p=0.059)
+3. `#167` merged
+   - PR: [#167](https://github.com/datablogin/causal-optimizer/pull/167)
+   - result: Hillstrom benchmark contract
+4. `#169` merged
+   - PR: [#169](https://github.com/datablogin/causal-optimizer/pull/169)
+   - issue: `#168` closed
+   - result: Hillstrom benchmark harness code merged
+
+Current Sprint 30 position:
+
+1. `#162` ERCOT reality gate: **complete** (PR #166 merged)
+2. `#163` portability brief: **complete** (PR #165 merged)
+3. `#164` scorecard: **complete** (this PR)
+4. `#168` Hillstrom harness: **complete** (PR #169 merged)
+5. verdict: **REAL-WORLD IMPROVED BUT DOMAIN-SPECIFIC** — first ERCOT
+   causal vs s.o. differentiation (COAST p=0.008, NORTH_C p=0.059),
+   but no non-energy empirical results yet
+6. Sprint 31: run Hillstrom + extend ERCOT to 10 seeds
 
 ### Sprint 29
 
@@ -122,16 +161,14 @@ Merged PRs:
 
 ## Immediate Next Step
 
-Sprint 29 is no longer queued.  If resuming:
+Sprint 30 is complete.  Verdict: **REAL-WORLD IMPROVED BUT DOMAIN-SPECIFIC**.
+Sprint 31 is in progress.  If resuming:
 
-1. read the merged Sprint 29 docs in order:
-   - [sprint-29-trajectory-diagnosis-report.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-29-trajectory-diagnosis-report.md)
-   - [sprint-29-dose-response-10seed-report.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-29-dose-response-10seed-report.md)
-   - [sprint-29-interaction-ablation-report.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-29-interaction-ablation-report.md)
-   - [sprint-29-adaptive-causal-guidance-report.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-29-adaptive-causal-guidance-report.md)
-2. read the [Sprint 28 backend baseline scorecard](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-28-backend-baseline-scorecard.md)
-3. read the [Sprint 29 optimizer-core scorecard](thoughts/shared/docs/sprint-29-optimizer-core-scorecard.md) for the full regression gate results
-4. plan Sprint 30 — the scorecard recommends characterizing the new baseline and deciding whether to pursue the remaining interaction gap or return to real-world ERCOT benchmarks
+1. read the [Sprint 30 reality-and-generalization scorecard](thoughts/shared/docs/sprint-30-reality-and-generalization-scorecard.md) for the full verdict
+2. read the [handoff document](thoughts/shared/docs/handoff.md) for Sprint 31 instructions
+3. run the Hillstrom benchmark harness with 10 seeds at B20/B40/B80 — first non-energy empirical test
+4. extend ERCOT to 10 seeds (5 incremental per strategy-budget-dataset)
+5. publish Sprint 31 generalization scorecard
 
 ## Canonical Docs
 
@@ -370,44 +407,67 @@ What we learned:
 9. RF fallback is useful for family-level drift detection but should not be used to certify or refute row-level causal-advantage claims
 10. Sprint 29 should return to optimizer-core work
 
+### Sprint 30 (General Causal Autoresearch: Reality Check And Portability)
+
+Merged PRs:
+
+1. `#165` portability brief
+2. `#166` ERCOT reality report
+3. `#167` Hillstrom benchmark contract
+4. `#169` Hillstrom benchmark harness
+
+What we learned:
+
+1. the Sprint 29 default change (`causal_exploration_weight=0.0`) produced the first real-world causal vs surrogate-only differentiation on ERCOT
+2. COAST B80: causal certified better than s.o. (p=0.008, 5/5 wins) — this is the strongest real-world signal to date
+3. NORTH_C B80: causal trending better than s.o. (p=0.059, 4/5 wins) — marginal, needs 10-seed confirmation
+4. causal still does not beat random on either dataset; all strategies converge to ridge
+5. the core engine is fully domain-portable; 6 of 7 active regression gate rows are ERCOT-tied
+6. the portability brief re-anchored the project identity as domain-agnostic
+7. the Hillstrom email campaign harness is the first non-energy benchmark code
+8. no non-energy empirical results exist yet — generality claim is structural
+9. verdict: **REAL-WORLD IMPROVED BUT DOMAIN-SPECIFIC**
+10. Sprint 31: run Hillstrom + extend ERCOT to 10 seeds
+
 ### Sprint 29 (Adaptive Causal Guidance Under Clean Backend Gates)
 
-Open issues:
+Merged PRs:
 
-1. `#152` trajectory diagnosis for interaction and dose-response
-2. `#153` adaptive causal guidance intervention
-3. `#154` optimizer-core regression gate and scorecard
+1. `#155` trajectory diagnosis
+2. `#158` dose-response 10-seed certification
+3. `#159` interaction ablation
+4. `#160` default change (causal_exploration_weight 0.3 to 0.0)
+5. `#161` regression gate and scorecard
 
-Current plan:
+What we learned:
 
-1. diagnose before changing optimizer behavior
-2. implement one narrow intervention only if the diagnosis supports it
-3. rerun the Ax-primary gate and publish the scorecard
-
-What must not drift:
-
-1. Ax/BoTorch remains the primary causal-advantage path
-2. RF fallback remains a secondary family-level drift signal
-3. dose-response must not be claimed as a statistically certified causal win from mean regret alone
-4. demand-response wins and null-control cleanliness are hard gates
+1. the interaction B20 catastrophe was caused by causal-weighted exploration, not alignment
+2. dose-response is a certified Ax-primary causal win (p=0.003, 9/10 wins)
+3. removing causal_exploration_weight improved every row in mean regret
+4. interaction flipped from s.o. advantage (p=0.014) to near-parity (p=0.225)
+5. base B80 mean improved (1.13 to 1.01) but lost statistical significance (p=0.045 to p=0.112)
+6. no row regressed; no row has s.o. statistically significantly better than causal under Ax
+7. verdict: **GENERALITY IMPROVED**
 
 ## Current Best Evidence
 
-### Real Predictive Benchmarks
+### Real Predictive Benchmarks (Sprint 30)
 
-ERCOT NORTH_C and COAST still show:
+ERCOT NORTH_C and COAST now show the first causal vs surrogate-only differentiation:
 
-1. `random` marginally better than engine-based strategies
-2. `causal` effectively identical to `surrogate_only`
-3. all strategies converging to `ridge`
-4. highly stable results across seeds
+1. COAST B80: causal certified better than s.o. (MAE 104.88 vs 105.72, two-sided MWU `p=0.008`, 5/5 wins)
+2. NORTH_C B80: causal trending better than s.o. (MAE 132.48 vs 132.98, two-sided MWU `p=0.059`, 4/5 wins)
+3. causal still does not statistically beat random on either dataset
+4. all strategies still converge to `ridge`
+5. results at 5 seeds only; 10-seed rerun recommended
 
 Interpretation:
 
-1. the real-task harness is functioning correctly
-2. but the project still lacks a convincing real-world causal advantage on these forecasting tasks
+1. the Sprint 29 default change (`causal_exploration_weight=0.0`) broke the "causal == s.o." plateau from Sprint 16
+2. the improvement is in ridge hyperparameters, not model class
+3. the project has a first real-world causal vs s.o. signal but not a full causal advantage claim
 
-### Positive / Negative Benchmark Boundary
+### Positive / Negative Benchmark Boundary (Sprint 29, unchanged)
 
 Trusted Ax-primary references (Sprint 29, after `causal_exploration_weight=0.0`):
 
@@ -427,33 +487,41 @@ Negative control:
 2. Sprint 26 intentionally did not rerun null control
 3. latest clean reruns stay within the `2%` tolerance
 
+### Non-Energy Benchmarks (Sprint 30, new)
+
+1. Hillstrom email campaign: harness merged (PR #169), no results yet
+2. Criteo uplift: identified, not started
+3. Open Bandit Pipeline: identified, not started
+
 ## Current Conclusion
 
-The project is a **trustworthy automated research harness with improved causal generality after Sprint 29**.
+The project is a **trustworthy automated research harness with a first real-world signal and a defined generalization path**.
 
 What is now established:
 
-1. causal guidance helps in the demand-response family: medium-noise and high-noise are certified under Ax; base mean improved but lost significance (p=0.112)
-2. dose-response is a certified Ax-primary causal win (p=0.003)
-3. interaction is near-parity after removing harmful causal-weighted exploration
-4. no benchmark row has a statistically significant surrogate-only advantage under Ax
-5. RF fallback is a secondary family-level regression signal, not a drop-in substitute for Ax-primary baselines
+1. causal guidance wins on 3 of 7 synthetic benchmarks under Ax (medium, high, dose-response); base is trending; interaction is near-parity
+2. the Sprint 29 default change produced the first real-world causal vs surrogate-only differentiation on ERCOT (COAST p=0.008, NORTH_C p=0.059)
+3. causal still does not beat random on real ERCOT data
+4. the engine is architecturally domain-portable; the benchmark portfolio is empirically energy-dominated
+5. the Hillstrom harness is the first non-energy benchmark ready to run
+6. RF fallback is a secondary family-level regression signal, not a drop-in substitute for Ax-primary baselines
 
-## Sprint 29 Exit Condition
+## Sprint 30 Exit Condition
 
-Sprint 29 is **complete**.  The scorecard verdict is GENERALITY IMPROVED:
+Sprint 30 is **complete**.  The scorecard verdict is REAL-WORLD IMPROVED BUT DOMAIN-SPECIFIC:
 
-1. medium-noise and high-noise: preserved and improved
-2. base: mean improved, lost significance (trending)
-3. dose-response: preserved (certified win)
-4. interaction: flipped from s.o. advantage to near-parity
-5. null control: 11th clean run
-6. Sprint 30: characterize new baseline, decide whether to pursue remaining interaction gap or return to real-world ERCOT
+1. COAST: causal certified > s.o. (p=0.008, 5 seeds)
+2. NORTH_C: causal trending > s.o. (p=0.059, 5 seeds)
+3. causal does not beat random on either ERCOT dataset
+4. portability brief re-anchored project as domain-agnostic
+5. Hillstrom harness merged, ready to run
+6. Sprint 31: run Hillstrom + extend ERCOT to 10 seeds
 
 ## Practical Next Step
 
 If resuming from here:
 
-1. read the [Sprint 29 optimizer-core scorecard](thoughts/shared/docs/sprint-29-optimizer-core-scorecard.md) for the full verdict
-2. plan Sprint 30 — decide whether to pursue certified interaction win or return to ERCOT
-3. the benchmark suite is ready to evaluate further optimizer changes
+1. read the [Sprint 30 reality-and-generalization scorecard](thoughts/shared/docs/sprint-30-reality-and-generalization-scorecard.md) for the full verdict
+2. run the Hillstrom benchmark harness with 10 seeds at B20/B40/B80 — first non-energy empirical test
+3. extend ERCOT to 10 seeds (5 incremental per strategy-budget-dataset)
+4. publish Sprint 31 generalization scorecard
