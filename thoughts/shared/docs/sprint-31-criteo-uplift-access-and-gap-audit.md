@@ -90,8 +90,8 @@ license tracking that Hillstrom did not need.
 **Local setup cost:**
 
 1. Download: ~300 MB, one-time, no authentication
-2. Disk: ~300 MB compressed or ~311 MB uncompressed; both are small by
-   modern standards
+2. Disk: ~300 MB gzip CSV or ~311 MB Parquet (Hugging Face); uncompressed
+   CSV is ~900 MB - 1.5 GB (see table above)
 3. Memory: loading the full 14M-row CSV into a pandas DataFrame at
    default dtypes (float64) will consume approximately 1.7 GB. Using
    int8 for the 4 binary columns and float32 for features would cut
