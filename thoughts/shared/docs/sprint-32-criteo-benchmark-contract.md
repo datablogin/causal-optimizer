@@ -235,7 +235,7 @@ pass shows promise.
 | Component | Count |
 |-----------|-------|
 | Real benchmark: 3 strategies x 3 budgets x 10 seeds | 90 runs |
-| Null control: 3 strategies x 2 budgets x 10 seeds | 60 runs |
+| Null control: 3 strategies x 2 budgets x 10 seeds (B80 excluded — see Section 7d) | 60 runs |
 | **Total** | **150 runs** |
 
 At B80, each run executes up to 80 adapter calls. Worst-case total
@@ -243,8 +243,9 @@ adapter calls: 150 x 80 = 12,000. At ~1M rows per call with vectorized
 numpy, per-call latency should be sub-second. For reference, the
 Hillstrom benchmark (240 runs on 42-64K rows) completed in 1,303
 seconds (~22 minutes). Criteo's 150 runs on 1M rows will have higher
-per-call cost but fewer total runs; estimated wall-clock time is 1-3
-hours depending on machine and backend (RF vs Ax/BoTorch).
+per-call cost (~15-24x more data) but fewer total runs (150 vs 240).
+Estimated wall-clock time: ~1 hour under the RF backend, ~2-3 hours
+under Ax/BoTorch (which adds per-step GP fitting overhead).
 
 ## 5. Wrapper Mapping Into MarketingLogAdapter
 
@@ -326,9 +327,19 @@ IPS weighting at 85:15 imbalance.
 The consequence is explicit: the first Criteo run tests whether the
 engine's phase transitions, surrogate modeling, and screening add value
 on a degenerate surface under heavy IPS variance. It does not test
-whether causal graph focus helps on a heterogeneous surface. That test
-requires a follow-on run with a synthesized segment or a wider search
-space.
+whether causal graph focus helps on a heterogeneous surface. A
+near-parity result on the degenerate surface is therefore expected and
+not informative about the causal path's value in general.
+
+**Mandatory second batch:** if the first run shows near-parity (all
+strategies converge to the same corner), the implementation sprint must
+also run a second batch with a synthesized segment column (tertiles of
+`f0` mapped to `"high_value" / "medium" / "low"`) before publishing the
+Criteo report. This is not a follow-on recommendation — it is a
+contract requirement. The degenerate-surface run establishes the
+baseline; the heterogeneous-surface run tests whether the causal path
+can exploit the additional structure. Both results are needed for an
+interpretable verdict.
 
 ## 6. Search-Space And Propensity Decisions
 
@@ -360,26 +371,40 @@ However, the `CriteoLoader` should explicitly add `propensity = 0.85`
 for clarity and provenance.
 
 Risk: if residual propensity heterogeneity remains after v2 rebalancing,
-the constant assumption introduces bias. **Pre-benchmark check
-(mandatory):** before running the 150-experiment benchmark, compute the
-empirical treatment rate by `f0` decile on the 1M subsample. If any
-decile's treatment rate deviates from 0.85 by more than 2 percentage
-points, propensity heterogeneity is present and the constant-propensity
-assumption must be revisited. This check is cheap (one groupby on the
-subsample) and catches the problem before wasting 150 runs.
+the constant assumption introduces bias. **Pre-benchmark gate
+(mandatory, hard stop):** before running the 150-experiment benchmark,
+compute the empirical treatment rate by `f0` decile on the 1M subsample.
+This check is cheap (one groupby on the subsample) and catches the
+problem before wasting 150 runs.
+
+- **Pass:** all deciles have treatment rate within 2 percentage points
+  of 0.85. Proceed with constant propensity.
+- **Fail:** any decile deviates by more than 2 percentage points. The
+  benchmark does not proceed. The implementation sprint must either:
+  (a) fit a logistic regression on `f0`-`f11` to estimate per-row
+  propensities and add those as the `propensity` column, or
+  (b) use a stratified constant propensity (per-decile treatment rate)
+  as a coarser fix.
+  Document whichever path is taken in the benchmark report provenance.
 
 Additionally, the first run should monitor `weight_cv` and
 `max_ips_weight` per seed to detect whether IPS weights are suspiciously
 variable despite the constant-propensity assumption. Under a true
 constant propensity of 0.85:
 
-- Treated observations: IPS weight = `1 / 0.85 = 1.176`
-- Control observations: IPS weight = `1 / 0.15 = 6.667`
+- Treated observations: raw IPS weight = `1 / 0.85 = 1.176`
+- Control observations: raw IPS weight = `1 / 0.15 = 6.667`
 
-Expected `weight_cv` under constant propensity and uniform policy
-assignment: calculable from the 85:15 mix. If observed `weight_cv`
-exceeds this expected value substantially, propensity heterogeneity may
-be present.
+Note: the `MarketingLogAdapter` uses **self-normalized IPS** (weights
+are rescaled so they sum to `N`; see `marketing_logs.py` line 322). The
+`max_ips_weight` and `weight_cv` diagnostics report **raw** (pre-
+normalization) weights. The diagnostic thresholds in Section 7a
+(`max_ips_weight > 20`, `weight_cv > 3.0`) are calibrated against raw
+weights. Under constant propensity with an always-treat policy, the
+expected raw `max_ips_weight` is 6.667 and the expected `weight_cv` is
+~1.3 (from the 85:15 weight mix). If observed values substantially
+exceed these, propensity heterogeneity or policy-induced weight
+concentration may be present.
 
 ### 6c. min_propensity_clip Decision
 
@@ -519,8 +544,22 @@ threshold. Rationale: `visit` is a binary 0/1 column with a 4.70% base
 rate. IPS-weighted means of sparse binary outcomes on permuted data are
 inherently noisier than IPS-weighted means of continuous `spend`. The
 Hillstrom null control already showed that the `2%` threshold can be
-tight on right-skewed zero-inflated data. Starting at `5%` on a sparse
-binary outcome avoids a predictable fallback-ladder invocation.
+tight on right-skewed zero-inflated data.
+
+**Back-of-envelope SE justification:** under permuted data with constant
+propensity 0.85, the self-normalized IPS-weighted mean of a binary
+outcome has approximate standard error
+`SE ≈ sqrt(p * (1-p) / ESS_eff)` where `p ≈ 0.047` and `ESS_eff` is
+the effective sample size under the IPS weights. On 1M rows with 85:15
+imbalance, the raw ESS from Kish's formula is approximately
+`N / (1 + CV^2_w)`. With 85% of weights at 1.176 and 15% at 6.667, the
+weight CV is ~1.3, giving `ESS_eff ≈ 1M / (1 + 1.69) ≈ 372K`. Per-seed
+SE ≈ `sqrt(0.047 * 0.953 / 372K) ≈ 0.00035`. Across 10 seeds, the SE
+of the mean is `0.00035 / sqrt(10) ≈ 0.00011`. The 5% band
+`±0.00235` is ~21 SEs wide, so the tolerance is conservative for
+well-behaved permuted data. If observed null-control variance is much
+larger than this (e.g., due to policy-search multiple comparisons or
+degenerate corner solutions), the fallback ladder handles it.
 
 **Pre-committed fallback:** if more than 3 of 10 null-control seeds for
 any strategy fall outside `[0.95 * mu, 1.05 * mu]`:
@@ -632,6 +671,10 @@ The implementation sprint should:
    - generates the permuted-outcome null control frame
 
 2. Commit a 3,000-row CI fixture with `LICENSE-CRITEO` attribution.
+   Include a unit test that validates
+   `abs(fixture['treatment'].mean() - 0.85) < 0.03` to prevent a
+   stratified-sampling bug from silently producing a fixture with the
+   wrong treatment ratio.
 
 3. Write a benchmark script modeled on `scripts/hillstrom_benchmark.py`.
 
