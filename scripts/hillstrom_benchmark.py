@@ -327,13 +327,17 @@ def main() -> None:
 
     # Assemble JSON artifact with Hillstrom-specific provenance
     projected_graph = hillstrom_projected_prior_graph()
-    hillstrom_provenance = {
-        "slices": slices,
-        "null_control_enabled": bool(args.null_control),
-        "projected_graph_edge_count": len(projected_graph.edges),
-        "projected_graph_edges": [list(edge) for edge in projected_graph.edges],
-        "null_baselines": {name: scenario.null_baseline for name, scenario in scenarios.items()},
-    }
+    hillstrom_provenance = _sanitize_for_json(
+        {
+            "slices": slices,
+            "null_control_enabled": bool(args.null_control),
+            "projected_graph_edge_count": len(projected_graph.edges),
+            "projected_graph_edges": [list(edge) for edge in projected_graph.edges],
+            "null_baselines": {
+                name: scenario.null_baseline for name, scenario in scenarios.items()
+            },
+        }
+    )
     output_data = {
         "benchmark": "sprint_31_hillstrom",
         "suite_runtime_seconds": suite_runtime,

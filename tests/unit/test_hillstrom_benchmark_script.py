@@ -73,6 +73,30 @@ class TestSanitizeForJson:
         out = hb._sanitize_for_json({"loss": float("nan"), "acc": 0.9})
         assert out == {"loss": None, "acc": 0.9}
 
+    def test_hillstrom_provenance_nan_baseline_is_sanitized(self) -> None:
+        """Regression: an empty primary slice produces null_baseline=nan.
+
+        If the provenance dict is not passed through _sanitize_for_json
+        before json.dump(..., allow_nan=False), the write crashes. This
+        test pins the fix by building the exact shape of the provenance
+        dict with a nan baseline and verifying the sanitizer converts it
+        to None.
+        """
+        import json
+
+        provenance = hb._sanitize_for_json(
+            {
+                "slices": ["primary"],
+                "null_control_enabled": False,
+                "projected_graph_edge_count": 7,
+                "projected_graph_edges": [["a", "b"]],
+                "null_baselines": {"primary": float("nan")},
+            }
+        )
+        assert provenance["null_baselines"]["primary"] is None
+        # Must serialize without error under allow_nan=False
+        json.dumps(provenance, allow_nan=False)
+
 
 class TestParseIntList:
     """``_parse_int_list`` converts comma-separated args into int lists."""
