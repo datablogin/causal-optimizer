@@ -51,9 +51,11 @@ This contract builds on those lessons rather than relitigating them.
 
 ### 1b. Why Criteo Is Not Trivial
 
-1. **85:15 treatment imbalance.** Control observations carry IPS weight
-   `1 / (1 - 0.85) = 6.67`. This is 3.3x higher than Hillstrom's
-   maximum weight of 2.0. The IPS stack will be under real stress.
+1. **85:15 treatment imbalance.** Control-arm observations carry IPS
+   weight `1 / (1 - 0.85) = 6.67` (treated-arm weight is only
+   `1 / 0.85 = 1.18`). The control-arm weight is 3.3x higher than
+   Hillstrom's maximum weight of 2.0. The IPS stack will be under real
+   stress.
 2. **Binary outcomes only.** `visit` (4.70% base rate) and `conversion`
    (0.29%) are both binary. IPS-weighted means of rare binary events
    are noisy. There is no continuous outcome like Hillstrom's `spend`
@@ -238,7 +240,11 @@ pass shows promise.
 
 At B80, each run executes up to 80 adapter calls. Worst-case total
 adapter calls: 150 x 80 = 12,000. At ~1M rows per call with vectorized
-numpy, this should complete within 1-2 hours on a modern machine.
+numpy, per-call latency should be sub-second. For reference, the
+Hillstrom benchmark (240 runs on 42-64K rows) completed in 1,303
+seconds (~22 minutes). Criteo's 150 runs on 1M rows will have higher
+per-call cost but fewer total runs; estimated wall-clock time is 1-3
+hours depending on machine and backend (RF vs Ax/BoTorch).
 
 ## 5. Wrapper Mapping Into MarketingLogAdapter
 
@@ -270,21 +276,19 @@ numpy, this should complete within 1-2 hours on a modern machine.
 
 ### 5d. Segment Column Decision
 
-Criteo has no natural segment column. Three options were considered:
+Criteo has no natural segment column. Two options were considered:
 
 1. **Omit segment entirely.** Adapter assigns all rows
    `segment_score = 0.2`. Uplift scores depend only on channel weight
    and regularization. Less heterogeneity for the optimizer to exploit.
+   Accept reduced heterogeneity and diagnose from results.
 2. **Synthesize from feature quantiles.** Map tertiles of `f0` to
    `"high_value" / "medium" / "low"`. Creates heterogeneity but is
-   arbitrary.
-3. **Defer.** Accept reduced heterogeneity and diagnose from results.
+   arbitrary — it fabricates structure that does not exist in the data.
 
-**Decision: Option 1 (omit segment) for the first run.** Rationale:
-synthesizing a segment from anonymized features would fabricate structure
-that does not exist in the data. If the first run shows all policies
-collapse to the same `policy_value`, the follow-on run should synthesize
-a segment and compare.
+**Decision: Option 1 (omit segment) for the first run.** If the first
+run shows all policies collapse to the same `policy_value`, the follow-on
+run should synthesize a segment and compare.
 
 ### 5e. Features Dropped On First Run
 
@@ -356,10 +360,18 @@ However, the `CriteoLoader` should explicitly add `propensity = 0.85`
 for clarity and provenance.
 
 Risk: if residual propensity heterogeneity remains after v2 rebalancing,
-the constant assumption introduces bias. The first run should monitor
-`weight_cv` and `max_ips_weight` to detect whether IPS weights are
-suspiciously variable despite the constant-propensity assumption. Under
-a true constant propensity of 0.85:
+the constant assumption introduces bias. **Pre-benchmark check
+(mandatory):** before running the 150-experiment benchmark, compute the
+empirical treatment rate by `f0` decile on the 1M subsample. If any
+decile's treatment rate deviates from 0.85 by more than 2 percentage
+points, propensity heterogeneity is present and the constant-propensity
+assumption must be revisited. This check is cheap (one groupby on the
+subsample) and catches the problem before wasting 150 runs.
+
+Additionally, the first run should monitor `weight_cv` and
+`max_ips_weight` per seed to detect whether IPS weights are suspiciously
+variable despite the constant-propensity assumption. Under a true
+constant propensity of 0.85:
 
 - Treated observations: IPS weight = `1 / 0.85 = 1.176`
 - Control observations: IPS weight = `1 / 0.15 = 6.667`
@@ -495,9 +507,12 @@ Permuted-outcome null control, following the Hillstrom discipline:
    a permutation of the same column values, `mu` is identical on `D`
    and `D_null`.
 
-**Failure criterion:** the null control fails if any strategy's mean
-`policy_value` across the 10 null-control seeds exceeds `1.05 * mu` at
-any budget.
+**Failure criterion (symmetric):** the null control fails if any
+strategy's mean `policy_value` across the 10 null-control seeds falls
+outside the interval `[0.95 * mu, 1.05 * mu]` at any budget. The lower
+bound catches strategies that systematically avoid treating high-visit
+users on permuted data, which would also indicate IPS estimation
+problems.
 
 Note: the tolerance is `5%`, wider than Hillstrom's initial `2%`
 threshold. Rationale: `visit` is a binary 0/1 column with a 4.70% base
@@ -508,8 +523,9 @@ tight on right-skewed zero-inflated data. Starting at `5%` on a sparse
 binary outcome avoids a predictable fallback-ladder invocation.
 
 **Pre-committed fallback:** if more than 3 of 10 null-control seeds for
-any strategy exceed `1.05 * mu`:
-  (a) widen to `1.10 * mu` and re-evaluate the same seeds (no new runs);
+any strategy fall outside `[0.95 * mu, 1.05 * mu]`:
+  (a) widen to `[0.90 * mu, 1.10 * mu]` and re-evaluate the same seeds
+  (no new runs);
   (b) if `10%` still fails, the null control fails and blocks the real
   verdict.
 
@@ -524,7 +540,9 @@ All four conditions must hold:
 
 1. Causal `policy_value` at B80 is strictly greater than surrogate_only
    at B80, with `p <= 0.05` under two-sided Mann-Whitney U.
-2. Causal is not statistically worse than random at B80.
+2. Causal is not statistically worse than random at B80 (i.e., the
+   two-sided MWU test of causal vs random does not show random > causal
+   at `p <= 0.05`).
 3. The null control passes.
 4. Median ESS at B80 is >= 100 for all strategies.
 
@@ -632,8 +650,15 @@ The implementation sprint should:
 ### 10c. Prerequisite Before Implementation
 
 The Criteo v2.1 CSV must be downloaded locally. The implementation
-sprint should document the download path and verify the file hash.
-The raw file must not be committed to the repository.
+sprint must:
+
+1. Document the download path used.
+2. Compute and record the SHA-256 hash of the downloaded file in the
+   benchmark report provenance section. (The direct download URL
+   `go.criteo.net/...` is a redirect that Criteo could change; the hash
+   is the authoritative identifier.)
+3. Verify the row count matches the expected 13,979,592.
+4. Not commit the raw file to the repository.
 
 ### 10d. Follow-On Run Candidates (Not In First Implementation)
 
