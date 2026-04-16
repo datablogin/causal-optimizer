@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-16
 **Sprint:** 31 (General Causal Autoresearch: First Non-Energy Real-Data Benchmark)
-**Issue:** #171
+**Issue:** [#171](https://github.com/datablogin/causal-optimizer/issues/171)
 **Branch:** `sprint-31/criteo-uplift-audit`
 **Status:** Audit document. No code changes.
 
@@ -26,7 +26,7 @@ It answers six questions:
 | Item | Value |
 |------|-------|
 | Official page | <https://ailab.criteo.com/criteo-uplift-prediction-dataset/> |
-| Direct download (v2.1) | `http://go.criteo.net/criteo-research-uplift-v2.1.csv.gz` |
+| Direct download (v2.1) | `https://go.criteo.net/criteo-research-uplift-v2.1.csv.gz` |
 | Hugging Face mirror | <https://huggingface.co/datasets/criteo/criteo-uplift> |
 | Reference paper | Diemert et al., "A Large Scale Benchmark for Uplift Modeling", AdKDD 2018, KDD London |
 | Extended paper | Diemert et al., "A Large Scale Benchmark for Individual Treatment Effect Prediction and Uplift Modeling", 2021 (arXiv:2111.10106) |
@@ -227,7 +227,7 @@ onto the adapter contract:
 | `outcome` | `visit` (primary) or `conversion` (secondary) | Pass-through (binary 0/1, used as float) |
 | `cost` | synthesized | Fixed constant (e.g., 0.01 treated, 0.0 control) |
 | `propensity` | synthesized | Constant 0.85 (from known randomization ratio) |
-| `channel` | constant | `"email"` (or `"ad"` — degenerate, single channel) |
+| `channel` | constant | `"ad"` (degenerate, single channel; Criteo is display/RTB, not e-mail) |
 | `segment` | synthesized | Must be derived from f0-f11; no natural segment column exists |
 
 **What reuses cleanly:**
@@ -426,8 +426,9 @@ exposure-based analysis.
    exercised on Hillstrom before being applied to a harder dataset.
 
 3. **IPS variance diagnostics are understood.** The Hillstrom run
-   should establish baseline expectations for `weight_cv`, `max_ips_
-   weight`, and `effective_sample_size` on a dataset where propensities
+   should establish baseline expectations for `weight_cv`,
+   `max_ips_weight`, and `effective_sample_size` on a dataset where
+   propensities
    are balanced (0.5). Criteo's 85:15 imbalance will stress these
    diagnostics, and the team needs calibrated expectations.
 
