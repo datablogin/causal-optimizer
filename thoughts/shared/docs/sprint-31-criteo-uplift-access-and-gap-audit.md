@@ -183,8 +183,8 @@ applies.
 **Primary objective recommendation:** Use `visit` (4.70% base rate) as
 the primary outcome for the first run. `conversion` (0.29%) is too rare
 for stable per-seed IPS-weighted estimates at the subsampled scale
-(1M rows x 0.29% = ~2,900 positive outcomes, of which ~435 are in the
-15% control arm). Track `conversion` as a secondary reported outcome.
+(1M rows x 0.29% = ~2,900 positive outcomes; of those,
+~15% are control = ~435 control-arm conversions). Track `conversion` as a secondary reported outcome.
 
 ## 6. Propensity Availability
 
@@ -290,7 +290,10 @@ Hillstrom does not impose:
    would collapse all propensities to 0.5 — a distortion, not a fix.
    The 6.67x weight on 15% of
    observations means control-arm observations dominate IPS estimates.
-   This is not wrong, but it increases variance.
+   This is not wrong, but it increases variance. Note that this is
+   structurally different from the typical clipping use case (estimated
+   propensities near 0 or 1): Criteo's propensity of 0.85 is moderate,
+   but its complement (0.15) creates high control-arm weights.
 
 2. **Rare binary outcomes (0.29% conversion, 4.70% visit).** IPS
    weighting on a sparse binary outcome amplifies noise. A single
@@ -424,6 +427,10 @@ exposure-based analysis.
 
 ### Entry Sprint: Sprint 33 (earliest), contingent on Hillstrom outcome
 
+**Dependency chain:** Sprint 31 proves the wrapper pattern on Hillstrom.
+Sprint 32 publishes the Hillstrom report and calibrates IPS diagnostics.
+Sprint 33 starts Criteo.
+
 **Prerequisites before starting Criteo:**
 
 1. **Hillstrom benchmark is stable.** The wrapper pattern (column
@@ -445,7 +452,9 @@ exposure-based analysis.
 
 4. **License tracking is in place.** A mechanism for attaching
    CC-BY-NC-SA-4.0 attribution to committed fixture data must exist
-   before Criteo data enters the repo.
+   before Criteo data enters the repo. Concrete proposal: add a
+   `tests/fixtures/DATA-LICENSES.md` file listing each fixture's
+   dataset name, license, required attribution, and row count.
 
 ### Recommended Sprint 33 Criteo Contract Shape
 
