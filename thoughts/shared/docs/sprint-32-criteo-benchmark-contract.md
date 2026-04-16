@@ -137,7 +137,7 @@ flagged as unreliable.
 
 | Item | Value |
 |------|-------|
-| Official page | Criteo AI Lab |
+| Official page | [Criteo AI Lab](https://ailab.criteo.com/criteo-uplift-prediction-dataset/) |
 | Direct download (v2.1) | `http://go.criteo.net/criteo-research-uplift-v2.1.csv.gz` |
 | Hugging Face mirror | `criteo/criteo-uplift` on Hugging Face Datasets |
 | Reference paper | Diemert et al., "A Large Scale Benchmark for Uplift Modeling", AdKDD 2018, KDD London |
@@ -168,7 +168,7 @@ must be added alongside the fixture. This is stricter than Hillstrom
 | Rows | 13,979,592 |
 | Columns | 16 (12 features `f0`-`f11` + `treatment` + `exposure` + `visit` + `conversion`) |
 | Compressed size | ~297 MB (gzip CSV) |
-| Uncompressed size | ~311 MB |
+| Uncompressed size | ~3.25 GB |
 | In-memory (float64) | ~1.7 GB (full), ~120 MB (1M subsample) |
 
 ### 3d. Local-Data Expectations
@@ -580,12 +580,12 @@ variance is much larger than this (e.g., due to policy-search multiple
 comparisons, degenerate corner solutions, or restrictive policies), the
 fallback ladder handles it.
 
-**Pre-committed fallback:** if more than 3 of 10 null-control seeds for
-any strategy fall outside `[0.95 * mu, 1.05 * mu]`:
-  (a) widen to `[0.90 * mu, 1.10 * mu]` and re-evaluate the same seeds
-  (no new runs);
-  (b) if `10%` still fails, the null control fails and blocks the real
-  verdict.
+**Pre-committed fallback:** if the primary mean-based criterion fails
+(any strategy's mean falls outside `[0.95 * mu, 1.05 * mu]`):
+  (a) widen the band to `[0.90 * mu, 1.10 * mu]` and re-evaluate the
+  same strategy means (no new runs);
+  (b) if the mean still falls outside the widened `10%` band, the null
+  control fails and blocks the real verdict.
 
 If the null control fails, the implementation sprint must stop and
 diagnose before reporting any real-data verdict.
