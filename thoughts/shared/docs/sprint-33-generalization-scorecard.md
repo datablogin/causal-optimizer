@@ -38,7 +38,7 @@ change produced a durable separation between `causal` and
 | COAST | causal vs s.o. | -0.842 | **0.008** | 5/5 | 5 | Certified |
 | COAST | causal vs random | -0.332 | 0.690 | 3/5 | 5 | Not significant |
 | NORTH_C | causal vs s.o. | -0.498 | **0.059** | 4/5 | 5 | Trending |
-| NORTH_C | causal vs random | +0.129 | 0.402 | 1/5 | 5 | Random still better |
+| NORTH_C | causal vs random | +0.129 | 0.402 | 1/5 | 5 | Not significant (random mean lower) |
 
 Source: [Sprint 30 ERCOT reality report](sprint-30-ercot-reality-report.md) (PR #166).
 
