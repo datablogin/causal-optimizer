@@ -107,13 +107,15 @@ treatment-effect evidence."
 
 ### 2c. Narrow Search Spaces Can Blunt Graph Value
 
-Hillstrom's 3-variable active search space is much narrower than the
-energy benchmarks where causal guidance had the clearest wins. The causal
-graph may have more leverage when the search problem contains more
-irrelevant or weakly relevant directions. **Criteo's first run uses the
-same 3-variable active space as Hillstrom** (for comparability), but a
-follow-on run should consider widening the search space if the first run
-shows near-parity.
+Hillstrom's nominal 3-variable active search space is much narrower than
+the energy benchmarks where causal guidance had the clearest wins (and
+one of those three — `regularization` — is inert under the current
+adapter math; see Section 6e). The causal graph may have more leverage
+when the search problem contains more irrelevant or weakly relevant
+directions. **Criteo's first run uses a 2-variable active space**
+(`eligibility_threshold`, `treatment_budget_pct`), which is even
+narrower. A follow-on run should consider widening the search space if
+the first run shows near-parity.
 
 ### 2d. A Wrapper That Runs Is Not A Benchmark That Proves Generality
 
@@ -289,8 +291,8 @@ under Ax/BoTorch (which adds per-step GP fitting overhead).
 Criteo has no natural segment column. Two options were considered:
 
 1. **Omit segment entirely.** Adapter assigns all rows
-   `segment_score = 0.2`. Uplift scores depend only on channel weight
-   and regularization. Less heterogeneity for the optimizer to exploit.
+   `segment_score = 0.2`. Uplift scores collapse to uniform after
+   normalization. Less heterogeneity for the optimizer to exploit.
    Accept reduced heterogeneity and diagnose from results.
 2. **Synthesize from feature quantiles.** Map tertiles of `f0` to
    `"high_value" / "medium" / "low"`. Creates heterogeneity but is
@@ -318,14 +320,15 @@ computation simplifies:
 - `channel_weight` = constant (all rows get `email_share + 0.1`)
 - `segment_score` = constant (all rows get `0.2`)
 - `raw_score` = constant for all rows
-- After regularization and normalization, `uplift_score` = `0.5` for
-  all rows (uniform)
+- After normalization, `uplift_score` = `0.5` for all rows (uniform;
+  `regularization` is inert — see Section 6e)
 
-This means `eligibility_threshold` becomes the sole policy lever that
-varies treatment assignment across observations. When
-`eligibility_threshold < 0.5`, all rows are eligible; when
-`eligibility_threshold > 0.5`, no rows are eligible. The optimizer
-searches a step-function response surface.
+This means the two active variables have distinct roles:
+`eligibility_threshold` is a step function (below 0.5, all rows are
+eligible; above 0.5, none are), and `treatment_budget_pct` controls
+what fraction of eligible rows are treated. The optimizer searches a
+surface that is piecewise-constant in `eligibility_threshold` and
+smooth in `treatment_budget_pct` within the eligible region.
 
 **This is a known limitation of the first run.** It mirrors the
 Hillstrom behavior where the optimal corner (`eligibility_threshold=0.0`,
@@ -333,12 +336,13 @@ Hillstrom behavior where the optimal corner (`eligibility_threshold=0.0`,
 discover the same corner if the treat-everyone policy is optimal under
 IPS weighting at 85:15 imbalance.
 
-The consequence is explicit: the first Criteo run tests whether the
-engine's phase transitions, surrogate modeling, and screening add value
-on a degenerate surface under heavy IPS variance. It does not test
-whether causal graph focus helps on a heterogeneous surface. A
-near-parity result on the degenerate surface is therefore expected and
-not informative about the causal path's value in general.
+The consequence is explicit: with only 2 active variables on a
+degenerate surface, the first Criteo run tests whether the engine's
+phase transitions and surrogate modeling add value under heavy IPS
+variance. The 5-edge projected graph has limited scope to demonstrate
+causal focus value. A near-parity result on the degenerate surface is
+therefore expected and not informative about the causal path's value
+in general.
 
 **Mandatory second batch:** if the first run shows near-parity (all
 strategies converge to the same corner), the implementation sprint must
@@ -360,12 +364,13 @@ interpretable verdict.
 | `email_share` | **Fixed at `1.0`** | degenerate (single channel) |
 | `social_share_of_remainder` | **Fixed at `0.0`** | degenerate (single channel) |
 | `min_propensity_clip` | **Fixed at `0.01`** | see Section 6c |
-| `regularization` | **Tuned** | [0.001, 10.0] |
+| `regularization` | **Fixed at `1.0`** | inert under current adapter (see Section 6e) |
 | `treatment_budget_pct` | **Tuned** | [0.1, 1.0] |
 
-Effective active search space: **3 tuned continuous variables**
-(`eligibility_threshold`, `regularization`, `treatment_budget_pct`).
-Same dimensionality as Hillstrom, for direct comparability.
+Effective active search space: **2 tuned continuous variables**
+(`eligibility_threshold`, `treatment_budget_pct`). This is narrower
+than Hillstrom's nominal 3-variable space because `regularization` is
+inert under the current adapter math (see Section 6e).
 
 ### 6b. Propensity Decision
 
@@ -449,23 +454,23 @@ fixing it at a higher value (e.g., `0.10`).
 ### 6d. Prior Causal Graph
 
 The Hillstrom contract projected the full 14-edge adapter graph to a
-7-edge subgraph over active variables. The same projection applies on
-Criteo:
+7-edge subgraph over active variables. Criteo projects further because
+`regularization` is also frozen (inert, see Section 6e), yielding a
+**5-edge** subgraph:
 
 ```text
 eligibility_threshold  --> treated_fraction
 treatment_budget_pct   --> treated_fraction
-regularization         --> treated_fraction
-regularization         --> policy_value
 treated_fraction       --> total_cost
 treated_fraction       --> policy_value
 treated_fraction       --> effective_sample_size
 ```
 
-Dropped edges (7 total): `email_share -> {total_cost, policy_value}`,
+Dropped edges (9 total): `email_share -> {total_cost, policy_value}`,
 `social_share_of_remainder -> {total_cost, policy_value}`,
 `min_propensity_clip -> {total_cost, policy_value,
-effective_sample_size}`.
+effective_sample_size}`, `regularization -> {treated_fraction,
+policy_value}`.
 
 **Alternative: empty graph + auto-discovery.** Because Criteo features
 are anonymized, no domain-knowledge prior graph over features is
@@ -475,9 +480,53 @@ run could test `discovery_method="correlation"` at the exploration-to-
 optimization phase transition to learn a data-driven graph. This would
 be the first real-data test of the `GraphLearner` pathway.
 
-**Decision for first run:** use the projected 7-edge policy-variable
-graph, same as Hillstrom. This preserves comparability. Document the
-auto-discovery alternative as a follow-on recommendation.
+**Decision for first run:** use the projected 5-edge policy-variable
+graph. Document the auto-discovery alternative as a follow-on
+recommendation.
+
+### 6e. Regularization Is Inert Under The Current Adapter
+
+The `MarketingLogAdapter` computes uplift scores as:
+
+```
+raw_score = channel_weight * segment_score
+reg_factor = 1.0 / (1.0 + regularization)
+uplift_score = reg_factor * raw_score + (1 - reg_factor) * mean(raw_score)
+```
+
+It then applies min/max normalization to `[0, 1]`:
+
+```
+uplift_score = (uplift_score - min) / (max - min)
+```
+
+The regularization step is a positive affine transform of `raw_score`:
+`a * raw_score + b` where `a = reg_factor` and
+`b = (1 - reg_factor) * mean(raw_score)`. Min/max normalization of a
+positive affine transform produces the same normalized ranking
+regardless of `a` and `b`:
+
+```
+(a*x + b - (a*min + b)) / (a*max + b - (a*min + b))
+  = a*(x - min) / (a*(max - min))
+  = (x - min) / (max - min)
+```
+
+The `reg_factor` cancels algebraically. When `raw_score` is constant
+(the Run 1 degenerate case), the adapter falls back to
+`uplift_score = 0.5` for all rows, which is also independent of
+`regularization`.
+
+**Consequence:** `regularization` has no effect on `policy_value`,
+`treated_fraction`, or any other metric under the current adapter math.
+It is frozen at `1.0` (the adapter default) and excluded from the
+active search space.
+
+**Note:** this finding retroactively applies to the Hillstrom benchmark
+(Sprint 31), where `regularization` was nominally tuned but was
+similarly inert after normalization. The Hillstrom benchmark report
+should be annotated in a follow-on PR. For Criteo, the contract
+reflects the corrected understanding.
 
 ## 7. Diagnostics And Null-Control Requirements
 
@@ -526,7 +575,7 @@ The benchmark report must record:
 7. Fixed parameter values (`email_share=1.0`,
    `social_share_of_remainder=0.0`, `min_propensity_clip=0.01`,
    `cost=0.01/0.0`, `propensity=0.85`)
-8. Projected prior graph (7 edges)
+8. Projected prior graph (5 edges)
 9. Diemert et al. 2018 citation
 
 ### 7d. Null Control
@@ -760,8 +809,16 @@ If the first run shows near-parity or IPS variance issues:
    weighting with an outcome model for variance reduction. This is a
    Sprint 34+ consideration.
 6. **Wider search space.** Add `min_propensity_clip` as a tuned variable
-   to create a 4-dimensional search, or synthesize additional policy
+   to create a 3-dimensional search, or synthesize additional policy
    levers from Criteo features.
+7. **Fix `regularization` in the adapter.** The current
+   `MarketingLogAdapter` applies regularization before min/max
+   normalization, which algebraically cancels the regularization effect
+   (see Section 6e). A future adapter fix could either (a) apply
+   regularization after normalization, or (b) replace the affine
+   smoothing with a nonlinear shrinkage that survives normalization.
+   This would make `regularization` a true active variable and widen the
+   effective search space on all marketing benchmarks retroactively.
 
 ## 11. References
 
