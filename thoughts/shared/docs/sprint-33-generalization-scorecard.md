@@ -57,6 +57,9 @@ What that does not support:
 1. A claim that causal beats random on any real-world task.
 2. A claim that ERCOT certifies the engine as generally advantage-bearing
    across domains.
+3. The 10-seed rerun has not been abandoned; it was deprioritized relative
+   to non-energy expansion (Hillstrom, Criteo, Open Bandit) and remains
+   on the backlog. It is not the Sprint 34 critical path.
 
 ERCOT is the strongest real-world positive signal the project currently
 has, but it is one domain, at 5 seeds, with a `causal`-vs-`random`
