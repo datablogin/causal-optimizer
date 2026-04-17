@@ -1,6 +1,6 @@
 # Benchmark State
 
-Updated: 2026-04-16 (Sprint 30 complete — REAL-WORLD IMPROVED BUT DOMAIN-SPECIFIC)
+Updated: 2026-04-17 (Sprint 33 closing — GENERALITY IS REAL BUT CONDITIONAL)
 
 ## Purpose
 
@@ -16,7 +16,7 @@ Use it when:
 
 ## Current Position
 
-The project is now strongest as a **trustworthy research harness with a first real-world signal and a defined generalization path**.
+The project is now strongest as a **trustworthy research harness with one real-world positive, one clean non-energy boundary, one near-parity large-scale marketing result, and a defined multi-action frontier**.
 
 What is true today:
 
@@ -30,17 +30,88 @@ What is true today:
 8. Sprint 28 separated Ax/BoTorch primary claims from RF-fallback secondary checks
 9. Sprint 29 completed diagnosis, intervention, and regression gate — verdict GENERALITY IMPROVED
 10. Sprint 30 produced the ERCOT reality report, portability brief, and Hillstrom harness — verdict REAL-WORLD IMPROVED BUT DOMAIN-SPECIFIC
+11. Sprint 31 ran Hillstrom as the first non-energy real-data benchmark — verdict SURROGATE-ONLY ADVANTAGE (pooled slice) with a near-parity causal B80 tail on the primary slice under RF fallback
+12. Sprint 32 merged the Criteo uplift benchmark contract
+13. Sprint 33 executed the Criteo contract under Ax/BoTorch on a 1M-row subsample — Run 1 degenerate-surface exact tie and Run 2 heterogeneous-surface near-parity, combined verdict NEAR-PARITY
+14. Sprint 33 closure published the generalization scorecard — verdict GENERALITY IS REAL BUT CONDITIONAL
 
 ## Current Goal
 
-Sprint 30 is **complete**.  The scorecard verdict is REAL-WORLD IMPROVED BUT DOMAIN-SPECIFIC.
+Sprint 33 is **closing** as a documentation / memory-sync sprint.  The closure
+verdict is GENERALITY IS REAL BUT CONDITIONAL.
 
-Sprint 31 should run the Hillstrom benchmark as the first non-energy
-empirical test AND extend ERCOT to 10 seeds in parallel.  The ERCOT
-signal is real (COAST p=0.008) but confined to one domain.  The
-Hillstrom harness is merged and ready to run.
+Sprint 34 should draft the Open Bandit contract and multi-action
+architecture brief as one authoritative document.  This is explicitly
+not another immediate binary marketing rerun — Hillstrom and Criteo
+together answer the narrow binary marketing question.  The next frontier
+is logged multi-action / policy data.
 
 ## Current Sprint Status
+
+### Sprint 33
+
+Plan:
+
+1. [23-sprint-33-recommendation.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/23-sprint-33-recommendation.md)
+2. [24-sprint-34-recommendation.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/24-sprint-34-recommendation.md)
+
+Prompts:
+
+1. [sprint-33-criteo-benchmark-implementation.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/prompts/sprint-33-criteo-benchmark-implementation.md)
+2. [sprint-33-closure-scorecard.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/prompts/sprint-33-closure-scorecard.md)
+
+Merged PRs:
+
+1. `#180` merged
+   - PR: [#180](https://github.com/datablogin/causal-optimizer/pull/180)
+   - result: Criteo uplift benchmark Run 1 (degenerate 2-variable surface) exact-tie near-parity on B20/B40/B80 and mandatory Run 2 (synthesized f0-tertile segments) near-parity on B20/B40/B80; combined verdict NEAR-PARITY; Ax/BoTorch primary, 1M-row subsample of 13.98M-row dataset, 10 seeds, null control PASS, propensity gate PASS, ESS ~849,982 on optimized strategies
+
+Current Sprint 33 position:
+
+1. Criteo benchmark run and report: **complete** (PR #180 merged)
+2. Sprint 33 generalization scorecard and restart-doc sync: **closing** (this PR)
+3. verdict: **GENERALITY IS REAL BUT CONDITIONAL** — ERCOT remains the strongest real-world positive signal, Hillstrom is a real non-energy boundary favoring `surrogate_only` under RF fallback, Criteo is near-parity under Ax/BoTorch even after the mandatory heterogeneous follow-up, project remains a general causal research harness but current causal advantage over `surrogate_only` is conditional on landscape structure, noise burden, and search-space breadth
+4. Sprint 34: draft Open Bandit contract and multi-action architecture brief; not another binary marketing rerun
+
+### Sprint 32
+
+Merged PRs:
+
+1. `#178` merged
+   - PR: [#178](https://github.com/datablogin/causal-optimizer/pull/178)
+   - result: Criteo uplift benchmark contract (primary outcome `visit`, 1M-row fixed-seed subsample, IPS / ESS / null-control gates, mandatory Run 2 on near-parity)
+
+Current Sprint 32 position:
+
+1. Criteo benchmark contract: **complete** (PR #178 merged)
+2. verdict: contract pinned; execution deferred to Sprint 33
+
+### Sprint 31
+
+Plan:
+
+1. [22-sprint-31-generalization-research-plan.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/22-sprint-31-generalization-research-plan.md)
+
+Prompts:
+
+1. [sprint-31-hillstrom-benchmark-contract.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/prompts/sprint-31-hillstrom-benchmark-contract.md)
+2. [sprint-31-hillstrom-benchmark-implementation.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/prompts/sprint-31-hillstrom-benchmark-implementation.md)
+
+Merged PRs:
+
+1. `#174` merged
+   - PR: [#174](https://github.com/datablogin/causal-optimizer/pull/174)
+   - result: Criteo access and adapter-gap audit
+2. `#176` merged
+   - PR: [#176](https://github.com/datablogin/causal-optimizer/pull/176)
+   - result: Hillstrom benchmark report — pooled slice certified SURROGATE-ONLY ADVANTAGE at B20/B40/B80 (p=0.017 / 0.002 / 0.019); primary slice trending s.o. at B20 (p=0.060), certified s.o. at B40 (p=0.0001), near-parity at B80 (p=0.817) with bimodal causal tail; causal > random at primary B80 (p=0.0004); RF fallback backend; 10 seeds; 3-variable active search space
+
+Current Sprint 31 position:
+
+1. Hillstrom benchmark run and report: **complete** (PR #176 merged)
+2. Criteo access / adapter-gap audit: **complete** (PR #174 merged)
+3. ERCOT 10-seed rerun: not executed (still on backlog)
+4. verdict: **SURROGATE-ONLY ADVANTAGE** on Hillstrom pooled slice under RF fallback; first non-energy boundary is specific and diagnosable, not a general marketing claim
 
 ### Sprint 30
 
@@ -161,14 +232,15 @@ Merged PRs:
 
 ## Immediate Next Step
 
-Sprint 30 is complete.  Verdict: **REAL-WORLD IMPROVED BUT DOMAIN-SPECIFIC**.
-Sprint 31 is in progress.  If resuming:
+Sprint 33 is closing.  Verdict: **GENERALITY IS REAL BUT CONDITIONAL**.
+Sprint 34 is the Open Bandit contract / multi-action architecture lane.
+If resuming:
 
-1. read the [Sprint 30 reality-and-generalization scorecard](thoughts/shared/docs/sprint-30-reality-and-generalization-scorecard.md) for the full verdict
-2. read the [handoff document](thoughts/shared/docs/handoff.md) for Sprint 31 instructions
-3. run the Hillstrom benchmark harness with 10 seeds at B20/B40/B80 — first non-energy empirical test
-4. extend ERCOT to 10 seeds (5 incremental per strategy-budget-dataset)
-5. publish Sprint 31 generalization scorecard
+1. read the [Sprint 33 generalization scorecard](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-33-generalization-scorecard.md) for the synthesized verdict across ERCOT, Hillstrom, and Criteo
+2. read the [handoff document](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/handoff.md) for Sprint 34 instructions
+3. begin the [Sprint 34 recommendation](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/24-sprint-34-recommendation.md) by drafting the Open Bandit contract and multi-action architecture brief
+4. do not reopen Hillstrom or Criteo as the Sprint 34 main lane
+5. the ERCOT 10-seed rerun remains on the backlog but is not the Sprint 34 critical path
 
 ## Canonical Docs
 
@@ -429,6 +501,56 @@ What we learned:
 9. verdict: **REAL-WORLD IMPROVED BUT DOMAIN-SPECIFIC**
 10. Sprint 31: run Hillstrom + extend ERCOT to 10 seeds
 
+### Sprint 31 (First Non-Energy Real-Data Benchmark)
+
+Merged PRs:
+
+1. `#174` Criteo access and adapter-gap audit
+2. `#176` Hillstrom benchmark report
+
+What we learned:
+
+1. Hillstrom ran end-to-end on a real marketing dataset under the existing `MarketingLogAdapter`, confirming the generalization program is empirical rather than structural
+2. pooled slice returned certified `surrogate_only` advantage at B20/B40/B80 (p=0.017 / 0.002 / 0.019, two-sided MWU)
+3. primary slice was trending s.o. at B20 (p=0.060), certified s.o. at B40 (p=0.0001), near-parity at B80 (p=0.817) with a bimodal causal tail on seeds 7/8/9
+4. causal beat `random` at primary B80 (p=0.0004, 9/10 wins) — the causal path is not inert on Hillstrom
+5. the run was on the RF fallback backend, so it is a real non-energy boundary result under RF, not an Ax-primary refutation
+6. the 3-variable active search space is narrower than the rows with clearest synthetic causal wins — a plausible boundary condition on graph leverage
+7. the Hillstrom null-control pass has the caveat that permuted-outcome policy values can still exceed the simple baseline for some strategies, so primary-slice gains should not be read as clean treatment-effect evidence on their own
+8. the Criteo access audit confirmed that Criteo fits the existing adapter via a wrapper rather than needing a new multi-action architecture
+9. verdict: **SURROGATE-ONLY ADVANTAGE** on Hillstrom pooled slice; specific and diagnosable non-energy boundary, not a general marketing-domain claim
+
+### Sprint 32 (Criteo Benchmark Contract)
+
+Merged PRs:
+
+1. `#178` Criteo uplift benchmark contract
+
+What we learned:
+
+1. the contract pinned primary outcome (`visit`), secondary outcome (`conversion`), benchmark scale (1M-row fixed-seed subsample), IPS / ESS gates, null-control rules, propensity-gate behavior, and the mandatory Run 2 requirement on near-parity
+2. Criteo adapts to the existing `MarketingLogAdapter` via a wrapper; no adapter evolution required for the first run
+3. backend discipline is explicit in the contract: no mixing of Ax and RF within one verdict table
+4. verdict: contract merged; execution deferred to Sprint 33
+
+### Sprint 33 (First Ax-Primary Large-Scale Marketing Benchmark)
+
+Merged PRs:
+
+1. `#180` Criteo benchmark report (Run 1 + Run 2)
+
+What we learned:
+
+1. the engine runs cleanly on a 1M-row, 85:15 treatment-imbalanced, binary-outcome marketing log under Ax/BoTorch
+2. Run 1 on the degenerate 2-variable surface returned exact-tie near-parity on B20/B40/B80 (p=1.000), as the contract anticipated
+3. the mandatory Run 2 with synthesized f0-tertile segments also returned near-parity on B20/B40/B80 (p=0.168 / 1.000 / 0.368); heterogeneity did not unlock a causal advantage
+4. the propensity gate passed (max deviation 0.79pp vs 2pp threshold); IPS stack was stable at 85:15 imbalance (ESS ~849,982 on optimized strategies, no zero-support events)
+5. null control passed within the 5% band on all cells
+6. combined Criteo verdict per the Sprint 32 contract: **near-parity**
+7. Hillstrom and Criteo together answer the narrow binary-marketing question; Open Bandit is the right next frontier rather than a third binary uplift rerun
+8. closure verdict: **GENERALITY IS REAL BUT CONDITIONAL** — the engine remains a general causal research harness, but current causal advantage over `surrogate_only` is conditional on landscape structure, noise burden, and search-space breadth
+9. Sprint 34: Open Bandit contract / multi-action architecture brief
+
 ### Sprint 29 (Adaptive Causal Guidance Under Clean Backend Gates)
 
 Merged PRs:
@@ -487,41 +609,56 @@ Negative control:
 2. Sprint 26 intentionally did not rerun null control
 3. latest clean reruns stay within the `2%` tolerance
 
-### Non-Energy Benchmarks (Sprint 30, new)
+### Non-Energy Benchmarks (Sprint 31 + Sprint 33)
 
-1. Hillstrom email campaign: harness merged (PR #169), no results yet
-2. Criteo uplift: identified, not started
-3. Open Bandit Pipeline: identified, not started
+1. Hillstrom email campaign (RF fallback, 10 seeds, 3-variable active search space):
+   - primary B20: trending s.o. (p=0.060, 8/10 wins s.o.)
+   - primary B40: certified s.o. (p=0.0001, 10/10 wins s.o.)
+   - primary B80: near-parity with bimodal causal tail (p=0.817); causal > random certified (p=0.0004, 9/10 wins)
+   - pooled B20/B40/B80: certified s.o. (p=0.017 / 0.002 / 0.019)
+   - null-control pass has the caveat that permuted-outcome policy values can still exceed the simple baseline
+2. Criteo uplift (Ax/BoTorch, 10 seeds, 1M-row subsample of 13.98M-row dataset):
+   - Run 1 degenerate 2-variable surface B20/B40/B80: exact-tie near-parity (p=1.000 on all three)
+   - Run 2 synthesized f0-tertile segments B20/B40/B80: near-parity (p=0.168 / 1.000 / 0.368)
+   - propensity gate PASS (max deviation 0.79pp vs 2pp threshold)
+   - IPS stack stable at 85:15 treatment imbalance (ESS ~849,982 on optimized strategies, no zero-support events)
+   - null control PASS within 5% band on all cells
+   - combined Criteo verdict: near-parity
+3. Open Bandit Pipeline: identified, Sprint 34 frontier (contract sprint, not implementation)
 
 ## Current Conclusion
 
-The project is a **trustworthy automated research harness with a first real-world signal and a defined generalization path**.
+The project is a **trustworthy automated causal research harness with one real-world positive (ERCOT), one clean non-energy boundary (Hillstrom under RF), one near-parity large-scale marketing result (Criteo under Ax/BoTorch), and multi-action policy data as the next frontier**.
 
 What is now established:
 
 1. causal guidance wins on 3 of 7 synthetic benchmarks under Ax (medium, high, dose-response); base is trending; interaction is near-parity
 2. the Sprint 29 default change produced the first real-world causal vs surrogate-only differentiation on ERCOT (COAST p=0.008, NORTH_C p=0.059)
 3. causal still does not beat random on real ERCOT data
-4. the engine is architecturally domain-portable; the benchmark portfolio is empirically energy-dominated
-5. the Hillstrom harness is the first non-energy benchmark ready to run
-6. RF fallback is a secondary family-level regression signal, not a drop-in substitute for Ax-primary baselines
+4. the engine is architecturally domain-portable; the benchmark portfolio is empirically energy-dominated but Hillstrom (RF) and Criteo (Ax) now exist as real non-energy lanes
+5. Hillstrom returned a clean pooled-slice surrogate-only advantage on a narrow 3-variable search space under RF fallback; causal beats random at primary B80
+6. Criteo returned near-parity under Ax/BoTorch on both a degenerate 2-variable surface and the mandatory heterogeneous f0-tertile follow-up
+7. causal advantage over surrogate-only is currently conditional on landscape structure, noise burden, and search-space breadth; it is not a universal property of the engine
+8. RF fallback is a secondary family-level regression signal, not a drop-in substitute for Ax-primary baselines; Hillstrom and Criteo must not be folded into the same verdict row
 
-## Sprint 30 Exit Condition
+## Sprint 33 Exit Condition
 
-Sprint 30 is **complete**.  The scorecard verdict is REAL-WORLD IMPROVED BUT DOMAIN-SPECIFIC:
+Sprint 33 is **closing**.  The scorecard verdict is GENERALITY IS REAL BUT CONDITIONAL:
 
-1. COAST: causal certified > s.o. (p=0.008, 5 seeds)
-2. NORTH_C: causal trending > s.o. (p=0.059, 5 seeds)
-3. causal does not beat random on either ERCOT dataset
-4. portability brief re-anchored project as domain-agnostic
-5. Hillstrom harness merged, ready to run
-6. Sprint 31: run Hillstrom + extend ERCOT to 10 seeds
+1. ERCOT COAST: causal certified > s.o. (p=0.008, 5 seeds) — strongest real-world positive
+2. ERCOT NORTH_C: causal trending > s.o. (p=0.059, 5 seeds)
+3. causal still does not beat random on either ERCOT dataset
+4. Hillstrom pooled B20/B40/B80: certified s.o. advantage under RF fallback
+5. Criteo Run 1 + Run 2: combined near-parity under Ax/BoTorch
+6. synthetic Ax boundary unchanged since Sprint 29 (medium, high, dose-response certified; base trending; interaction near-parity)
+7. Sprint 34: Open Bandit contract / multi-action architecture brief, not another binary marketing rerun
 
 ## Practical Next Step
 
 If resuming from here:
 
-1. read the [Sprint 30 reality-and-generalization scorecard](thoughts/shared/docs/sprint-30-reality-and-generalization-scorecard.md) for the full verdict
-2. run the Hillstrom benchmark harness with 10 seeds at B20/B40/B80 — first non-energy empirical test
-3. extend ERCOT to 10 seeds (5 incremental per strategy-budget-dataset)
-4. publish Sprint 31 generalization scorecard
+1. read the [Sprint 33 generalization scorecard](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-33-generalization-scorecard.md) for the synthesized verdict
+2. read the [Sprint 34 recommendation](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/24-sprint-34-recommendation.md)
+3. draft the Open Bandit contract and multi-action architecture brief as one authoritative document
+4. keep the ERCOT 10-seed rerun on the backlog but do not make it the Sprint 34 critical path
+5. do not reopen Hillstrom or Criteo as the Sprint 34 main lane

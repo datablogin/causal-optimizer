@@ -4,17 +4,20 @@ Causally informed experiment optimization for teams trying to learn from experim
 
 ## Project Status
 
-This project has **characterized the boundary of causal advantage** across a 7-benchmark suite spanning 4 domain families.
+This project has **characterized the boundary of causal advantage** across synthetic and real-data benchmarks in energy and marketing, with multi-action policy data as the next frontier.
 
 What we can say confidently today:
 
 1. **Causal guidance wins on noisy, categorical-barrier landscapes.** On the demand-response family, medium-noise (9D, p=0.002) and high-noise (15D, p=0.001) show statistically significant causal wins. Base (5D) has an improved mean (1.01) but lost significance after the Sprint 29 default change (p=0.112, was 0.045).
 2. **Causal guidance wins on smooth dose-response landscapes under Ax/BoTorch.** On the dose-response benchmark (Emax curve, 6D), causal achieves near-zero regret (0.22, p=0.003, 9/10 wins). Under RF fallback, surrogate-only still wins — this row is Ax-primary.
-3. **Interaction is now near-parity.** Sprint 29 identified and removed harmful causal-weighted exploration, flipping the interaction row from surrogate-only advantage (p=0.014) to near-parity (causal 1.90 vs s.o. 2.18, p=0.225). No benchmark row now has a statistically significant surrogate-only advantage under Ax.
+3. **Interaction is now near-parity.** Sprint 29 identified and removed harmful causal-weighted exploration, flipping the interaction row from surrogate-only advantage (p=0.014) to near-parity (causal 1.90 vs s.o. 2.18, p=0.225). No synthetic benchmark row has a statistically significant surrogate-only advantage under Ax.
 4. **The crossover is structural, not dimensional.** The boundary depends on landscape family (categorical barriers, noise-to-signal ratio), not a single noise-dimension threshold.
-5. **Null control has been clean for 11 runs across Sprints 18--29** (S26 did not re-run), confirming the optimizer does not manufacture false signal.
+5. **Null control has been clean for 11 runs across Sprints 18--29** (S26 did not re-run), confirming the optimizer does not manufacture false signal. Hillstrom and Criteo null controls also passed (Hillstrom with the caveat that permuted-outcome policy values can exceed the simple baseline; Criteo within the 5% band on all cells).
 6. Sprint 30 produced the **first real-world causal vs surrogate-only differentiation** on ERCOT: COAST statistically significant (p=0.008, two-sided MWU, 5 seeds) and NORTH_C trending (p=0.059). Causal still does not beat random. Results are at 5 seeds and confined to energy forecasting.
-7. The benchmark stack is disciplined enough to catch false stories -- Sprint 21 rejected an attractive reranking idea that did not survive locked A/B attribution.
+7. Sprint 31 Hillstrom is a **real non-energy boundary result favoring surrogate-only** under the RF fallback backend: pooled slice certified s.o. at B20 (p=0.017), B40 (p=0.002), and B80 (p=0.019); primary slice trending s.o. at B20 (p=0.060), certified s.o. at B40 (p=0.0001), near-parity at B80 (p=0.817). Causal beat random at primary B80 (p=0.0004). The active search space was three variables wide.
+8. Sprint 33 Criteo is **near-parity under Ax/BoTorch** on a 1M-row subsample of the 13.98M-row dataset, even after the mandatory heterogeneous follow-up: Run 1 returned exact ties at B20/B40/B80 on a degenerate 2-variable surface; Run 2 with synthesized f0-tertile segments returned near-parity at B20/B40/B80 (p=0.168 / 1.000 / 0.368). Propensity gate passed (0.79pp vs 2pp threshold); IPS stack stable at 85:15 imbalance (ESS ~849,982 on optimized strategies).
+9. **Generalization is real but conditional.** The engine remains a general causal research harness, but current causal advantage over surrogate-only is conditional on landscape structure, noise burden, and search-space breadth — not a universal property across domains.
+10. The benchmark stack is disciplined enough to catch false stories -- Sprint 21 rejected an attractive reranking idea that did not survive locked A/B attribution.
 
 ## What This Repo Is
 
@@ -65,15 +68,23 @@ Sprint 30 retested the two real ERCOT forecasting benchmarks under the Sprint 29
 2. **NORTH_C B80**: causal trending better than surrogate-only (MAE 132.48 vs 132.98, p=0.059, 4/5 wins)
 3. `causal` still does not statistically beat `random` on either dataset
 4. all strategies still converge to `ridge`; improvement is in hyperparameters, not model class
-5. results at 5 seeds only; 10-seed rerun recommended for Sprint 31
+5. results at 5 seeds only; the 10-seed rerun remains on the backlog
 
 This breaks the long-standing "causal identical to surrogate-only on real data" result from Sprint 16. It is the first real-world evidence of causal vs surrogate-only differentiation, but not a full causal advantage claim.
 
-### 4. Attribution discipline rejected a false story
+### 4. Non-energy real-data benchmarks (Sprints 31 and 33)
+
+Sprint 31 ran **Hillstrom** (MineThatData email campaign, 64,000 rows) as the first non-energy real-data benchmark under the RF fallback backend on a 3-variable active search space. The pooled slice returned a certified `surrogate_only` advantage at B20 (p=0.017), B40 (p=0.002), and B80 (p=0.019). The primary slice was trending s.o. at B20 (p=0.060), certified s.o. at B40 (p=0.0001), and near-parity at B80 (p=0.817) with a bimodal causal tail that beat `random` (p=0.0004, 9/10 wins).
+
+Sprint 33 ran **Criteo uplift** (1M-row subsample of the 13.98M-row dataset) as the first Ax-primary marketing benchmark. Run 1 on a degenerate 2-variable surface returned exact-tie near-parity at B20/B40/B80 (p=1.000). The mandatory Run 2 with synthesized f0-tertile segments also returned near-parity at B20/B40/B80 (p=0.168 / 1.000 / 0.368). The propensity gate passed (max deviation 0.79pp vs 2pp threshold) and the IPS stack was stable at 85:15 treatment imbalance (ESS ~849,982 on optimized strategies, no zero-support events).
+
+Together, Hillstrom and Criteo show that the current binary-marketing contract is a near-parity / surrogate-only domain under the existing adapter. Sprint 34 moves the project to Open Bandit multi-action policy data rather than another immediate binary marketing rerun.
+
+### 5. Attribution discipline rejected a false story
 
 Sprint 20's post-merge rerun looked better. Sprint 21's locked A/B rerun then showed that the improvement was **not attributable** to balanced Ax reranking -- alignment-only was equal or better. That rejection strengthened the project's evidence standards and led to reverting balanced reranking in Sprint 22.
 
-### 5. Stability took four targeted fixes to achieve
+### 6. Stability took four targeted fixes to achieve
 
 The base-B80 catastrophic-seed problem (seeds locking into a bad categorical value during exploitation) resisted four fixes across Sprints 22--24 before Sprint 25's exploitation-phase categorical sweep resolved it (0/10 catastrophic, mean 1.13, std 1.40). The key insight was targeting the correct optimizer phase (exploitation, not optimization).
 
@@ -81,24 +92,31 @@ The base-B80 catastrophic-seed problem (seeds locking into a bad categorical val
 
 If you want the shortest honest summary:
 
-1. we have **statistically significant causal wins on 3 of 7 benchmarks** under Ax/BoTorch (medium p=0.002, high p=0.001, dose-response p=0.003), with base trending (p=0.112, mean improved from 1.13 to 1.01 but no longer significant after the Sprint 29 default change)
-2. **no benchmark row has a statistically significant surrogate-only advantage** under Ax — Sprint 29 flipped the interaction row from s.o. winning to near-parity
+1. we have **statistically significant causal wins on 3 of 7 synthetic benchmarks** under Ax/BoTorch (medium p=0.002, high p=0.001, dose-response p=0.003), with base trending (p=0.112, mean improved from 1.13 to 1.01 but no longer significant after the Sprint 29 default change)
+2. **no synthetic benchmark row has a statistically significant surrogate-only advantage** under Ax — Sprint 29 flipped the interaction row from s.o. winning to near-parity
 3. backend matters: dose-response and base energy are Ax-primary (surrogate-only wins under RF fallback)
-4. Sprint 30 produced the **first real-world causal vs surrogate-only differentiation** on ERCOT (COAST p=0.008, NORTH_C p=0.059) but causal does not yet beat random
-5. we have enough rigor to reject optimizer stories that do not survive attribution (Sprint 21) and stability gates that took 4 targeted fixes to pass (Sprint 25)
+4. Sprint 30 produced the **first real-world causal vs surrogate-only differentiation** on ERCOT (COAST p=0.008, NORTH_C p=0.059) but causal does not yet beat random on real data
+5. Sprint 31 Hillstrom and Sprint 33 Criteo are the two merged non-energy real-data benchmarks: Hillstrom is a certified `surrogate_only` advantage on the pooled slice under RF fallback; Criteo is near-parity under Ax/BoTorch even after the mandatory heterogeneous follow-up
+6. **generalization is real but conditional** — the engine remains a general causal research harness, but current causal advantage is conditional on landscape structure, noise burden, and search-space breadth
+7. we have enough rigor to reject optimizer stories that do not survive attribution (Sprint 21) and stability gates that took 4 targeted fixes to pass (Sprint 25)
 
 ## Key Documents
 
-1. [Sprint 30 Reality-and-Generalization Scorecard](thoughts/shared/docs/sprint-30-reality-and-generalization-scorecard.md) -- REAL-WORLD IMPROVED BUT DOMAIN-SPECIFIC
-2. [Sprint 30 ERCOT Reality Report](thoughts/shared/docs/sprint-30-ercot-reality-report.md) -- first real-world causal vs s.o. differentiation
-3. [Sprint 30 Portability Brief](thoughts/shared/docs/sprint-30-general-causal-portability-brief.md) -- domain-agnostic re-anchoring
-4. [Sprint 29 Optimizer-Core Scorecard](thoughts/shared/docs/sprint-29-optimizer-core-scorecard.md) -- GENERALITY IMPROVED after removing causal-weighted exploration
-5. [Sprint 28 Backend Baseline Scorecard](thoughts/shared/docs/sprint-28-backend-baseline-scorecard.md) -- Ax-primary vs RF-secondary classification
-6. [Sprint 27 Crossover Scorecard](thoughts/shared/docs/sprint-27-crossover-scorecard.md) -- where causal wins, ties, and loses
-7. [Sprint 25 Stability Scorecard](thoughts/shared/docs/sprint-25-stability-scorecard.md) -- exploitation-phase fix that resolved B80 catastrophic seeds
-8. [Sprint 26 Expansion Scorecard](thoughts/shared/docs/sprint-26-expansion-scorecard.md) -- benchmark expansion to interaction policy and dose-response
-9. [Sprint 21 Attribution Scorecard](thoughts/shared/docs/sprint-21-attribution-scorecard.md) -- locked A/B reranking attribution
-10. [Benchmark State](thoughts/shared/plans/07-benchmark-state.md)
+1. [Sprint 33 Generalization Scorecard](thoughts/shared/docs/sprint-33-generalization-scorecard.md) -- GENERALITY IS REAL BUT CONDITIONAL
+2. [Sprint 33 Criteo Benchmark Report](thoughts/shared/docs/sprint-33-criteo-benchmark-report.md) -- first Ax-primary marketing benchmark; near-parity verdict
+3. [Sprint 31 Hillstrom Benchmark Report](thoughts/shared/docs/sprint-31-hillstrom-benchmark-report.md) -- first non-energy real-data benchmark; pooled slice certified surrogate-only under RF
+4. [Sprint 31 Hillstrom Lessons Learned](thoughts/shared/docs/sprint-31-hillstrom-lessons-learned.md) -- interpretation of the first non-energy boundary
+5. [Sprint 30 Reality-and-Generalization Scorecard](thoughts/shared/docs/sprint-30-reality-and-generalization-scorecard.md) -- REAL-WORLD IMPROVED BUT DOMAIN-SPECIFIC
+6. [Sprint 30 ERCOT Reality Report](thoughts/shared/docs/sprint-30-ercot-reality-report.md) -- first real-world causal vs s.o. differentiation
+7. [Sprint 30 Portability Brief](thoughts/shared/docs/sprint-30-general-causal-portability-brief.md) -- domain-agnostic re-anchoring
+8. [Sprint 29 Optimizer-Core Scorecard](thoughts/shared/docs/sprint-29-optimizer-core-scorecard.md) -- GENERALITY IMPROVED after removing causal-weighted exploration
+9. [Sprint 28 Backend Baseline Scorecard](thoughts/shared/docs/sprint-28-backend-baseline-scorecard.md) -- Ax-primary vs RF-secondary classification
+10. [Sprint 27 Crossover Scorecard](thoughts/shared/docs/sprint-27-crossover-scorecard.md) -- where causal wins, ties, and loses
+11. [Sprint 26 Expansion Scorecard](thoughts/shared/docs/sprint-26-expansion-scorecard.md) -- benchmark expansion to interaction policy and dose-response
+12. [Sprint 25 Stability Scorecard](thoughts/shared/docs/sprint-25-stability-scorecard.md) -- exploitation-phase fix that resolved B80 catastrophic seeds
+13. [Sprint 21 Attribution Scorecard](thoughts/shared/docs/sprint-21-attribution-scorecard.md) -- locked A/B reranking attribution
+14. [Sprint 34 Recommendation](thoughts/shared/plans/24-sprint-34-recommendation.md) -- Open Bandit / multi-action frontier
+15. [Benchmark State](thoughts/shared/plans/07-benchmark-state.md)
 
 ## Install
 
