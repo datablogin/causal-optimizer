@@ -402,7 +402,7 @@ Per the [Sprint 34 recommendation](../plans/24-sprint-34-recommendation.md):
 2. [Sprint 30 ERCOT reality report](sprint-30-ercot-reality-report.md) -- PR #166
 3. [Sprint 30 portability brief](sprint-30-general-causal-portability-brief.md) -- PR #165
 4. [Sprint 31 Hillstrom benchmark report](sprint-31-hillstrom-benchmark-report.md) -- PR #176
-5. [Sprint 31 Hillstrom lessons learned](sprint-31-hillstrom-lessons-learned.md)
+5. [Sprint 31 Hillstrom lessons learned](sprint-31-hillstrom-lessons-learned.md) -- local note authored alongside PR #176, not separately merged
 6. [Sprint 32 Criteo benchmark contract](sprint-32-criteo-benchmark-contract.md) -- PR #178
 7. [Sprint 33 Criteo benchmark report](sprint-33-criteo-benchmark-report.md) -- PR #180
 8. [Sprint 29 optimizer-core scorecard](sprint-29-optimizer-core-scorecard.md) -- PR #161
