@@ -30,15 +30,15 @@ is required before publishing the final Criteo verdict.
 
 | Property | Value |
 |----------|-------|
-| Source dataset | Criteo Uplift v2.1 (13,979,592 rows) |
+| Source file | Criteo Uplift v2.1 (13,979,592 rows) |
+| Source file SHA-256 | `2716e1bf0fd157a93b5bf86924d9088419dfbac2022c6cd90030220634f616dc` |
+| Source file size | 311,422,618 bytes (compressed .csv.gz) |
 | Subsample | 1,000,000 rows, fixed seed 20260417 |
-| SHA-256 (subsample) | `2716e1bf0fd157a93b5bf86924d9088419dfbac2022c6cd90030220634f616dc` |
-| File size | 311,422,618 bytes |
-| Treatment ratio | 0.8500 (85:15) |
-| Visit rate | 0.0469 (4.69%) |
-| Conversion rate | 0.002882 |
-| Control count | 150,018 |
-| Treated count | 849,982 |
+| Subsample treatment ratio | 0.8500 (85:15) |
+| Subsample visit rate | 0.0469 (4.69%) |
+| Subsample conversion rate | 0.002882 |
+| Subsample control count | 150,018 |
+| Subsample treated count | 849,982 |
 
 ## Configuration
 
@@ -268,10 +268,10 @@ provide enough leverage for graph-guided focus to improve over a pure surrogate.
 
 ## Reproducibility
 
-- **Subsample seed:** 20260417 (fixed)
-- **SHA-256:** `2716e1bf0fd157a93b5bf86924d9088419dfbac2022c6cd90030220634f616dc`
-- **File size:** 311,422,618 bytes (uncompressed subsample)
-- **Source:** Criteo Uplift v2.1, available from the Criteo AI Lab
+- **Source file:** Criteo Uplift v2.1, available from the Criteo AI Lab
+- **Source file SHA-256:** `2716e1bf0fd157a93b5bf86924d9088419dfbac2022c6cd90030220634f616dc`
+- **Source file size:** 311,422,618 bytes (compressed .csv.gz)
+- **Subsample seed:** 20260417 (fixed, 1M rows drawn via `DataFrame.sample`)
 
 ## Attribution
 
