@@ -19,6 +19,24 @@ from causal_optimizer.benchmarks.counterfactual_variants import (
     HighNoiseDemandResponse,
     MediumNoiseDemandResponse,
 )
+from causal_optimizer.benchmarks.criteo import (
+    CRITEO_ENGINE_OBJECTIVE,
+    CRITEO_FROZEN_PARAMS,
+    CRITEO_PROPENSITY,
+    CRITEO_SAMPLE_SEED,
+    CriteoBenchmarkResult,
+    CriteoPolicyRunner,
+    CriteoScenario,
+    criteo_active_search_space,
+    criteo_null_baseline,
+    criteo_projected_prior_graph,
+    load_criteo_subsample,
+    permute_criteo_visit,
+    run_propensity_gate,
+)
+from causal_optimizer.benchmarks.criteo import (
+    VALID_STRATEGIES as CRITEO_VALID_STRATEGIES,
+)
 from causal_optimizer.benchmarks.dose_response import (
     DoseResponseBenchmarkResult,
     DoseResponseScenario,
@@ -98,6 +116,14 @@ class BenchmarkSCM(Protocol):
 
 
 __all__ = [
+    "CRITEO_ENGINE_OBJECTIVE",
+    "CRITEO_FROZEN_PARAMS",
+    "CRITEO_PROPENSITY",
+    "CRITEO_SAMPLE_SEED",
+    "CRITEO_VALID_STRATEGIES",
+    "CriteoBenchmarkResult",
+    "CriteoPolicyRunner",
+    "CriteoScenario",
     "HILLSTROM_FROZEN_PARAMS",
     "HILLSTROM_POOLED_PROPENSITY",
     "HILLSTROM_PRIMARY_PROPENSITY",
@@ -128,6 +154,9 @@ __all__ = [
     "ToyGraphBenchmark",
     "ValidationEnergyRunner",
     "check_null_signal",
+    "criteo_active_search_space",
+    "criteo_null_baseline",
+    "criteo_projected_prior_graph",
     "dose_response_effect",
     "evaluate_interaction_policy",
     "evaluate_on_test",
@@ -139,12 +168,15 @@ __all__ = [
     "interaction_propensity",
     "interaction_treatment_effect",
     "load_energy_frame",
+    "load_criteo_subsample",
     "load_hillstrom_slice",
     "net_benefit",
+    "permute_criteo_visit",
     "permute_hillstrom_spend",
     "permute_target",
     "propensity",
     "run_null_strategy",
+    "run_propensity_gate",
     "sample_random_params",
     "split_time_frame",
     "treatment_effect",
