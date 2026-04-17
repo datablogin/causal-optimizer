@@ -144,7 +144,7 @@ Current Sprint 30 position:
 
 1. `#162` ERCOT reality gate: **complete** (PR #166 merged)
 2. `#163` portability brief: **complete** (PR #165 merged)
-3. `#164` scorecard: **complete** (this PR)
+3. `#164` scorecard: **complete** (PR #175 merged)
 4. `#168` Hillstrom harness: **complete** (PR #169 merged)
 5. verdict: **REAL-WORLD IMPROVED BUT DOMAIN-SPECIFIC** — first ERCOT
    causal vs s.o. differentiation (COAST p=0.008, NORTH_C p=0.059),
@@ -183,6 +183,10 @@ Merged PRs:
 4. `#160` merged
    - PR: [#160](https://github.com/datablogin/causal-optimizer/pull/160)
    - result: production default `causal_exploration_weight` changed from `0.3` to `0.0`; `causal_softness` left unchanged at `0.5`
+5. `#161` merged
+   - PR: [#161](https://github.com/datablogin/causal-optimizer/pull/161)
+   - issue: `#154` closed
+   - result: Ax-primary regression gate and optimizer-core scorecard, verdict **GENERALITY IMPROVED**
 
 Current Sprint 29 position:
 

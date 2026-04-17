@@ -1,6 +1,7 @@
 # Sprint 31 Hillstrom Lessons Learned
 
 **Date:** 2026-04-16
+**Updated:** 2026-04-17 (Sprint 33 closure status note added to Sprint 32 Recommendation)
 **Sprint:** 31
 **Predecessors:**
 - PR #169 -- Hillstrom benchmark harness

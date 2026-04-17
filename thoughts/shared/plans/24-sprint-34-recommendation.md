@@ -6,7 +6,7 @@ Updated: 2026-04-17
 
 **General Causal Autoresearch: Multi-Action Expansion After Binary Marketing Boundary-Mapping**
 
-Sprint 33 should close with a clear empirical answer on the current binary
+Sprint 33 closed with a clear empirical answer on the current binary
 marketing line:
 
 1. Hillstrom gave the first non-energy real-data result and favored
