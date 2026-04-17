@@ -140,6 +140,14 @@ problem class.
 
 ## Sprint 32 Recommendation
 
+> **Status note (added during Sprint 33 closure, 2026-04-17):** Sprint 32
+> executed this recommendation; the Criteo contract was merged as
+> [PR #178](https://github.com/datablogin/causal-optimizer/pull/178) and
+> Sprint 33 executed it in
+> [PR #180](https://github.com/datablogin/causal-optimizer/pull/180).
+> The verdict came back as near-parity. The recommendation below is
+> preserved as the Sprint 31 lesson-learned snapshot.
+
 Sprint 32 should open the Criteo line with a **benchmark contract sprint**,
 not a full implementation sprint.
 
