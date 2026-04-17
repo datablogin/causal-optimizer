@@ -252,7 +252,7 @@ Sprint 33. The Sprint 29 Ax-primary table still holds:
 | 2 | Medium-noise | 1.19 | 0.002 | Certified causal win |
 | 3 | High-noise | 1.08 | 0.001 | Certified causal win |
 | 4 | Confounded | -- | -- | All strategies misled |
-| 5 | Null control | 0.2% max delta | PASS | 11th clean run (through S28) |
+| 5 | Null control | 0.2% max delta | PASS | 11th clean synthetic run (through S29, S26 did not rerun) |
 | 6 | Interaction policy | 1.90 | 0.225 | Near-parity (was s.o.) |
 | 7 | Dose-response | 0.22 | 0.003 | Certified causal win (Ax-primary) |
 
@@ -338,7 +338,7 @@ Alternative verdicts considered and rejected:
 |-------------|-----|--------|------|
 | Criteo benchmark contract (Sprint 32) | #178 | Merged | Pinned the executable Criteo shape |
 | Criteo benchmark report (Run 1 + Run 2) | #180 | Merged | First Ax-primary marketing benchmark; near-parity verdict |
-| Sprint 31 Hillstrom lessons learned | local doc | In this PR | Captures the specific Hillstrom boundary |
+| Sprint 31 Hillstrom lessons learned | local doc | Not tracked by this PR (local note authored alongside PR #176) | Captures the specific Hillstrom boundary |
 | This scorecard | (this PR) | This PR | Sprint 33 closure and Sprint 34 bridge |
 
 ## 5. What Changed Between Sprint 30 And Sprint 33
