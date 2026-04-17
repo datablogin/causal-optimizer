@@ -52,13 +52,13 @@ is logged multi-action / policy data.
 
 Plan:
 
-1. [23-sprint-33-recommendation.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/23-sprint-33-recommendation.md)
-2. [24-sprint-34-recommendation.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/24-sprint-34-recommendation.md)
+1. [23-sprint-33-recommendation.md](23-sprint-33-recommendation.md)
+2. [24-sprint-34-recommendation.md](24-sprint-34-recommendation.md)
 
 Prompts:
 
-1. [sprint-33-criteo-benchmark-implementation.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/prompts/sprint-33-criteo-benchmark-implementation.md)
-2. [sprint-33-closure-scorecard.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/prompts/sprint-33-closure-scorecard.md)
+1. [sprint-33-criteo-benchmark-implementation.md](../prompts/sprint-33-criteo-benchmark-implementation.md)
+2. [sprint-33-closure-scorecard.md](../prompts/sprint-33-closure-scorecard.md)
 
 Merged PRs:
 
@@ -90,12 +90,12 @@ Current Sprint 32 position:
 
 Plan:
 
-1. [22-sprint-31-generalization-research-plan.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/22-sprint-31-generalization-research-plan.md)
+1. [22-sprint-31-generalization-research-plan.md](22-sprint-31-generalization-research-plan.md)
 
 Prompts:
 
-1. [sprint-31-hillstrom-benchmark-contract.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/prompts/sprint-31-hillstrom-benchmark-contract.md)
-2. [sprint-31-hillstrom-benchmark-implementation.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/prompts/sprint-31-hillstrom-benchmark-implementation.md)
+1. [sprint-31-hillstrom-benchmark-contract.md](../prompts/sprint-31-hillstrom-benchmark-contract.md)
+2. [sprint-31-hillstrom-benchmark-implementation.md](../prompts/sprint-31-hillstrom-benchmark-implementation.md)
 
 Merged PRs:
 
@@ -240,9 +240,9 @@ Sprint 33 is closing.  Verdict: **GENERALITY IS REAL BUT CONDITIONAL**.
 Sprint 34 is the Open Bandit contract / multi-action architecture lane.
 If resuming:
 
-1. read the [Sprint 33 generalization scorecard](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-33-generalization-scorecard.md) for the synthesized verdict across ERCOT, Hillstrom, and Criteo
-2. read the [handoff document](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/handoff.md) for Sprint 34 instructions
-3. begin the [Sprint 34 recommendation](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/24-sprint-34-recommendation.md) by drafting the Open Bandit contract and multi-action architecture brief
+1. read the [Sprint 33 generalization scorecard](../docs/sprint-33-generalization-scorecard.md) for the synthesized verdict across ERCOT, Hillstrom, and Criteo
+2. read the [handoff document](../docs/handoff.md) for Sprint 34 instructions
+3. begin the [Sprint 34 recommendation](24-sprint-34-recommendation.md) by drafting the Open Bandit contract and multi-action architecture brief
 4. do not reopen Hillstrom or Criteo as the Sprint 34 main lane
 5. the ERCOT 10-seed rerun remains on the backlog but is not the Sprint 34 critical path
 
@@ -661,8 +661,8 @@ Sprint 33 is **closing**.  The scorecard verdict is GENERALITY IS REAL BUT CONDI
 
 If resuming from here:
 
-1. read the [Sprint 33 generalization scorecard](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-33-generalization-scorecard.md) for the synthesized verdict
-2. read the [Sprint 34 recommendation](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/24-sprint-34-recommendation.md)
+1. read the [Sprint 33 generalization scorecard](../docs/sprint-33-generalization-scorecard.md) for the synthesized verdict
+2. read the [Sprint 34 recommendation](24-sprint-34-recommendation.md)
 3. draft the Open Bandit contract and multi-action architecture brief as one authoritative document
 4. keep the ERCOT 10-seed rerun on the backlog but do not make it the Sprint 34 critical path
 5. do not reopen Hillstrom or Criteo as the Sprint 34 main lane

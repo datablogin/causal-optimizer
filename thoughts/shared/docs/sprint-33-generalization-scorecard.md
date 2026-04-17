@@ -127,7 +127,7 @@ returned near-parity:
 |--------|----------------|------------------|----------------|
 | B20 | causal 10/10 corner; s.o. misses on some | 0.168 | Near-parity |
 | B40 | identical all 10 seeds | 1.000 | Near-parity |
-| B80 | identical all 10 seeds | 0.368 | Near-parity |
+| B80 | near-identical; minor seed-level divergence | 0.368 | Near-parity |
 
 Source: [Sprint 33 Criteo benchmark report](sprint-33-criteo-benchmark-report.md) (PR #180).
 
@@ -345,7 +345,7 @@ Alternative verdicts considered and rejected:
 |-------------|-----|--------|------|
 | Criteo benchmark contract (Sprint 32) | #178 | Merged | Pinned the executable Criteo shape |
 | Criteo benchmark report (Run 1 + Run 2) | #180 | Merged | First Ax-primary marketing benchmark; near-parity verdict |
-| Sprint 31 Hillstrom lessons learned | local doc | Not tracked by this PR (local note authored alongside PR #176) | Captures the specific Hillstrom boundary |
+| Sprint 31 Hillstrom lessons learned | (this PR) | Committed here | Captures the specific Hillstrom boundary; originally authored alongside PR #176 |
 | This scorecard | (this PR) | This PR | Sprint 33 closure and Sprint 34 bridge |
 
 ## 5. What Changed Between Sprint 30 And Sprint 33

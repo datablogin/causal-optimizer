@@ -135,21 +135,21 @@ Per the [Sprint 34 recommendation](../plans/24-sprint-34-recommendation.md):
 
 ## Files To Read First
 
-1. [07-benchmark-state.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/07-benchmark-state.md)
-2. [sprint-33-generalization-scorecard.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-33-generalization-scorecard.md)
-3. [sprint-33-criteo-benchmark-report.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-33-criteo-benchmark-report.md)
-4. [sprint-31-hillstrom-benchmark-report.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-31-hillstrom-benchmark-report.md)
-5. [sprint-31-hillstrom-lessons-learned.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-31-hillstrom-lessons-learned.md)
-6. [sprint-30-reality-and-generalization-scorecard.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-30-reality-and-generalization-scorecard.md)
-7. [sprint-30-general-causal-portability-brief.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-30-general-causal-portability-brief.md)
-8. [24-sprint-34-recommendation.md](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/24-sprint-34-recommendation.md)
+1. [07-benchmark-state.md](../plans/07-benchmark-state.md)
+2. [sprint-33-generalization-scorecard.md](sprint-33-generalization-scorecard.md)
+3. [sprint-33-criteo-benchmark-report.md](sprint-33-criteo-benchmark-report.md)
+4. [sprint-31-hillstrom-benchmark-report.md](sprint-31-hillstrom-benchmark-report.md)
+5. [sprint-31-hillstrom-lessons-learned.md](sprint-31-hillstrom-lessons-learned.md)
+6. [sprint-30-reality-and-generalization-scorecard.md](sprint-30-reality-and-generalization-scorecard.md)
+7. [sprint-30-general-causal-portability-brief.md](sprint-30-general-causal-portability-brief.md)
+8. [24-sprint-34-recommendation.md](../plans/24-sprint-34-recommendation.md)
 
 ## Immediate Instructions For The Next Agent
 
 After Sprint 33 closure merges:
 
-1. Read the [Sprint 33 generalization scorecard](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-33-generalization-scorecard.md) for the synthesized verdict.
-2. Begin Sprint 34 by drafting the Open Bandit contract and multi-action architecture brief per the [Sprint 34 recommendation](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/24-sprint-34-recommendation.md).
+1. Read the [Sprint 33 generalization scorecard](sprint-33-generalization-scorecard.md) for the synthesized verdict.
+2. Begin Sprint 34 by drafting the Open Bandit contract and multi-action architecture brief per the [Sprint 34 recommendation](../plans/24-sprint-34-recommendation.md).
 3. Do not reopen Hillstrom or Criteo as the Sprint 34 main lane.
 4. Do not claim `causal` beats `random` on real data; ERCOT has not closed that gap.
 
