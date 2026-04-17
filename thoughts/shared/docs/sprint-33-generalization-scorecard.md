@@ -38,7 +38,7 @@ change produced a durable separation between `causal` and
 | COAST | causal vs s.o. | -0.842 | **0.008** | 5/5 | 5 | Certified |
 | COAST | causal vs random | -0.332 | 0.690 | 3/5 | 5 | Not significant |
 | NORTH_C | causal vs s.o. | -0.498 | **0.059** | 4/5 | 5 | Trending |
-| NORTH_C | causal vs random | +0.129 | 0.402 | 1/5 | 5 | Not significant (random mean lower) |
+| NORTH_C | causal vs random | +0.129 | 0.402 | 1/5 | 5 | Not significant (random has lower MAE) |
 
 Source: [Sprint 30 ERCOT reality report](sprint-30-ercot-reality-report.md) (PR #166).
 
@@ -288,7 +288,10 @@ reports when Cohen's d is quoted.
 1. Null control passed on Hillstrom and Criteo (Run 1 and Run 2). The
    Criteo null band was tight; the Hillstrom null-control pass had the
    known caveat that permuted-outcome policy values can still exceed
-   the simple baseline.
+   the simple baseline. Including the 11 synthetic clean runs through
+   Sprint 29 (S26 did not rerun), Hillstrom (1), and Criteo Run 1
+   and Run 2 (2), the project now counts 14 null-control passes across
+   synthetic, energy, and marketing domains.
 2. IPS diagnostics on Criteo were stable at 85:15 imbalance (ESS
    ~849,982 on the optimized strategies, zero zero-support events).
 3. The propensity gate on the Criteo 1M subsample passed (max deviation
