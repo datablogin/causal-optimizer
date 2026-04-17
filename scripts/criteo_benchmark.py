@@ -111,6 +111,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Also run each strategy on permuted-outcome data (B20 and B40 only).",
     )
     parser.add_argument(
+        "--synthesize-segment",
+        action="store_true",
+        help=(
+            "Synthesize segment from f0 tertiles (Run 2 heterogeneous surface). "
+            "When not set, segment is omitted (Run 1 degenerate surface)."
+        ),
+    )
+    parser.add_argument(
         "--skip-propensity-gate",
         action="store_true",
         help="Skip the propensity heterogeneity gate (for CI fixture runs).",
@@ -269,7 +277,9 @@ def main() -> None:
     else:
         propensity_gate_result = {"passed": True, "note": "gate skipped"}
 
-    reshaped = load_criteo_subsample(raw)
+    reshaped = load_criteo_subsample(raw, synthesize_segment=args.synthesize_segment)
+    if args.synthesize_segment:
+        logger.info("Synthesized segment from f0 tertiles (Run 2 heterogeneous surface)")
     scenario = CriteoScenario(reshaped)
     logger.info(
         "Prepared scenario: %d rows, μ=%.6f",
@@ -354,6 +364,7 @@ def main() -> None:
             "projected_graph_edges": [list(edge) for edge in projected_graph.edges],
             "null_baseline": scenario.null_baseline,
             "null_control_enabled": bool(args.null_control),
+            "synthesize_segment": bool(args.synthesize_segment),
             "propensity_gate": propensity_gate_result,
         }
     )

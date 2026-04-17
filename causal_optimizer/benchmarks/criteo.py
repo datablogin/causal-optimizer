@@ -115,6 +115,7 @@ def load_criteo_subsample(
     *,
     treated_cost: float = CRITEO_TREATED_COST,
     control_cost: float = CRITEO_CONTROL_COST,
+    synthesize_segment: bool = False,
 ) -> pd.DataFrame:
     """Reshape a Criteo frame into the ``MarketingLogAdapter`` schema.
 
@@ -126,14 +127,17 @@ def load_criteo_subsample(
     - constant ``channel``: ``"email"``
     - ``conversion`` retained as secondary outcome
 
-    The ``segment`` column is omitted (Run 1 degenerate surface).
-    Features ``f0``-``f11`` and ``exposure`` are dropped from the
-    adapter input but ``f0`` is retained for the propensity gate.
+    When ``synthesize_segment`` is ``False`` (Run 1), the ``segment``
+    column is omitted (degenerate surface). When ``True`` (Run 2),
+    ``f0`` tertiles are mapped to ``"high_value"`` / ``"medium"`` /
+    ``"low"`` per Sprint 32 contract Section 5f.
 
     Args:
         raw: DataFrame with the Criteo column schema.
         treated_cost: Per-treated-row fixed cost.
         control_cost: Per-control-row fixed cost.
+        synthesize_segment: When ``True``, derive ``segment`` from
+            ``f0`` tertiles for the heterogeneous-surface Run 2.
 
     Returns:
         A new DataFrame with the ``MarketingLogAdapter`` required
@@ -162,7 +166,14 @@ def load_criteo_subsample(
         }
     )
 
-    # Retain f0 for propensity gate diagnostics (not passed to adapter)
+    if synthesize_segment and "f0" in raw.columns:
+        # Map f0 tertiles to segment labels per contract Section 5f
+        tertile_labels = pd.qcut(
+            raw["f0"], q=3, labels=["low", "medium", "high_value"], duplicates="drop"
+        )
+        result["segment"] = tertile_labels.astype(str)
+
+    # Retain f0 for propensity gate diagnostics
     if "f0" in raw.columns:
         result["f0"] = raw["f0"].values
 
