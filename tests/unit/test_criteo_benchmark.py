@@ -367,3 +367,56 @@ class TestActiveParamsInvariant:
         }
         with pytest.raises(RuntimeError, match="unexpected keys"):
             _check_active_params_invariant(leaked)
+
+
+# ── Synthesize segment (Run 2) ──────────────────────────────────────
+
+
+class TestSynthesizeSegment:
+    """Run 2 synthesized segment from f0 tertiles."""
+
+    def test_segment_column_created_when_f0_present(self, raw_criteo: pd.DataFrame) -> None:
+        df = load_criteo_subsample(raw_criteo, synthesize_segment=True)
+        assert "segment" in df.columns
+        assert set(df["segment"].unique()) <= {"low", "medium", "high_value"}
+
+    def test_segment_absent_when_flag_false(self, raw_criteo: pd.DataFrame) -> None:
+        df = load_criteo_subsample(raw_criteo, synthesize_segment=False)
+        assert "segment" not in df.columns
+
+    def test_segment_skipped_when_f0_missing(self) -> None:
+        raw = pd.DataFrame(
+            {"treatment": [0, 1, 0, 1], "visit": [0, 1, 0, 1], "conversion": [0, 0, 0, 1]}
+        )
+        df = load_criteo_subsample(raw, synthesize_segment=True)
+        assert "segment" not in df.columns
+
+
+# ── Engine-based scenario smoke test ─────────────────────────────────
+
+
+class TestScenarioEngine:
+    """Smoke test: surrogate_only and causal run on the fixture."""
+
+    def test_surrogate_only_runs(self, loaded_criteo: pd.DataFrame) -> None:
+        scenario = CriteoScenario(loaded_criteo)
+        result = scenario.run_strategy("surrogate_only", budget=3, seed=0)
+        assert np.isfinite(result.policy_value)
+        assert result.strategy == "surrogate_only"
+
+    def test_causal_runs(self, loaded_criteo: pd.DataFrame) -> None:
+        scenario = CriteoScenario(loaded_criteo)
+        result = scenario.run_strategy("causal", budget=3, seed=0)
+        assert np.isfinite(result.policy_value)
+        assert result.strategy == "causal"
+
+
+# ── Secondary arm aggregates edge case ───────────────────────────────
+
+
+class TestSecondaryArmAggregates:
+    def test_empty_when_conversion_missing(self, loaded_criteo: pd.DataFrame) -> None:
+        from causal_optimizer.benchmarks.criteo import _secondary_arm_aggregates
+
+        no_conv = loaded_criteo.drop(columns=["conversion"])
+        assert _secondary_arm_aggregates(no_conv) == {}
