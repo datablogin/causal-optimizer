@@ -92,7 +92,7 @@ Near-parity:
 Remaining boundary rows:
 
 1. confounded demand-response: all strategies misled
-2. null control: 11 clean runs across 12 sprint slots (through S28)
+2. null control: 11 clean runs across 12 sprint slots (through S29, S26 did not rerun); Hillstrom and Criteo also passed their null controls
 
 ### Real Energy Benchmarks (Sprint 30)
 
@@ -146,7 +146,7 @@ Per the [Sprint 34 recommendation](../plans/24-sprint-34-recommendation.md):
 
 ## Immediate Instructions For The Next Agent
 
-Sprint 33 closure is in flight. Once merged:
+After Sprint 33 closure merges:
 
 1. Read the [Sprint 33 generalization scorecard](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-33-generalization-scorecard.md) for the synthesized verdict.
 2. Begin Sprint 34 by drafting the Open Bandit contract and multi-action architecture brief per the [Sprint 34 recommendation](/Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/24-sprint-34-recommendation.md).
