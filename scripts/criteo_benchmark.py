@@ -278,8 +278,15 @@ def main() -> None:
         propensity_gate_result = {"passed": True, "note": "gate skipped"}
 
     reshaped = load_criteo_subsample(raw, synthesize_segment=args.synthesize_segment)
+    segment_synthesized = "segment" in reshaped.columns
     if args.synthesize_segment:
-        logger.info("Synthesized segment from f0 tertiles (Run 2 heterogeneous surface)")
+        if segment_synthesized:
+            logger.info("Synthesized segment from f0 tertiles (Run 2 heterogeneous surface)")
+        else:
+            logger.warning(
+                "--synthesize-segment was set but 'f0' is absent from the data; "
+                "segment synthesis was skipped. Run will proceed as Run 1 (degenerate surface)."
+            )
     scenario = CriteoScenario(reshaped)
     logger.info(
         "Prepared scenario: %d rows, μ=%.6f",
@@ -364,7 +371,7 @@ def main() -> None:
             "projected_graph_edges": [list(edge) for edge in projected_graph.edges],
             "null_baseline": scenario.null_baseline,
             "null_control_enabled": bool(args.null_control),
-            "synthesize_segment": bool(args.synthesize_segment),
+            "synthesize_segment": segment_synthesized,
             "propensity_gate": propensity_gate_result,
         }
     )
