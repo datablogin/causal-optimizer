@@ -1,4 +1,4 @@
-# Sprint 33 Criteo Benchmark Report (Run 1: Degenerate Surface)
+# Sprint 33 Criteo Benchmark Report
 
 **Date:** 2026-04-17
 **Issue:** #179
@@ -212,21 +212,59 @@ Null baseline mu = 0.046879 (raw visit rate on the unshuffled frame).
 3. Whether auto-discovered graphs would help on Criteo.
 4. Absolute incrementality levels (Criteo is non-uniformly subsampled).
 
-## Run 2 Status
+## Run 2: Heterogeneous Surface (Synthesized f0 Tertile Segments)
 
-Run 2 (synthesized f0 tertile segments: "high_value" / "medium" / "low") is
-required by the Sprint 32 contract before the final Criteo verdict can be
-published. Run 2 introduces genuine uplift heterogeneity across segments,
-creating a non-degenerate surface where the causal graph has the opportunity to
-provide differential value.
+Run 2 maps f0 tertiles to `"high_value"` / `"medium"` / `"low"` segment labels,
+introducing uplift-score heterogeneity per contract Section 5f. Suite runtime:
+2111.5 seconds (35.2 minutes). 150 total runs (90 real + 60 null-control).
 
-Per contract Section 8e, the combined Criteo verdict depends on the Run 2
-outcome:
+### Run 2 Summary Statistics
 
-- If Run 2 shows a causal win: **Conditional Criteo win** (causal guidance adds
-  value on structured surfaces but is inert on degenerate ones).
-- If Run 2 shows near-parity or surrogate-only advantage: **Criteo near-parity**
-  (neither path dominates on binary uplift policy problems under Criteo).
+| Strategy | Budget | Mean | Std (ddof=0) |
+|----------|--------|------|-------------|
+| random | 20 | 0.042202 | 0.000227 |
+| surrogate_only | 20 | 0.047883 | 0.001806 |
+| causal | 20 | 0.048485 | 0.000000 |
+| random | 40 | 0.042297 | 0.000146 |
+| surrogate_only | 40 | 0.048485 | 0.000000 |
+| causal | 40 | 0.048485 | 0.000000 |
+| random | 80 | 0.042342 | 0.000116 |
+| surrogate_only | 80 | 0.048485 | 0.000000 |
+| causal | 80 | 0.048485 | 0.000000 |
+
+The synthesized segments changed random's behavior: random now finds lower-value
+policies (~0.0423 vs 0.0480 in Run 1) because the heterogeneous segment scores
+create a surface where not all parameter combinations are equivalent. Both causal
+and surrogate_only still converge to the same treat-everyone corner (0.048485) on
+all seeds at B40 and B80. At B20, causal finds the corner on 10/10 seeds while
+surrogate_only misses on some (mean 0.04788), but this is not significant (p=0.168).
+
+### Run 2 MWU Tests (two-sided)
+
+| Budget | Comparison | p-value | Verdict |
+|--------|-----------|---------|---------|
+| B20 | causal vs s.o. | 0.168 | near-parity |
+| B40 | causal vs s.o. | 1.000 | near-parity |
+| B80 | causal vs s.o. | 0.368 | near-parity |
+
+### Run 2 Null Control
+
+All 6 strategy-budget cells pass within the 5% band. Null control: PASS.
+
+## Combined Verdict (Run 1 + Run 2)
+
+Per Sprint 32 contract Section 8e interpretation table:
+
+| Run 1 (degenerate) | Run 2 (heterogeneous) | Combined verdict |
+|--------------------|-----------------------|------------------|
+| Near-parity | Near-parity | **Criteo near-parity** |
+
+**Combined Criteo verdict: NEAR-PARITY.** The causal path does not differentiate
+from surrogate_only on the Criteo Uplift dataset regardless of whether the search
+surface is degenerate (Run 1) or heterogeneous (Run 2). Both strategies converge
+to the same treat-everyone corner. This is a surface-structure result: the
+2-variable search space with binary outcomes under 85:15 imbalance does not
+provide enough leverage for graph-guided focus to improve over a pure surrogate.
 
 ## Reproducibility
 
