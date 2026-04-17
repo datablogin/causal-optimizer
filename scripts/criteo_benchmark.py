@@ -219,7 +219,6 @@ def main() -> None:
         len(raw.columns),
     )
 
-    # Subsample if requested
     if args.subsample is not None and args.subsample < len(raw):
         logger.info(
             "Subsampling to %d rows with seed %d",
@@ -270,7 +269,6 @@ def main() -> None:
     else:
         propensity_gate_result = {"passed": True, "note": "gate skipped"}
 
-    # Reshape
     reshaped = load_criteo_subsample(raw)
     scenario = CriteoScenario(reshaped)
     logger.info(
@@ -280,7 +278,6 @@ def main() -> None:
     )
 
     results: list[CriteoBenchmarkResult] = []
-    # Real runs
     real_total = len(budgets) * len(seeds) * len(strategies)
     idx = 0
     t_suite_start = time.perf_counter()
@@ -345,7 +342,6 @@ def main() -> None:
 
     suite_runtime = time.perf_counter() - t_suite_start
 
-    # Assemble JSON artifact
     projected_graph = criteo_projected_prior_graph()
     criteo_provenance = _sanitize_for_json(
         {

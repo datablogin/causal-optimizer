@@ -69,9 +69,6 @@ CRITEO_SAMPLE_SEED: int = 20260417
 """Fixed seed for the 1M-row subsample. Every strategy-budget-seed
 combination operates on the same subsample."""
 
-CRITEO_FIXTURE_SEED: int = 20260417
-"""Seed used to generate the 3,000-row CI fixture."""
-
 CRITEO_TREATED_COST: float = 0.01
 """Synthetic per-treated-row cost. Does not affect ``policy_value``."""
 
@@ -285,20 +282,20 @@ def run_propensity_gate(
             "note": "f0 column not present; gate skipped",
         }
 
-    raw = raw.copy()
-    raw["f0_decile"] = pd.qcut(raw["f0"], q=10, labels=False, duplicates="drop")
-    decile_rates = raw.groupby("f0_decile")["treatment"].mean()
+    decile_labels = pd.qcut(raw["f0"], q=10, labels=False, duplicates="drop")
+    decile_rates = raw["treatment"].groupby(decile_labels).mean()
 
     rates_list = decile_rates.tolist()
     deviations = [abs(r - 0.85) for r in rates_list]
     max_dev = max(deviations)
     passed = max_dev <= threshold_pp
+    worst_idx = int(np.argmax(deviations))
 
     return passed, {
         "decile_treatment_rates": rates_list,
         "max_deviation": float(max_dev),
-        "worst_decile": int(np.argmax(deviations)),
-        "worst_rate": float(rates_list[int(np.argmax(deviations))]),
+        "worst_decile": worst_idx,
+        "worst_rate": float(rates_list[worst_idx]),
     }
 
 
@@ -317,7 +314,7 @@ def permute_criteo_visit(
         raise ValueError(f"column {outcome_col!r} not in reshaped frame")
     out = reshaped.copy()
     rng = np.random.default_rng(seed)
-    values = out[outcome_col].to_numpy().copy()
+    values = out[outcome_col].to_numpy(copy=True)
     rng.shuffle(values)
     out[outcome_col] = values
     return out
