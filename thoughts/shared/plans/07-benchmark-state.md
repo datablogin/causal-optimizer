@@ -581,7 +581,7 @@ ERCOT NORTH_C and COAST now show the first causal vs surrogate-only differentiat
 2. NORTH_C B80: causal trending better than s.o. (MAE 132.48 vs 132.98, two-sided MWU `p=0.059`, 4/5 wins)
 3. causal still does not statistically beat random on either dataset
 4. all strategies still converge to `ridge`
-5. results at 5 seeds only; 10-seed rerun recommended
+5. results at 5 seeds only; 10-seed rerun remains on the backlog
 
 Interpretation:
 

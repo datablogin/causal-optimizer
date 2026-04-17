@@ -187,6 +187,7 @@ Sprint 29. What has moved is the real-data evidence:
 | ERCOT COAST B80 | Ax | causal > s.o. certified (p=0.008, 5 seeds) |
 | ERCOT NORTH_C B80 | Ax | causal > s.o. trending (p=0.059, 5 seeds) |
 | Hillstrom pooled B20/B40/B80 | RF | s.o. > causal certified at all three |
+| Hillstrom primary B20 | RF | s.o. > causal trending (p=0.060) |
 | Hillstrom primary B40 | RF | s.o. > causal certified |
 | Hillstrom primary B80 | RF | near-parity (bimodal causal tail) |
 | Criteo Run 1 (B20/B40/B80) | Ax | near-parity (exact tie) |
@@ -404,7 +405,7 @@ Per the [Sprint 34 recommendation](../plans/24-sprint-34-recommendation.md):
 
 ### Source documents
 
-1. [Sprint 30 reality-and-generalization scorecard](sprint-30-reality-and-generalization-scorecard.md) -- PR #164
+1. [Sprint 30 reality-and-generalization scorecard](sprint-30-reality-and-generalization-scorecard.md) -- Issue #164 (scorecard delivered via PR #175)
 2. [Sprint 30 ERCOT reality report](sprint-30-ercot-reality-report.md) -- PR #166
 3. [Sprint 30 portability brief](sprint-30-general-causal-portability-brief.md) -- PR #165
 4. [Sprint 31 Hillstrom benchmark report](sprint-31-hillstrom-benchmark-report.md) -- PR #176

@@ -58,7 +58,7 @@ Sprint 27 completed a noise-dimension gradient study across the demand-response 
 
 Causal pruning provides stable performance across noise levels (B80 mean regret: 1.01, 1.19, 1.08). Surrogate-only degrades sharply (4.98, 9.61, 15.23). On the smooth dose-response landscape (6D), causal also wins under Ax/BoTorch (0.22, p=0.003) but surrogate-only wins under RF fallback.
 
-Sprint 29 removed harmful causal-weighted exploration, improving causal on every row. The interaction benchmark (7D, 3-way interaction surface) flipped from surrogate-only advantage to near-parity. No benchmark row now has a statistically significant surrogate-only advantage under Ax.
+Sprint 29 removed harmful causal-weighted exploration, improving causal on every row. The interaction benchmark (7D, 3-way interaction surface) flipped from surrogate-only advantage to near-parity. No synthetic benchmark row now has a statistically significant surrogate-only advantage under Ax.
 
 ### 3. First real-world signal on ERCOT (Sprint 30)
 
