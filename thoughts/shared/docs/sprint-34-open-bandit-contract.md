@@ -424,12 +424,13 @@ action-to-reward association the null control is meant to destroy, so the
 Section 7a implementation must permute across actions within each
 position-stratum.
 
-The permutation runs under **one fixed seed** per benchmark, reported in the
-provenance record. This matches the Hillstrom and Criteo null-control
-convention. Multiple permutation seeds are out of scope for Sprint 35. Rerun the full strategy sweep on the permuted
-dataset. The null-control pass requires that no strategy produces a policy
-value more than **5 percentage points** above the permuted baseline mean at
-any budget.
+The permutation runs under **one fixed seed** per benchmark (reported in the
+provenance record), matching the Hillstrom and Criteo null-control
+convention. Multiple permutation seeds are out of scope for Sprint 35.
+
+Rerun the full strategy sweep on the permuted dataset. The null-control pass
+requires that no strategy produces a policy value more than **5 percentage
+points** above the permuted baseline mean at any budget.
 
 The 5 percentage-point band mirrors the Criteo contract convention
 (translated into SNIPW-CTR units rather than visit-rate units).
