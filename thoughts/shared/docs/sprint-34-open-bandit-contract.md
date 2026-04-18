@@ -295,27 +295,33 @@ reported for cross-estimator stability, not as the headline.
 ### 5c. Propensity clipping policy
 
 SNIPW still needs a floor on the logged-policy propensity when the logger
-never sampled certain (action, context) pairs. Under Open Bandit's uniform
-Random policy, each logged row's `action_prob` is approximately
-`1 / n_items` — Saito et al. 2021 describe the Random logger as drawing each
-item uniformly at each position, yielding a per-(item, position) logged
-propensity of `1 / n_items`. On Men/Random the expected logged propensity is
-therefore `~1/34 ≈ 0.0294`. The first run must:
+never sampled certain (action, context) pairs. Open Bandit's Random logger
+draws each item uniformly at each position (Saito et al. 2021, paraphrased).
+The `action_prob` column in OBD stores the logged probability of the observed
+(item, position) pair. The first implementation sprint must confirm during
+smoke testing whether OBD's `action_prob` is stored as the conditional
+`P(item | position) = 1/n_items` or as the joint `P(item, position) = 1 /
+(n_items * n_positions)`. Both are consistent with the paper's description;
+the floor default below is chosen to stay safe under either interpretation.
+
+The first run must:
 
 1. clip logged propensities from below at a fixed floor `min_propensity_clip`
-   defaulting to `1 / (2 * n_items)` for the chosen campaign. On Men/Random
-   that is `1 / (2 * 34) ≈ 0.0147`, i.e. half the expected uniform-Random
-   propensity. This preserves the expected-case logged rows and only clips
-   rows whose logged propensity sits materially below the expected floor.
+   defaulting to `1 / (2 * n_items * n_positions)` for the chosen campaign,
+   i.e. `1 / (2 * 34 * 3) ≈ 0.00490` on Men/Random. This is the safe
+   lower-bound choice: if `action_prob` is the joint probability, this is
+   half the expected value (`~1/102`); if `action_prob` is the conditional
+   probability (`~1/34`), this is a conservative ~6% floor. The first
+   benchmark report must state which interpretation the OBD schema uses and
+   note whether the floor can be loosened on that basis in a later sprint.
 2. freeze `min_propensity_clip` in the first run (not tuned by the
    optimizer). This mirrors the Criteo contract Section 5 decision.
 3. report the **number of clipped rows** as a diagnostic.
 
-The same floor applies regardless of the Section 4c position-handling flag.
-`position_1_only` subsets the logged rows by position before IPS; it does
-not change the per-row logged propensity stored in `action_prob`. A future
-sprint that switches the first run to joint `(item, position)` evaluation
-should revisit the floor to `1 / (2 * n_items * n_positions)`.
+The floor applies to the per-row logged propensity stored in `action_prob`,
+independent of the Section 4c position-handling flag. `position_1_only`
+subsets the logged rows by position before IPS; it does not change the
+per-row logged propensity value, so the same floor applies.
 
 The first benchmark may revisit the clip threshold only if Run 1 post-hoc
 shows that >5% of rows are clipped; that would be a support-failure signal
@@ -376,9 +382,10 @@ and should be absent from the adapter return value.
 
 ### 6e. Verdict rule
 
-The first-run verdict is quoted on Men/Random under SNIPW at budget B80, as a
-two-sided MWU test of `causal` vs `surrogate_only` policy values across 10
-seeds. The Sprint 33 classification labels apply unchanged:
+The first-run verdict is quoted on Men/Random under SNIPW at budget B80
+(B20/B40/B80 refer to experiment-count budgets of 20, 40, and 80 under the
+benchmark convention established in Sprint 27), as a two-sided MWU test of
+`causal` vs `surrogate_only` policy values across 10 seeds. The Sprint 33 classification labels apply unchanged:
 
 1. "certified" at `p <= 0.05`
 2. "trending" at `0.05 < p <= 0.15`
@@ -401,11 +408,14 @@ Permute the logged reward column across rows under a fixed seed, so each
 from a different row's reward value. The within-row
 `(context, action, position, propensity)` structure stays intact; only the
 reward-to-row association is destroyed. The permutation **must be stratified
-by `position`**, so rewards are exchanged only between rows sharing the same
-position — this preserves the structural position-CTR difference (positions
-have materially different base click rates even under a random policy) and
-leaves the position-handling choice in Section 4c as the only control over
-position bias in the verdict. Rerun the full strategy sweep on the permuted
+by `position` and must NOT be stratified by `action`**. Stratifying by
+position preserves the structural position-CTR difference (positions have
+materially different base click rates even under a random policy) and leaves
+the position-handling choice in Section 4c as the only control over position
+bias in the verdict. Stratifying by action would partially preserve the
+action-to-reward association the null control is meant to destroy, so the
+Section 7a implementation must permute across actions within each
+position-stratum. Rerun the full strategy sweep on the permuted
 dataset. The null-control pass requires that no strategy produces a policy
 value more than **5 percentage points** above the permuted baseline mean at
 any budget.
@@ -419,10 +429,17 @@ document which strategy inflated on permuted outcomes.
 ### 7b. Support / effective sample size gate
 
 Across the 10 seeds, the median ESS of the IPS weights under the optimized
-policies must be at least `max(1000, n_rows / 100)`. For Men/Random
-(~453K rows), that is ~4,530 as the ESS floor. A run whose optimized
-policies' median ESS falls below this threshold is a support-failure row, and
-its verdict must be quoted with an explicit support-weakness caveat.
+policies must be at least `max(1000, n_rows / 100)`, where `n_rows` is the
+count of rows that actually enter the SNIPW sum under the Section 4c
+position-handling flag. On Men/Random with `"marginalize"` (all positions),
+`n_rows ≈ 453K` and the floor is ~4,530. On Men/Random with
+`"position_1_only"` (the first-run default), `n_rows ≈ 151K` and the floor
+is ~1,510. The floor is defined against the post-subsetting row count
+because the ESS is computed against that same set of rows.
+
+A run whose optimized policies' median ESS falls below this threshold is a
+support-failure row, and its verdict must be quoted with an explicit
+support-weakness caveat.
 
 This threshold is deliberately conservative for the first run. Tightening it
 is a Sprint 35 conversation, not a Sprint 34 one.
@@ -535,7 +552,8 @@ blur the contract.
 
 ## 10. Suggested Implementation Sprint Shape
 
-Sprint 34 delivers this contract. The recommended Sprint 35 issue shape is:
+Sprint 34 delivers this contract. The recommended Sprint 35 issue shape is
+three ordered issues with partial overlap (not strictly sequential):
 
 1. **Sprint 35 Issue A:** implement `BanditLogAdapter` (or chosen name) with
    the Section 4 interface, wired to OBP under the optional extra.
@@ -545,9 +563,10 @@ Sprint 34 delivers this contract. The recommended Sprint 35 issue shape is:
    B20/B40/B80, run the null control, produce the Sprint 35 Open Bandit
    benchmark report under the same format as the Criteo report.
 
-Each issue is one PR, reviewed independently. Issue A can land before Issues
-B and C; Issue B can be partially tested against a synthetic bandit feedback
-dict before Issue C consumes it.
+Each issue is one PR, reviewed independently. Issue A must land before Issue
+C can run, but Issue B can be drafted and partially tested against a
+synthetic bandit-feedback dict before Issue A lands, so A and B can overlap
+in development. Issue C is strictly downstream of both A and B.
 
 No implementation issue should open until this contract is merged.
 

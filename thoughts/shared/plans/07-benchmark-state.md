@@ -688,7 +688,7 @@ Sprint 33 is **complete** (PR #183 merged).  The scorecard verdict is GENERALITY
 The Sprint 34 Open Bandit contract ([sprint-34-open-bandit-contract.md](../docs/sprint-34-open-bandit-contract.md)) pins seven decisions for the first implementation sprint:
 
 1. First slice: ZOZOTOWN Men campaign, uniform-random logger (~453K rows, 34 actions, 3 positions, binary click reward)
-2. Adapter: a new `DomainAdapter` subclass parameterizing an item-scoring policy in a 6-to-9 variable search space (softmax temperature, exploration epsilon, context-feature weights, a position-handling flag)
+2. Adapter: a new `DomainAdapter` subclass parameterizing an item-scoring policy in a 6-to-8 variable search space (softmax temperature, exploration epsilon, context-feature weights, a position-handling flag)
 3. OPE stack: SNIPW primary, DM and DR secondary, DRos deferred
 4. Objective: maximize SNIPW-estimated CTR; no revenue, no cost column, no multi-objective
 5. Support gates: null control (5-pp band), ESS floor `max(1000, n_rows/100)`, zero-support fraction `<= 10%`, propensity-mean sanity band, DR/SNIPW cross-check within 25% relative

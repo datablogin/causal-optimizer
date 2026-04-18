@@ -139,7 +139,7 @@ Per the [Sprint 34 recommendation](../plans/24-sprint-34-recommendation.md):
 The Sprint 34 Open Bandit contract is drafted and in review for issue [#182](https://github.com/datablogin/causal-optimizer/issues/182). See the full document at [sprint-34-open-bandit-contract.md](sprint-34-open-bandit-contract.md). Summary of the contract decisions:
 
 1. **First slice:** ZOZOTOWN Men campaign, uniform-random logger (~453K rows, 34 actions, 3 positions, binary click reward).
-2. **Adapter:** a new `DomainAdapter` subclass (not a subclass of `MarketingLogAdapter`). Parameterizes an item-scoring policy in a 6-to-9 variable search space (softmax temperature, exploration epsilon, a small set of context-feature weights, a position-handling flag).
+2. **Adapter:** a new `DomainAdapter` subclass (not a subclass of `MarketingLogAdapter`). Parameterizes an item-scoring policy in a 6-to-8 variable search space (softmax temperature, exploration epsilon, a small set of context-feature weights, a position-handling flag).
 3. **OPE stack:** SNIPW primary, DM and DR secondary, DRos deferred to Sprint 35+.
 4. **Objective:** maximize SNIPW-estimated CTR (`policy_value`). No revenue, no cost column, no multi-objective.
 5. **Support gates:** null control (5-pp band), ESS floor (`max(1000, n_rows/100)`), zero-support fraction `<= 10%`, propensity-mean sanity band, and DR/SNIPW cross-check within 25% relative.
