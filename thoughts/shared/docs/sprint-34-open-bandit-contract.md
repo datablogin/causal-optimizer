@@ -230,10 +230,11 @@ What the contract does **not** require for the first run:
 3. learned positional weighting
 4. neural or tree-based scoring models
 
-The first run must stay parameterizable inside a six-to-nine variable search
-space. That is the same order of magnitude as the existing marketing search
-spaces and is believable under `suggest_parameters()` without new optimizer
-work.
+The first run must stay parameterizable inside a six-to-eight variable
+search space (one `tau`, one `eps`, three to five context-feature weights,
+one categorical position-handling flag). That is the same order of magnitude
+as the existing marketing search spaces and is believable under
+`suggest_parameters()` without new optimizer work.
 
 ### 4d. What `run_experiment` must return
 
@@ -296,9 +297,10 @@ reported for cross-estimator stability, not as the headline.
 SNIPW still needs a floor on the logged-policy propensity when the logger
 never sampled certain (action, context) pairs. Under Open Bandit's uniform
 Random policy, each logged row's `action_prob` is approximately
-`1 / n_items` (per Saito et al. 2021: "each item is equally likely at each
-position. Propensity = 1/n_items for each position"), so on Men/Random the
-expected logged propensity is `~1/34 ≈ 0.0294`. The first run must:
+`1 / n_items` — Saito et al. 2021 describe the Random logger as drawing each
+item uniformly at each position, yielding a per-(item, position) logged
+propensity of `1 / n_items`. On Men/Random the expected logged propensity is
+therefore `~1/34 ≈ 0.0294`. The first run must:
 
 1. clip logged propensities from below at a fixed floor `min_propensity_clip`
    defaulting to `1 / (2 * n_items)` for the chosen campaign. On Men/Random
@@ -398,10 +400,15 @@ Permute the logged reward column across rows under a fixed seed, so each
 `(context, action, position, propensity)` tuple is reassigned a reward drawn
 from a different row's reward value. The within-row
 `(context, action, position, propensity)` structure stays intact; only the
-reward-to-row association is destroyed. Rerun the full strategy sweep on the
-permuted dataset. The null-control pass requires that no strategy produces a
-policy value more than **5 percentage points** above the permuted baseline
-mean at any budget.
+reward-to-row association is destroyed. The permutation **must be stratified
+by `position`**, so rewards are exchanged only between rows sharing the same
+position — this preserves the structural position-CTR difference (positions
+have materially different base click rates even under a random policy) and
+leaves the position-handling choice in Section 4c as the only control over
+position bias in the verdict. Rerun the full strategy sweep on the permuted
+dataset. The null-control pass requires that no strategy produces a policy
+value more than **5 percentage points** above the permuted baseline mean at
+any budget.
 
 The 5 percentage-point band mirrors the Criteo contract convention
 (translated into SNIPW-CTR units rather than visit-rate units).
