@@ -10,7 +10,6 @@
 - Sprint 33 [Criteo benchmark report](sprint-33-criteo-benchmark-report.md)
 - Sprint 33 [Generalization scorecard](sprint-33-generalization-scorecard.md)
 - Sprint 30 [General-causal portability brief](sprint-30-general-causal-portability-brief.md)
-- Plan [16 agentic science architecture](../plans/16-agentic-science-architecture.md)
 - Plan [07 benchmark state](../plans/07-benchmark-state.md)
 - Plan [24 Sprint 34 recommendation](../plans/24-sprint-34-recommendation.md)
 
