@@ -213,7 +213,11 @@ narrow, honest parameterization:
 3. **Context-feature weights** (a small, fixed number — e.g. 3 to 5
    continuous variables, not the full context vector): linear weights on a
    chosen subset of user or user-item affinity features that the scoring
-   policy uses to rank items.
+   policy uses to rank items. The exact feature subset is **deferred to the
+   Sprint 35 implementation sprint**. The implementer chooses three to five
+   features from the OBD context / action-context columns during Issue A's
+   smoke test and documents the choice in the adapter docstring. The
+   contract only pins the cardinality (three to five), not the identity.
 4. **Position handling flag** (categorical: `"marginalize"` or
    `"position_1_only"`): determines whether the policy is evaluated across
    all three positions (marginal reward) or restricted to a single position.
@@ -385,7 +389,10 @@ and should be absent from the adapter return value.
 The first-run verdict is quoted on Men/Random under SNIPW at budget B80
 (B20/B40/B80 refer to experiment-count budgets of 20, 40, and 80 under the
 benchmark convention established in Sprint 27), as a two-sided MWU test of
-`causal` vs `surrogate_only` policy values across 10 seeds. The Sprint 33 classification labels apply unchanged:
+`causal` vs `surrogate_only` policy values across 10 seeds. B20 and B40 are
+run and reported for trajectory analysis and cross-budget consistency, but
+only B80 gates the Sprint 35 verdict. This matches the Criteo contract's
+B80-as-verdict convention. The Sprint 33 classification labels apply unchanged:
 
 1. "certified" at `p <= 0.05`
 2. "trending" at `0.05 < p <= 0.15`
@@ -415,7 +422,11 @@ the position-handling choice in Section 4c as the only control over position
 bias in the verdict. Stratifying by action would partially preserve the
 action-to-reward association the null control is meant to destroy, so the
 Section 7a implementation must permute across actions within each
-position-stratum. Rerun the full strategy sweep on the permuted
+position-stratum.
+
+The permutation runs under **one fixed seed** per benchmark, reported in the
+provenance record. This matches the Hillstrom and Criteo null-control
+convention. Multiple permutation seeds are out of scope for Sprint 35. Rerun the full strategy sweep on the permuted
 dataset. The null-control pass requires that no strategy produces a policy
 value more than **5 percentage points** above the permuted baseline mean at
 any budget.
@@ -556,7 +567,13 @@ Sprint 34 delivers this contract. The recommended Sprint 35 issue shape is
 three ordered issues with partial overlap (not strictly sequential):
 
 1. **Sprint 35 Issue A:** implement `BanditLogAdapter` (or chosen name) with
-   the Section 4 interface, wired to OBP under the optional extra.
+   the Section 4 interface, wired to OBP under the optional extra. Issue A
+   must include a smoke test that (i) loads the Men/Random slice via OBP
+   and verifies the row count matches Saito et al. 2021 Table 1
+   (~452,949), (ii) confirms whether `action_prob` is stored as a
+   conditional or joint probability (Section 5c) and documents the finding
+   in the adapter docstring, (iii) records the chosen three-to-five context
+   features (Section 4c) in the adapter docstring.
 2. **Sprint 35 Issue B:** implement the multi-action OPE stack wrapper
    (SNIPW primary, DM and DR secondary) and the Section 7 diagnostic gates.
 3. **Sprint 35 Issue C:** run the Men/Random benchmark at 10 seeds x
