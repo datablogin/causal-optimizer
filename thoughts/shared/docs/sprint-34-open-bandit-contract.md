@@ -1,4 +1,4 @@
-## Open Bandit Contract And Multi-Action Architecture Brief
+# Open Bandit Contract And Multi-Action Architecture Brief
 
 **Date:** 2026-04-18
 **Sprint:** 34 (Open Bandit contract / multi-action architecture)
@@ -104,7 +104,7 @@ The first Open Bandit run should use **one** slice. Specifically:
 |----------|--------|
 | Campaign | Men |
 | Logging policy | Uniform Random |
-| Rows (nominal) | ~452,949 |
+| Rows (nominal) | ~453K (452,949 per Saito et al. 2021 Table 1) |
 | Action space | 34 distinct items |
 | Positions | 3 (left, center, right) |
 | Reward | binary click |
@@ -294,15 +294,26 @@ reported for cross-estimator stability, not as the headline.
 ### 5c. Propensity clipping policy
 
 SNIPW still needs a floor on the logged-policy propensity when the logger
-never sampled certain (action, context) pairs. The first run must:
+never sampled certain (action, context) pairs. Under Open Bandit's uniform
+Random policy, each logged row's `action_prob` is approximately
+`1 / n_items` (per Saito et al. 2021: "each item is equally likely at each
+position. Propensity = 1/n_items for each position"), so on Men/Random the
+expected logged propensity is `~1/34 ≈ 0.0294`. The first run must:
 
 1. clip logged propensities from below at a fixed floor `min_propensity_clip`
-   (default `1 / (n_items * 3)` for Men/Random, i.e. roughly
-   `1 / (34 * 3) ≈ 0.0098`, matching the expected Random propensity per
-   position).
+   defaulting to `1 / (2 * n_items)` for the chosen campaign. On Men/Random
+   that is `1 / (2 * 34) ≈ 0.0147`, i.e. half the expected uniform-Random
+   propensity. This preserves the expected-case logged rows and only clips
+   rows whose logged propensity sits materially below the expected floor.
 2. freeze `min_propensity_clip` in the first run (not tuned by the
    optimizer). This mirrors the Criteo contract Section 5 decision.
 3. report the **number of clipped rows** as a diagnostic.
+
+The same floor applies regardless of the Section 4c position-handling flag.
+`position_1_only` subsets the logged rows by position before IPS; it does
+not change the per-row logged propensity stored in `action_prob`. A future
+sprint that switches the first run to joint `(item, position)` evaluation
+should revisit the floor to `1 / (2 * n_items * n_positions)`.
 
 The first benchmark may revisit the clip threshold only if Run 1 post-hoc
 shows that >5% of rows are clipped; that would be a support-failure signal
@@ -383,11 +394,14 @@ all four before a verdict is claimed.
 
 ### 7a. Null-control gate
 
-Permute the logged reward column within each row (not across rows, to
-preserve context-action joint structure), then rerun the full strategy sweep
-on the permuted dataset. The null-control pass requires that no strategy
-produces a policy value more than **5 percentage points** above the permuted
-baseline mean for more than one of the three strategies at any budget.
+Permute the logged reward column across rows under a fixed seed, so each
+`(context, action, position, propensity)` tuple is reassigned a reward drawn
+from a different row's reward value. The within-row
+`(context, action, position, propensity)` structure stays intact; only the
+reward-to-row association is destroyed. Rerun the full strategy sweep on the
+permuted dataset. The null-control pass requires that no strategy produces a
+policy value more than **5 percentage points** above the permuted baseline
+mean at any budget.
 
 The 5 percentage-point band mirrors the Criteo contract convention
 (translated into SNIPW-CTR units rather than visit-rate units).
