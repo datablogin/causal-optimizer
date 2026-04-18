@@ -1,9 +1,9 @@
 # Causal Optimizer Handoff Document
 
-**Date:** 2026-04-17
-**Current sprint:** 34 planning (Open Bandit contract / multi-action architecture brief) -- Sprint 33 complete
-**Current state:** Sprint 33 complete -- verdict GENERALITY IS REAL BUT CONDITIONAL (PR #183 merged)
-**Main repo status:** safe restart point is this doc + benchmark state file + Sprint 33 generalization scorecard
+**Date:** 2026-04-18
+**Current sprint:** 34 in progress (Open Bandit contract / multi-action architecture brief) -- Sprint 33 complete
+**Current state:** Sprint 33 complete (verdict GENERALITY IS REAL BUT CONDITIONAL, PR #183 merged). Sprint 34 contract in review on issue #182.
+**Main repo status:** safe restart point is this doc + benchmark state file + Sprint 33 generalization scorecard + Sprint 34 Open Bandit contract
 
 ## What The Next Agent Needs To Know
 
@@ -134,26 +134,44 @@ Per the [Sprint 34 recommendation](../plans/24-sprint-34-recommendation.md):
 5. Do not start coding a multi-action adapter before the contract is merged.
 6. Do not reopen Hillstrom or Criteo as the main lane in Sprint 34.
 
+## Sprint 34 Contract Decisions (In Review)
+
+The Sprint 34 Open Bandit contract is drafted and in review for issue [#182](https://github.com/datablogin/causal-optimizer/issues/182). See the full document at [sprint-34-open-bandit-contract.md](sprint-34-open-bandit-contract.md). Summary of the contract decisions:
+
+1. **First slice:** ZOZOTOWN Men campaign, uniform-random logger (~453K rows, 34 actions, 3 positions, binary click reward).
+2. **Adapter:** a new `DomainAdapter` subclass (not a subclass of `MarketingLogAdapter`). Parameterizes an item-scoring policy in a 6-to-9 variable search space (softmax temperature, exploration epsilon, a small set of context-feature weights, a position-handling flag).
+3. **OPE stack:** SNIPW primary, DM and DR secondary, DRos deferred to Sprint 35+.
+4. **Objective:** maximize SNIPW-estimated CTR (`policy_value`). No revenue, no cost column, no multi-objective.
+5. **Support gates:** null control (5-pp band), ESS floor (`max(1000, n_rows/100)`), zero-support fraction `<= 10%`, propensity-mean sanity band, and DR/SNIPW cross-check within 25% relative.
+6. **OBP dependency:** accepted as an optional extra. OBP powers the data loader and estimators; OBP types are hidden behind the adapter boundary and the adapter fails fast if OBP is missing.
+7. **Sprint 35 shape:** three sequential issues -- adapter, OPE stack + gates, and first Men/Random benchmark report.
+
+No implementation issue should open until the Sprint 34 contract merges.
+
 ## Files To Read First
 
 1. [07-benchmark-state.md](../plans/07-benchmark-state.md)
-2. [sprint-33-generalization-scorecard.md](sprint-33-generalization-scorecard.md)
-3. [sprint-33-criteo-benchmark-report.md](sprint-33-criteo-benchmark-report.md)
-4. [sprint-31-hillstrom-benchmark-report.md](sprint-31-hillstrom-benchmark-report.md)
-5. [sprint-31-hillstrom-lessons-learned.md](sprint-31-hillstrom-lessons-learned.md)
-6. [sprint-30-reality-and-generalization-scorecard.md](sprint-30-reality-and-generalization-scorecard.md)
-7. [sprint-30-general-causal-portability-brief.md](sprint-30-general-causal-portability-brief.md)
-8. [24-sprint-34-recommendation.md](../plans/24-sprint-34-recommendation.md)
+2. [sprint-34-open-bandit-contract.md](sprint-34-open-bandit-contract.md)
+3. [sprint-33-generalization-scorecard.md](sprint-33-generalization-scorecard.md)
+4. [sprint-33-criteo-benchmark-report.md](sprint-33-criteo-benchmark-report.md)
+5. [sprint-31-hillstrom-benchmark-report.md](sprint-31-hillstrom-benchmark-report.md)
+6. [sprint-31-hillstrom-lessons-learned.md](sprint-31-hillstrom-lessons-learned.md)
+7. [sprint-31-open-bandit-access-and-gap-audit.md](sprint-31-open-bandit-access-and-gap-audit.md)
+8. [sprint-30-reality-and-generalization-scorecard.md](sprint-30-reality-and-generalization-scorecard.md)
+9. [sprint-30-general-causal-portability-brief.md](sprint-30-general-causal-portability-brief.md)
+10. [24-sprint-34-recommendation.md](../plans/24-sprint-34-recommendation.md)
 
 ## Immediate Instructions For The Next Agent
 
-After Sprint 33 closure merges:
+Once the Sprint 34 contract (issue #182) merges:
 
-1. Read the [Sprint 33 generalization scorecard](sprint-33-generalization-scorecard.md) for the synthesized verdict.
-2. Begin Sprint 34 by drafting the Open Bandit contract and multi-action architecture brief per the [Sprint 34 recommendation](../plans/24-sprint-34-recommendation.md).
-3. Do not reopen Hillstrom or Criteo as the Sprint 34 main lane.
-4. Do not claim `causal` beats `random` on real data; ERCOT has not closed that gap.
+1. Read the [Sprint 34 Open Bandit contract](sprint-34-open-bandit-contract.md) first. It pins the Men/Random slice, the adapter interface, the SNIPW-primary OPE stack, the Section 7 support gates, and the OBP-as-optional-extra dependency decision.
+2. Open the three Sprint 35 implementation issues described in Section 10 of that contract (adapter, OPE stack + gates, first benchmark report).
+3. Do not subclass `MarketingLogAdapter` or silently reshape it to multi-action.
+4. Do not expand scope to the Women / All campaigns, BTS logger, or slate-level OPE in the first implementation sprint.
+5. Do not reopen Hillstrom or Criteo as the main lane.
+6. Do not claim `causal` beats `random` on real data; ERCOT has not closed that gap.
 
 ## One-Line Situation Summary
 
-Sprint 33 closes with verdict **GENERALITY IS REAL BUT CONDITIONAL**: ERCOT remains the strongest real-world positive (COAST p=0.008 certified), Hillstrom is a clean non-energy RF-backend boundary favoring `surrogate_only` on the pooled slice, Criteo under Ax/BoTorch is near-parity even after the heterogeneous follow-up, and Sprint 34 moves the project to Open Bandit multi-action rather than another binary marketing rerun.
+Sprint 33 closed with verdict **GENERALITY IS REAL BUT CONDITIONAL** (ERCOT COAST p=0.008 certified, Hillstrom pooled slice certified surrogate-only under RF, Criteo near-parity under Ax/BoTorch after the heterogeneous follow-up). Sprint 34 is drafting the Open Bandit contract and multi-action architecture brief as the first executable contract for logged multi-action policy data, with Men/Random as the first slice and OBP accepted as an optional extra for the OPE stack.

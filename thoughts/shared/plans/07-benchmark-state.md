@@ -1,6 +1,6 @@
 # Benchmark State
 
-Updated: 2026-04-17 (Sprint 33 complete — GENERALITY IS REAL BUT CONDITIONAL, PR #183 merged)
+Updated: 2026-04-18 (Sprint 34 contract in review — Open Bandit / multi-action architecture brief)
 
 ## Purpose
 
@@ -40,13 +40,38 @@ What is true today:
 Sprint 33 is **complete** as a documentation / memory-sync sprint.  The closure
 verdict is GENERALITY IS REAL BUT CONDITIONAL (PR #183 merged).
 
-Sprint 34 should draft the Open Bandit contract and multi-action
-architecture brief as one authoritative document.  This is explicitly
-not another immediate binary marketing rerun — Hillstrom and Criteo
-together answer the narrow binary marketing question.  The next frontier
-is logged multi-action / policy data.
+Sprint 34 is **in review** on issue [#182](https://github.com/datablogin/causal-optimizer/issues/182).
+It delivers the Open Bandit contract and multi-action architecture brief as
+one authoritative document — see [sprint-34-open-bandit-contract.md](../docs/sprint-34-open-bandit-contract.md).
+It is explicitly not another immediate binary marketing rerun; Hillstrom and
+Criteo together answer the narrow binary marketing question.  The next
+frontier is logged multi-action / policy data.
 
 ## Current Sprint Status
+
+### Sprint 34
+
+Plan:
+
+1. [24-sprint-34-recommendation.md](24-sprint-34-recommendation.md)
+
+Prompts:
+
+1. [sprint-34-open-bandit-contract.md](../prompts/sprint-34-open-bandit-contract.md)
+
+Open issue:
+
+1. [#182](https://github.com/datablogin/causal-optimizer/issues/182) define the Open Bandit benchmark contract and multi-action architecture brief
+
+Contract document in review:
+
+1. [sprint-34-open-bandit-contract.md](../docs/sprint-34-open-bandit-contract.md)
+
+Current Sprint 34 position:
+
+1. Open Bandit contract / multi-action architecture brief: **in review** (issue #182)
+2. Implementation issues (adapter, OPE stack + gates, first benchmark report): **not opened** — deferred until the contract merges
+3. Verdict: the contract pins Men/Random as the first slice, SNIPW as the primary OPE estimator, a new `DomainAdapter` subclass (not a `MarketingLogAdapter` extension), support gates for ESS / zero-support / propensity / null control, and OBP as an optional extra under a frozen version
 
 ### Sprint 33
 
@@ -237,14 +262,15 @@ Merged PRs:
 ## Immediate Next Step
 
 Sprint 33 is complete.  Verdict: **GENERALITY IS REAL BUT CONDITIONAL** (PR #183 merged).
-Sprint 34 is the active lane: Open Bandit contract / multi-action architecture brief.
+Sprint 34 contract is in review on issue [#182](https://github.com/datablogin/causal-optimizer/issues/182).
 If resuming:
 
-1. read the [Sprint 33 generalization scorecard](../docs/sprint-33-generalization-scorecard.md) for the synthesized verdict across ERCOT, Hillstrom, and Criteo
-2. read the [handoff document](../docs/handoff.md) for Sprint 34 instructions
-3. begin the [Sprint 34 recommendation](24-sprint-34-recommendation.md) by drafting the Open Bandit contract and multi-action architecture brief
-4. do not reopen Hillstrom or Criteo as the Sprint 34 main lane
-5. the ERCOT 10-seed rerun remains on the backlog but is not the Sprint 34 critical path
+1. read the [Sprint 34 Open Bandit contract](../docs/sprint-34-open-bandit-contract.md) for the Men/Random slice, adapter interface, OPE stack, support gates, and OBP dependency decision
+2. read the [Sprint 33 generalization scorecard](../docs/sprint-33-generalization-scorecard.md) for the synthesized verdict across ERCOT, Hillstrom, and Criteo
+3. read the [handoff document](../docs/handoff.md) for Sprint 34 instructions
+4. once the Sprint 34 contract merges, open the Sprint 35 implementation issues described in Section 10 of the contract (adapter, OPE stack + gates, first Men/Random benchmark report)
+5. do not reopen Hillstrom or Criteo as the Sprint 34 main lane
+6. the ERCOT 10-seed rerun remains on the backlog but is not the Sprint 34 critical path
 
 ## Canonical Docs
 
@@ -657,12 +683,25 @@ Sprint 33 is **complete** (PR #183 merged).  The scorecard verdict is GENERALITY
 6. synthetic Ax boundary unchanged since Sprint 29 (medium, high, dose-response certified; base trending; interaction near-parity)
 7. Sprint 34: Open Bandit contract / multi-action architecture brief, not another binary marketing rerun
 
+## Sprint 34 Contract Summary
+
+The Sprint 34 Open Bandit contract ([sprint-34-open-bandit-contract.md](../docs/sprint-34-open-bandit-contract.md)) pins seven decisions for the first implementation sprint:
+
+1. First slice: ZOZOTOWN Men campaign, uniform-random logger (~453K rows, 34 actions, 3 positions, binary click reward)
+2. Adapter: a new `DomainAdapter` subclass parameterizing an item-scoring policy in a 6-to-9 variable search space (softmax temperature, exploration epsilon, context-feature weights, a position-handling flag)
+3. OPE stack: SNIPW primary, DM and DR secondary, DRos deferred
+4. Objective: maximize SNIPW-estimated CTR; no revenue, no cost column, no multi-objective
+5. Support gates: null control (5-pp band), ESS floor `max(1000, n_rows/100)`, zero-support fraction `<= 10%`, propensity-mean sanity band, DR/SNIPW cross-check within 25% relative
+6. OBP: optional extra dependency with a pinned version; OBP types are hidden behind the adapter boundary
+7. Sprint 35 shape: three sequential issues -- adapter, OPE stack + gates, first Men/Random benchmark report
+
 ## Practical Next Step
 
 If resuming from here:
 
-1. read the [Sprint 33 generalization scorecard](../docs/sprint-33-generalization-scorecard.md) for the synthesized verdict
-2. read the [Sprint 34 recommendation](24-sprint-34-recommendation.md)
-3. draft the Open Bandit contract and multi-action architecture brief as one authoritative document
-4. keep the ERCOT 10-seed rerun on the backlog but do not make it the Sprint 34 critical path
-5. do not reopen Hillstrom or Criteo as the Sprint 34 main lane
+1. read the [Sprint 34 Open Bandit contract](../docs/sprint-34-open-bandit-contract.md) first
+2. read the [Sprint 33 generalization scorecard](../docs/sprint-33-generalization-scorecard.md) for the synthesized verdict
+3. read the [Sprint 34 recommendation](24-sprint-34-recommendation.md)
+4. once the Sprint 34 contract merges, open the three Sprint 35 implementation issues from Section 10 of the contract
+5. keep the ERCOT 10-seed rerun on the backlog but do not make it the Sprint 34 critical path
+6. do not reopen Hillstrom or Criteo as the Sprint 34 main lane

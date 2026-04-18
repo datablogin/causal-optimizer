@@ -1,6 +1,6 @@
 # Sprint 34 Recommendation
 
-Updated: 2026-04-17
+Updated: 2026-04-18
 
 ## Sprint Theme
 
@@ -93,22 +93,17 @@ The sprint should avoid over-scoping into:
 3. online-learning claims
 4. generalized multi-objective policy optimization
 
-## Parallel Lane
+## Current Starting Point
 
-### 2. Sprint 33 Closure And Restart Sync
+Sprint 33 closure is now merged.
 
-This should run in parallel with Sprint 34 planning, not ahead of it.
+That means Sprint 34 no longer needs a parallel documentation lane to establish
+the post-Criteo project state. The restart docs and synthesis scorecard are now
+in place, and the active research lane is singular:
 
-The closure lane should:
-
-1. publish the Sprint 33 synthesis scorecard
-2. update `07-benchmark-state.md`
-3. update `handoff.md`
-4. update README only if the merged Sprint 33 result materially changes the
-   public framing
-
-This lane is important, but it is not the next scientific frontier. Treat it as
-documentation / memory synchronization work, not as the main research sprint.
+1. define the Open Bandit contract
+2. define the minimum multi-action architecture
+3. queue the first implementation issue only after the contract is stable
 
 ## Success Criteria
 
@@ -150,15 +145,14 @@ Still valuable:
 
 ## Recommended Order
 
-1. run Sprint 33 closure in parallel as a short documentation lane
+1. read the Sprint 33 generalization scorecard and current restart docs
 2. draft the Open Bandit contract / architecture brief
 3. decide the first benchmark slice, evaluator, and support gates
 4. open the first Open Bandit implementation issue at the end of Sprint 34
 
 ## Suggested Sprint 34 Issues
 
-1. publish the Sprint 33 closure scorecard and sync restart docs
-2. define the Open Bandit benchmark contract and multi-action architecture brief
+1. [#182](https://github.com/datablogin/causal-optimizer/issues/182) define the Open Bandit benchmark contract and multi-action architecture brief
 
 ## Exit Criterion
 
