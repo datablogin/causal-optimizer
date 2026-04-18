@@ -1,14 +1,15 @@
 # Causal Optimizer Handoff Document
 
 **Date:** 2026-04-17
-**Current sprint:** 33 closing / Sprint 34 planning
-**Current state:** Sprint 33 closure -- GENERALITY IS REAL BUT CONDITIONAL
+**Current sprint:** 34 planning (Open Bandit contract / multi-action architecture brief) -- Sprint 33 complete
+**Current state:** Sprint 33 complete -- verdict GENERALITY IS REAL BUT CONDITIONAL (PR #183 merged)
 **Main repo status:** safe restart point is this doc + benchmark state file + Sprint 33 generalization scorecard
 
 ## What The Next Agent Needs To Know
 
-Sprint 33 is closing as a documentation / memory-sync sprint. The
-empirical work that matters for a fresh agent is:
+Sprint 33 is complete. It ran as a documentation / memory-sync sprint:
+the generalization scorecard and restart-doc sync landed via PR #183.
+The empirical work that matters for a fresh agent is:
 
 1. Sprint 30 produced the first real-world causal vs `surrogate_only`
    differentiation on ERCOT (COAST p=0.008, NORTH_C p=0.059; 5 seeds;
@@ -69,7 +70,7 @@ All Sprint 29 synthetic benchmark results carry forward unchanged.
 
 1. [PR #174](https://github.com/datablogin/causal-optimizer/pull/174) merged -- Criteo access and adapter-gap audit (Sprint 31/32 handoff)
 2. [PR #180](https://github.com/datablogin/causal-optimizer/pull/180) merged -- Criteo benchmark Run 1 + Run 2 report, combined verdict **NEAR-PARITY**
-3. This PR -- Sprint 33 generalization scorecard and restart-doc sync
+3. [PR #183](https://github.com/datablogin/causal-optimizer/pull/183) merged -- Sprint 33 generalization scorecard and restart-doc sync
 
 ## Current Best Evidence
 

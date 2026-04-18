@@ -1,6 +1,6 @@
 # Benchmark State
 
-Updated: 2026-04-17 (Sprint 33 closing — GENERALITY IS REAL BUT CONDITIONAL)
+Updated: 2026-04-17 (Sprint 33 complete — GENERALITY IS REAL BUT CONDITIONAL, PR #183 merged)
 
 ## Purpose
 
@@ -37,8 +37,8 @@ What is true today:
 
 ## Current Goal
 
-Sprint 33 is **closing** as a documentation / memory-sync sprint.  The closure
-verdict is GENERALITY IS REAL BUT CONDITIONAL.
+Sprint 33 is **complete** as a documentation / memory-sync sprint.  The closure
+verdict is GENERALITY IS REAL BUT CONDITIONAL (PR #183 merged).
 
 Sprint 34 should draft the Open Bandit contract and multi-action
 architecture brief as one authoritative document.  This is explicitly
@@ -69,7 +69,7 @@ Merged PRs:
 Current Sprint 33 position:
 
 1. Criteo benchmark run and report: **complete** (PR #180 merged)
-2. Sprint 33 generalization scorecard and restart-doc sync: **closing** (this PR)
+2. Sprint 33 generalization scorecard and restart-doc sync: **complete** ([PR #183](https://github.com/datablogin/causal-optimizer/pull/183) merged)
 3. verdict: **GENERALITY IS REAL BUT CONDITIONAL** — ERCOT remains the strongest real-world positive signal, Hillstrom is a real non-energy boundary favoring `surrogate_only` under RF fallback, Criteo is near-parity under Ax/BoTorch even after the mandatory heterogeneous follow-up, project remains a general causal research harness but current causal advantage over `surrogate_only` is conditional on landscape structure, noise burden, and search-space breadth
 4. Sprint 34: draft Open Bandit contract and multi-action architecture brief; not another binary marketing rerun
 
@@ -236,8 +236,8 @@ Merged PRs:
 
 ## Immediate Next Step
 
-Sprint 33 is closing.  Verdict: **GENERALITY IS REAL BUT CONDITIONAL**.
-Sprint 34 is the Open Bandit contract / multi-action architecture lane.
+Sprint 33 is complete.  Verdict: **GENERALITY IS REAL BUT CONDITIONAL** (PR #183 merged).
+Sprint 34 is the active lane: Open Bandit contract / multi-action architecture brief.
 If resuming:
 
 1. read the [Sprint 33 generalization scorecard](../docs/sprint-33-generalization-scorecard.md) for the synthesized verdict across ERCOT, Hillstrom, and Criteo
@@ -647,7 +647,7 @@ What is now established:
 
 ## Sprint 33 Exit Condition
 
-Sprint 33 is **closing**.  The scorecard verdict is GENERALITY IS REAL BUT CONDITIONAL:
+Sprint 33 is **complete** (PR #183 merged).  The scorecard verdict is GENERALITY IS REAL BUT CONDITIONAL:
 
 1. ERCOT COAST: causal certified > s.o. (p=0.008, 5 seeds) — strongest real-world positive
 2. ERCOT NORTH_C: causal trending > s.o. (p=0.059, 5 seeds)
