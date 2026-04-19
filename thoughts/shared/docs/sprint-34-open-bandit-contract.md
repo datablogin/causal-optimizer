@@ -428,11 +428,20 @@ provenance record), matching the Hillstrom and Criteo null-control
 convention. Multiple permutation seeds are out of scope for Sprint 35.
 
 Rerun the full strategy sweep on the permuted dataset. The null-control pass
-requires that no strategy produces a policy value more than **5 percentage
-points** above the permuted baseline mean at any budget.
+requires that no strategy produces a policy value more than **5% relative**
+above the permuted baseline mean at any budget. Concretely, if the permuted
+baseline mean CTR is `mu_null` (typically `~0.005` on Men/Random based on
+the paper's logged-policy CTR), then every strategy-budget cell must satisfy
+`policy_value <= 1.05 * mu_null`. The absolute pp difference this translates
+to is roughly `0.25 * mu_null` (≈`0.00025` on a `0.005` baseline), which is
+on the same order as real policy-value differences the benchmark would
+claim.
 
-The 5 percentage-point band mirrors the Criteo contract convention
-(translated into SNIPW-CTR units rather than visit-rate units).
+A 5 percentage-point **absolute** band would be ~10× the whole CTR signal
+on OBD Men/Random and would almost never fire, so absolute-pp bands inherited
+from the Criteo convention (which sat on a ~4.7% visit-rate baseline) do
+not transfer. The gate is defined in relative terms so it remains
+evidence-bearing regardless of the base CTR.
 
 If null control fails, the benchmark must be rejected and the report must
 document which strategy inflated on permuted outcomes.
@@ -467,11 +476,26 @@ parameterization bug, not a data bug.
 
 ### 7d. Propensity and policy-mass sanity gate
 
-On Men/Random, the empirical mean propensity in the logged data should be
-within 2 percentage points of `1/34 ≈ 0.0294` per (position, item) slot. A
-deviation outside this band suggests the loader, slice, or subsampling has
-contaminated the logged propensity and the slice should be re-loaded before
-the benchmark is rerun.
+The Sprint 35 Issue A smoke test must confirm whether OBD's `action_prob`
+column stores the conditional `P(item | position) = 1/n_items` or the joint
+`P(item, position) = 1 / (n_items * n_positions)` (see Section 5c). The
+propensity sanity gate is then evaluated against the expected value
+corresponding to the confirmed schema:
+
+1. if `action_prob` is conditional: target `~1/34 ≈ 0.0294` on Men/Random
+2. if `action_prob` is joint: target `~1/(34 * 3) ≈ 0.0098` on Men/Random
+
+The empirical mean of the logged `action_prob` column must fall within
+**10% relative** of the schema-appropriate target. The relative band
+(rather than a fixed absolute pp number) keeps the gate calibrated under
+either schema interpretation. A deviation outside this band suggests the
+loader, slice, or subsampling has contaminated the logged propensity and
+the slice should be re-loaded before the benchmark is rerun.
+
+The benchmark report must state which schema interpretation was confirmed
+during smoke testing and quote the empirical mean against the corresponding
+target, so a later reader can verify the gate without re-deriving which
+branch applied.
 
 ### 7e. Per-estimator cross-check
 

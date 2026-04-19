@@ -1,6 +1,6 @@
 # Benchmark State
 
-Updated: 2026-04-18 (Sprint 34 contract in review — Open Bandit / multi-action architecture brief)
+Updated: 2026-04-19 (Sprint 34 complete — Open Bandit contract merged as PR #184)
 
 ## Purpose
 
@@ -16,7 +16,7 @@ Use it when:
 
 ## Current Position
 
-The project is now strongest as a **trustworthy research harness with one real-world positive, one clean non-energy boundary, one near-parity large-scale marketing result, and a defined multi-action frontier**.
+The project is now strongest as a **trustworthy research harness with one real-world positive, one clean non-energy boundary, one near-parity large-scale marketing result, and an executable Open Bandit multi-action contract ready for Sprint 35 implementation**.
 
 What is true today:
 
@@ -34,18 +34,23 @@ What is true today:
 12. Sprint 32 merged the Criteo uplift benchmark contract
 13. Sprint 33 executed the Criteo contract under Ax/BoTorch on a 1M-row subsample — Run 1 degenerate-surface exact tie and Run 2 heterogeneous-surface near-parity, combined verdict NEAR-PARITY
 14. Sprint 33 closure published the generalization scorecard — verdict GENERALITY IS REAL BUT CONDITIONAL
+15. Sprint 34 merged the Open Bandit contract and multi-action architecture brief as PR #184 — the next frontier is now an executable contract, with Sprint 35 opening the three implementation issues (adapter, OPE stack + gates, first Men/Random benchmark report)
 
 ## Current Goal
 
-Sprint 33 is **complete** as a documentation / memory-sync sprint.  The closure
-verdict is GENERALITY IS REAL BUT CONDITIONAL (PR #183 merged).
+Sprint 34 is **complete** as a contract / architecture sprint.  The Open
+Bandit contract merged as PR #184, closing issue
+[#182](https://github.com/datablogin/causal-optimizer/issues/182).  See
+[sprint-34-open-bandit-contract.md](../docs/sprint-34-open-bandit-contract.md)
+for the authoritative design document.
 
-Sprint 34 is **in review** on issue [#182](https://github.com/datablogin/causal-optimizer/issues/182).
-It delivers the Open Bandit contract and multi-action architecture brief as
-one authoritative document — see [sprint-34-open-bandit-contract.md](../docs/sprint-34-open-bandit-contract.md).
-It is explicitly not another immediate binary marketing rerun; Hillstrom and
-Criteo together answer the narrow binary marketing question.  The next
-frontier is logged multi-action / policy data.
+Sprint 35 is the active implementation lane.  It should open three ordered
+issues per Section 10 of the contract: Issue A (adapter), Issue B (OPE
+stack + gates), and Issue C (first Men/Random benchmark report).  Issue A
+must ship first because its smoke test resolves the OBD `action_prob`
+schema ambiguity and the chosen context-feature subset, both of which
+Issues B and C depend on.  Sprint 35 is explicitly not another binary
+marketing rerun; Hillstrom and Criteo together answer that question.
 
 ## Current Sprint Status
 
@@ -59,19 +64,26 @@ Prompts:
 
 1. [sprint-34-open-bandit-contract.md](../prompts/sprint-34-open-bandit-contract.md)
 
-Open issue:
+Closed issue:
 
-1. [#182](https://github.com/datablogin/causal-optimizer/issues/182) define the Open Bandit benchmark contract and multi-action architecture brief
+1. [#182](https://github.com/datablogin/causal-optimizer/issues/182) define the Open Bandit benchmark contract and multi-action architecture brief -- closed by PR #184
 
-Contract document in review:
+Merged PRs:
+
+1. `#184` merged
+   - PR: [#184](https://github.com/datablogin/causal-optimizer/pull/184)
+   - issue: `#182` closed
+   - result: Open Bandit contract / multi-action architecture brief -- pins Men/Random as the first slice, SNIPW as the primary OPE estimator, a new `DomainAdapter` subclass (not a `MarketingLogAdapter` extension), support gates expressed in relative terms (5% relative null-control band, 10% relative propensity sanity band, ESS floor, zero-support fraction, DR/SNIPW cross-check), OBP as an optional extra under a pinned version, and three ordered Sprint 35 implementation issues (adapter, OPE stack + gates, first benchmark report)
+
+Contract document:
 
 1. [sprint-34-open-bandit-contract.md](../docs/sprint-34-open-bandit-contract.md)
 
 Current Sprint 34 position:
 
-1. Open Bandit contract / multi-action architecture brief: **in review** (issue #182)
-2. Implementation issues (adapter, OPE stack + gates, first benchmark report): **not opened** — deferred until the contract merges
-3. Verdict: the contract pins Men/Random as the first slice, SNIPW as the primary OPE estimator, a new `DomainAdapter` subclass (not a `MarketingLogAdapter` extension), support gates for ESS / zero-support / propensity / null control, and OBP as an optional extra under a frozen version
+1. Open Bandit contract / multi-action architecture brief: **complete** (PR #184 merged)
+2. Sprint 35 implementation issues (adapter, OPE stack + gates, first benchmark report): **not yet opened** -- Sprint 35's first action is to open Issues A, B, and C from Section 10 of the contract
+3. Verdict: the contract is executable. No benchmark ran in Sprint 34, so the synthetic Ax boundary and Sprint 33 closure verdict carry forward unchanged
 
 ### Sprint 33
 
@@ -261,16 +273,20 @@ Merged PRs:
 
 ## Immediate Next Step
 
-Sprint 33 is complete.  Verdict: **GENERALITY IS REAL BUT CONDITIONAL** (PR #183 merged).
-Sprint 34 contract is in review on issue [#182](https://github.com/datablogin/causal-optimizer/issues/182).
-If resuming:
+Sprint 34 is complete.  The Open Bandit contract merged as PR #184, closing
+issue [#182](https://github.com/datablogin/causal-optimizer/issues/182).
+The Sprint 33 closure verdict **GENERALITY IS REAL BUT CONDITIONAL** carries
+forward unchanged; no benchmark ran in Sprint 34.
 
-1. read the [Sprint 34 Open Bandit contract](../docs/sprint-34-open-bandit-contract.md) for the Men/Random slice, adapter interface, OPE stack, support gates, and OBP dependency decision
+Sprint 35 is the active implementation lane.  If resuming:
+
+1. read the [Sprint 34 Open Bandit contract](../docs/sprint-34-open-bandit-contract.md) for the Men/Random slice, adapter interface, OPE stack, Section 7 support gates, and OBP dependency decision
 2. read the [Sprint 33 generalization scorecard](../docs/sprint-33-generalization-scorecard.md) for the synthesized verdict across ERCOT, Hillstrom, and Criteo
-3. read the [handoff document](../docs/handoff.md) for Sprint 34 instructions
-4. once the Sprint 34 contract merges, open the Sprint 35 implementation issues described in Section 10 of the contract (adapter, OPE stack + gates, first Men/Random benchmark report)
-5. do not reopen Hillstrom or Criteo as the Sprint 34 main lane
-6. the ERCOT 10-seed rerun remains on the backlog but is not the Sprint 34 critical path
+3. read the [handoff document](../docs/handoff.md) for the post-Sprint-34 restart instructions
+4. open the three Sprint 35 implementation issues described in Section 10 of the contract: Issue A (adapter), Issue B (OPE stack + gates), Issue C (first Men/Random benchmark report)
+5. Issue A must ship first -- its smoke test resolves the OBD `action_prob` schema ambiguity and the chosen context-feature subset that Issues B and C depend on
+6. do not reopen Hillstrom or Criteo as the Sprint 35 main lane
+7. the ERCOT 10-seed rerun remains on the backlog but is not the Sprint 35 critical path
 
 ## Canonical Docs
 
@@ -685,15 +701,15 @@ Sprint 33 is **complete** (PR #183 merged).  The scorecard verdict is GENERALITY
 
 ## Sprint 34 Contract Summary
 
-The Sprint 34 Open Bandit contract ([sprint-34-open-bandit-contract.md](../docs/sprint-34-open-bandit-contract.md)) pins seven decisions for the first implementation sprint:
+The Sprint 34 Open Bandit contract ([sprint-34-open-bandit-contract.md](../docs/sprint-34-open-bandit-contract.md)) merged as PR #184 and pins seven decisions for the first implementation sprint:
 
 1. First slice: ZOZOTOWN Men campaign, uniform-random logger (~453K rows, 34 actions, 3 positions, binary click reward)
 2. Adapter: a new `DomainAdapter` subclass parameterizing an item-scoring policy in a 6-to-8 variable search space (softmax temperature, exploration epsilon, context-feature weights, a position-handling flag)
 3. OPE stack: SNIPW primary, DM and DR secondary, DRos deferred
 4. Objective: maximize SNIPW-estimated CTR; no revenue, no cost column, no multi-objective
-5. Support gates: null control (5-pp band), ESS floor `max(1000, n_rows/100)`, zero-support fraction `<= 10%`, propensity-mean sanity band, DR/SNIPW cross-check within 25% relative
+5. Support gates (all in relative terms): null control within 5% relative above the permuted baseline mean, ESS floor `max(1000, n_rows/100)`, zero-support fraction `<= 10%`, propensity-mean sanity band within 10% relative of the schema-dependent target (conditional `1/n_items` or joint `1/(n_items * n_positions)`, confirmed during Issue A smoke test), DR/SNIPW cross-check within 25% relative
 6. OBP: optional extra dependency with a pinned version; OBP types are hidden behind the adapter boundary
-7. Sprint 35 shape: three sequential issues -- adapter, OPE stack + gates, first Men/Random benchmark report
+7. Sprint 35 shape: three ordered issues -- adapter, OPE stack + gates, first Men/Random benchmark report
 
 ## Practical Next Step
 
@@ -701,7 +717,8 @@ If resuming from here:
 
 1. read the [Sprint 34 Open Bandit contract](../docs/sprint-34-open-bandit-contract.md) first
 2. read the [Sprint 33 generalization scorecard](../docs/sprint-33-generalization-scorecard.md) for the synthesized verdict
-3. read the [Sprint 34 recommendation](24-sprint-34-recommendation.md)
-4. once the Sprint 34 contract merges, open the three Sprint 35 implementation issues from Section 10 of the contract
-5. keep the ERCOT 10-seed rerun on the backlog but do not make it the Sprint 34 critical path
-6. do not reopen Hillstrom or Criteo as the Sprint 34 main lane
+3. read the [Sprint 34 recommendation](24-sprint-34-recommendation.md) for the pre-merge planning notes
+4. open the three Sprint 35 implementation issues described in Section 10 of the contract (Issue A adapter, Issue B OPE stack + gates, Issue C first Men/Random benchmark report)
+5. ship Issue A first; its smoke test is a dependency for Issues B and C
+6. keep the ERCOT 10-seed rerun on the backlog but do not make it the Sprint 35 critical path
+7. do not reopen Hillstrom or Criteo as the Sprint 35 main lane
