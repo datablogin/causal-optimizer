@@ -405,7 +405,10 @@ reported but are not the Sprint 34 verdict gate.
 ## 7. Null-Control And Support Diagnostics For Multi-Action Data
 
 Multi-action OPE needs more gates than binary IPS. The first run must pass
-all four before a verdict is claimed.
+all five support gates (Sections 7a null control, 7b ESS, 7c zero-support
+fraction, 7d propensity sanity, 7e per-estimator cross-check) before a
+verdict is claimed. Section 7f backend recording is a provenance
+requirement, not a pass/fail gate.
 
 ### 7a. Null-control gate
 
@@ -432,10 +435,9 @@ requires that no strategy produces a policy value more than **5% relative**
 above the permuted baseline mean at any budget. Concretely, if the permuted
 baseline mean CTR is `mu_null` (typically `~0.005` on Men/Random based on
 the paper's logged-policy CTR), then every strategy-budget cell must satisfy
-`policy_value <= 1.05 * mu_null`. The absolute pp difference this translates
-to is roughly `0.25 * mu_null` (≈`0.00025` on a `0.005` baseline), which is
-on the same order as real policy-value differences the benchmark would
-claim.
+`policy_value <= 1.05 * mu_null`. The absolute difference this translates
+to is `0.05 * mu_null` (≈`0.00025` on a `0.005` baseline), which is on the
+same order as real policy-value differences the benchmark would claim.
 
 A 5 percentage-point **absolute** band would be ~10× the whole CTR signal
 on OBD Men/Random and would almost never fire, so absolute-pp bands inherited
@@ -635,7 +637,7 @@ Sprint 34 is **not** successful if:
 
 ## 12. What A Good Sprint 35 Outcome Looks Like
 
-Best case: the Men/Random run produces a clean SNIPW verdict with all four
+Best case: the Men/Random run produces a clean SNIPW verdict with all five
 support gates green, and the verdict row is a new non-energy,
 non-binary-treatment benchmark entry. Direction of the verdict is secondary;
 presence of a clean, trustworthy row is primary.
