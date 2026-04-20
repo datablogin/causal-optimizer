@@ -42,7 +42,7 @@ from causal_optimizer.benchmarks.open_bandit import (
     compute_snipw,
     degenerate_policy,
     ess_gate,
-    evaluate_policy,
+    evaluate_open_bandit_policy,
     generate_synthetic_bandit_feedback,
     null_control_gate,
     peaked_policy,
@@ -60,16 +60,12 @@ class TestSyntheticFixtures:
     """Synthetic bandit-feedback generator and policy helpers."""
 
     def test_bandit_feedback_has_required_keys(self) -> None:
-        bf = generate_synthetic_bandit_feedback(
-            n_rounds=100, n_actions=4, n_positions=2, seed=0
-        )
+        bf = generate_synthetic_bandit_feedback(n_rounds=100, n_actions=4, n_positions=2, seed=0)
         for key in ("n_rounds", "n_actions", "action", "reward", "pscore"):
             assert key in bf
 
     def test_bandit_feedback_shapes(self) -> None:
-        bf = generate_synthetic_bandit_feedback(
-            n_rounds=50, n_actions=6, n_positions=3, seed=0
-        )
+        bf = generate_synthetic_bandit_feedback(n_rounds=50, n_actions=6, n_positions=3, seed=0)
         assert bf["n_rounds"] == 50
         assert bf["n_actions"] == 6
         assert bf["action"].shape == (50,)
@@ -78,12 +74,8 @@ class TestSyntheticFixtures:
         assert bf["position"].shape == (50,)
 
     def test_bandit_feedback_is_deterministic(self) -> None:
-        bf1 = generate_synthetic_bandit_feedback(
-            n_rounds=100, n_actions=4, n_positions=2, seed=42
-        )
-        bf2 = generate_synthetic_bandit_feedback(
-            n_rounds=100, n_actions=4, n_positions=2, seed=42
-        )
+        bf1 = generate_synthetic_bandit_feedback(n_rounds=100, n_actions=4, n_positions=2, seed=42)
+        bf2 = generate_synthetic_bandit_feedback(n_rounds=100, n_actions=4, n_positions=2, seed=42)
         np.testing.assert_array_equal(bf1["action"], bf2["action"])
         np.testing.assert_array_equal(bf1["reward"], bf2["reward"])
         np.testing.assert_array_equal(bf1["pscore"], bf2["pscore"])
@@ -116,9 +108,7 @@ class TestSyntheticFixtures:
         np.testing.assert_allclose(pol, 0.25)
 
     def test_peaked_policy_sums_to_one(self) -> None:
-        pol = peaked_policy(
-            n_rounds=20, n_actions=5, best_action=2, peak_mass=0.9
-        )
+        pol = peaked_policy(n_rounds=20, n_actions=5, best_action=2, peak_mass=0.9)
         assert pol.shape == (20, 5)
         row_sums = pol.sum(axis=1)
         np.testing.assert_allclose(row_sums, 1.0)
@@ -142,25 +132,21 @@ class TestPropensityClip:
         assert clip == pytest.approx(1.0 / (2 * 34 * 3))
 
     def test_clip_floor_prevents_divide_by_zero(self) -> None:
-        bf = generate_synthetic_bandit_feedback(
-            n_rounds=20, n_actions=4, n_positions=1, seed=0
-        )
+        bf = generate_synthetic_bandit_feedback(n_rounds=20, n_actions=4, n_positions=1, seed=0)
         # Inject a pathologically small propensity
         bf["pscore"] = bf["pscore"].copy()
         bf["pscore"][0] = 1e-12
         pol = uniform_policy(n_rounds=20, n_actions=4)
-        out = evaluate_policy(bf, pol, min_propensity_clip=0.01)
+        out = evaluate_open_bandit_policy(bf, pol, min_propensity_clip=0.01)
         assert np.isfinite(out["policy_value"])
         assert np.isfinite(out["max_weight"])
 
     def test_clipped_row_count_reported(self) -> None:
-        bf = generate_synthetic_bandit_feedback(
-            n_rounds=20, n_actions=4, n_positions=1, seed=0
-        )
+        bf = generate_synthetic_bandit_feedback(n_rounds=20, n_actions=4, n_positions=1, seed=0)
         bf["pscore"] = bf["pscore"].copy()
         bf["pscore"][:5] = 1e-6  # 5 rows below the 0.01 floor
         pol = uniform_policy(n_rounds=20, n_actions=4)
-        out = evaluate_policy(bf, pol, min_propensity_clip=0.01)
+        out = evaluate_open_bandit_policy(bf, pol, min_propensity_clip=0.01)
         assert out["n_clipped_rows"] == 5
 
 
@@ -196,23 +182,13 @@ class TestEstimators:
         assert out == pytest.approx(0.8)
 
     def test_snipw_is_bounded_in_reward_range(self) -> None:
-        bf = generate_synthetic_bandit_feedback(
-            n_rounds=500, n_actions=4, n_positions=1, seed=1
-        )
+        bf = generate_synthetic_bandit_feedback(n_rounds=500, n_actions=4, n_positions=1, seed=1)
         pol = peaked_policy(n_rounds=500, n_actions=4, best_action=1, peak_mass=0.9)
         val = compute_snipw(bf, pol, min_propensity_clip=0.01)
         assert 0.0 <= val <= 1.0
 
     def test_dm_with_constant_reward_model(self) -> None:
         # reward_hat constant 0.3 for every (action, position) → DM = 0.3
-        bf: dict[str, Any] = {
-            "n_rounds": 10,
-            "n_actions": 3,
-            "action": np.zeros(10, dtype=int),
-            "reward": np.zeros(10),
-            "pscore": np.full(10, 1.0 / 3),
-            "position": np.zeros(10, dtype=int),
-        }
         pol = uniform_policy(n_rounds=10, n_actions=3)
         reward_hat = np.full((10, 3), 0.3)
         val = compute_dm(pol, reward_hat)
@@ -245,18 +221,16 @@ class TestEstimators:
         assert dr_val == pytest.approx(dm_val, abs=1e-9)
 
 
-# ── evaluate_policy diagnostic dict ──────────────────────────────────
+# ── evaluate_open_bandit_policy diagnostic dict ──────────────────────────────────
 
 
 class TestEvaluatePolicyDiagnostics:
-    """Section 4d diagnostics returned by ``evaluate_policy``."""
+    """Section 4d diagnostics returned by ``evaluate_open_bandit_policy``."""
 
     def test_diagnostic_keys_present(self) -> None:
-        bf = generate_synthetic_bandit_feedback(
-            n_rounds=100, n_actions=4, n_positions=2, seed=0
-        )
+        bf = generate_synthetic_bandit_feedback(n_rounds=100, n_actions=4, n_positions=2, seed=0)
         pol = uniform_policy(n_rounds=100, n_actions=4)
-        out = evaluate_policy(bf, pol, min_propensity_clip=0.01)
+        out = evaluate_open_bandit_policy(bf, pol, min_propensity_clip=0.01)
         for key in (
             "policy_value",
             "ess",
@@ -270,11 +244,9 @@ class TestEvaluatePolicyDiagnostics:
             assert key in out
 
     def test_ess_is_bounded_by_n_rows(self) -> None:
-        bf = generate_synthetic_bandit_feedback(
-            n_rounds=200, n_actions=4, n_positions=1, seed=0
-        )
+        bf = generate_synthetic_bandit_feedback(n_rounds=200, n_actions=4, n_positions=1, seed=0)
         pol = uniform_policy(n_rounds=200, n_actions=4)
-        out = evaluate_policy(bf, pol, min_propensity_clip=0.01)
+        out = evaluate_open_bandit_policy(bf, pol, min_propensity_clip=0.01)
         assert 0.0 <= out["ess"] <= 200.0
 
     def test_zero_support_fraction_is_one_for_degenerate_on_non_logged(self) -> None:
@@ -288,32 +260,26 @@ class TestEvaluatePolicyDiagnostics:
             "position": np.zeros(10, dtype=int),
         }
         pol = degenerate_policy(n_rounds=10, n_actions=2, support_action=0)
-        out = evaluate_policy(bf, pol, min_propensity_clip=0.01)
+        out = evaluate_open_bandit_policy(bf, pol, min_propensity_clip=0.01)
         assert out["zero_support_fraction"] == pytest.approx(1.0)
 
     def test_n_effective_actions_for_uniform_is_n_actions(self) -> None:
-        bf = generate_synthetic_bandit_feedback(
-            n_rounds=50, n_actions=5, n_positions=1, seed=0
-        )
+        bf = generate_synthetic_bandit_feedback(n_rounds=50, n_actions=5, n_positions=1, seed=0)
         pol = uniform_policy(n_rounds=50, n_actions=5)
-        out = evaluate_policy(bf, pol, min_propensity_clip=0.01)
+        out = evaluate_open_bandit_policy(bf, pol, min_propensity_clip=0.01)
         assert out["n_effective_actions"] == 5
 
     def test_n_effective_actions_for_peaked_is_small(self) -> None:
-        bf = generate_synthetic_bandit_feedback(
-            n_rounds=50, n_actions=10, n_positions=1, seed=0
-        )
+        bf = generate_synthetic_bandit_feedback(n_rounds=50, n_actions=10, n_positions=1, seed=0)
         pol = peaked_policy(n_rounds=50, n_actions=10, best_action=3, peak_mass=0.99)
-        out = evaluate_policy(bf, pol, min_propensity_clip=0.01)
+        out = evaluate_open_bandit_policy(bf, pol, min_propensity_clip=0.01)
         # 0.99 already exceeds 0.95 → only 1 effective action
         assert out["n_effective_actions"] == 1
 
     def test_provenance_records_estimator_name(self) -> None:
-        bf = generate_synthetic_bandit_feedback(
-            n_rounds=20, n_actions=3, n_positions=1, seed=0
-        )
+        bf = generate_synthetic_bandit_feedback(n_rounds=20, n_actions=3, n_positions=1, seed=0)
         pol = uniform_policy(n_rounds=20, n_actions=3)
-        out = evaluate_policy(bf, pol, min_propensity_clip=0.01)
+        out = evaluate_open_bandit_policy(bf, pol, min_propensity_clip=0.01)
         assert out["estimator"] == "snipw"
 
 
@@ -322,9 +288,7 @@ class TestEvaluatePolicyDiagnostics:
 
 class TestNullControlGate:
     def test_permutation_is_stratified_by_position(self) -> None:
-        bf = generate_synthetic_bandit_feedback(
-            n_rounds=100, n_actions=4, n_positions=3, seed=0
-        )
+        bf = generate_synthetic_bandit_feedback(n_rounds=100, n_actions=4, n_positions=3, seed=0)
         # Build a reward vector whose values cluster by position so that an
         # unstratified permutation would scramble that structure.
         reward = np.zeros(100)
@@ -338,77 +302,46 @@ class TestNullControlGate:
             mask = bf["position"] == pos
             assert permuted["reward"][mask].sum() == pytest.approx(reward[mask].sum())
             # Means by position remain identical after within-stratum permutation
-            assert permuted["reward"][mask].mean() == pytest.approx(
-                reward[mask].mean()
-            )
+            assert permuted["reward"][mask].mean() == pytest.approx(reward[mask].mean())
 
     def test_permutation_is_deterministic_under_seed(self) -> None:
-        bf = generate_synthetic_bandit_feedback(
-            n_rounds=50, n_actions=4, n_positions=2, seed=0
-        )
+        bf = generate_synthetic_bandit_feedback(n_rounds=50, n_actions=4, n_positions=2, seed=0)
         p1 = permute_rewards_stratified(bf, seed=7)
         p2 = permute_rewards_stratified(bf, seed=7)
         np.testing.assert_array_equal(p1["reward"], p2["reward"])
 
     def test_permutation_does_not_mutate_input(self) -> None:
-        bf = generate_synthetic_bandit_feedback(
-            n_rounds=30, n_actions=3, n_positions=2, seed=0
-        )
+        bf = generate_synthetic_bandit_feedback(n_rounds=30, n_actions=3, n_positions=2, seed=0)
         original = bf["reward"].copy()
         permute_rewards_stratified(bf, seed=1)
         np.testing.assert_array_equal(bf["reward"], original)
 
     def test_null_control_gate_passes_on_permuted_data(self) -> None:
-        bf = generate_synthetic_bandit_feedback(
-            n_rounds=500, n_actions=4, n_positions=2, seed=0
-        )
+        bf = generate_synthetic_bandit_feedback(n_rounds=500, n_actions=4, n_positions=2, seed=0)
         # Uniform eval policy on permuted data should sit at the permuted mean
         pol = uniform_policy(n_rounds=500, n_actions=4)
-        result = null_control_gate(
-            bf, strategy_policies={"uniform": pol}, permutation_seed=13
-        )
+        result = null_control_gate(bf, strategy_policies={"uniform": pol}, permutation_seed=13)
         assert result.passed is True
         assert "uniform" in result.per_strategy_values
         # ratio under uniform is exactly 1.0 (ignoring floating point)
         assert result.per_strategy_ratios["uniform"] <= 1.05
 
     def test_null_control_gate_fails_when_strategy_exceeds_band(self) -> None:
-        bf = generate_synthetic_bandit_feedback(
-            n_rounds=500, n_actions=4, n_positions=2, seed=0
-        )
-        # Craft a "bad" policy that correlates with reward: force a policy that
-        # heavily weights the logged action where reward is high.  We do this
-        # by supplying ground-truth reward as the policy's input.
+        # A permuted-outcome strategy should sit at mu_null. The gate
+        # must fail when any strategy reports a value above 1.05 * mu_null,
+        # so we drive failure via the test-only override hook.
+        bf = generate_synthetic_bandit_feedback(n_rounds=500, n_actions=4, n_positions=2, seed=0)
+        pol = uniform_policy(n_rounds=500, n_actions=4)
         permuted = permute_rewards_stratified(bf, seed=3)
-        action = bf["action"]
-        n = bf["n_rounds"]
-        n_a = bf["n_actions"]
-        pol = np.full((n, n_a), 1e-8)
-        # place dominant mass on the logged action so the estimate matches
-        # the per-row reward — this is the pathological case
-        pol[np.arange(n), action] = 1.0
-        pol = pol / pol.sum(axis=1, keepdims=True)
-        result = null_control_gate(
-            bf,
-            strategy_policies={"adversarial": pol},
-            permutation_seed=3,
-        )
-        # The permuted reward is random, but matching the logged action makes
-        # SNIPW return the per-row permuted reward mean — still within the band
-        # unless we rig it. Directly rig: pretend the policy achieved 2x the
-        # null mean via a manual override.
         mu_null = float(permuted["reward"].mean())
-        inflated_value = 2.0 * mu_null + 1e-3
         inflated = null_control_gate(
             bf,
             strategy_policies={"adversarial": pol},
             permutation_seed=3,
-            strategy_value_overrides={"adversarial": inflated_value},
+            strategy_value_overrides={"adversarial": 2.0 * mu_null + 1e-3},
         )
-        # With manual override above 1.05 * mu_null → gate fails
         assert inflated.passed is False
-        # And the unrigged value should also be finite
-        assert np.isfinite(result.per_strategy_values["adversarial"])
+        assert np.isfinite(inflated.per_strategy_values["adversarial"])
 
 
 # ── 7b ESS floor ─────────────────────────────────────────────────────
@@ -519,45 +452,172 @@ class TestSnipwDrCrossCheck:
     def test_matching_values_pass(self) -> None:
         snipw_per_seed = [0.10, 0.11, 0.09]
         dr_per_seed = [0.105, 0.112, 0.088]
-        result = snipw_dr_cross_check_gate(
-            snipw_per_seed=snipw_per_seed, dr_per_seed=dr_per_seed
-        )
+        result = snipw_dr_cross_check_gate(snipw_per_seed=snipw_per_seed, dr_per_seed=dr_per_seed)
         assert result.passed is True
         assert result.max_relative_divergence < 0.25
 
     def test_large_divergence_fails(self) -> None:
         snipw_per_seed = [0.10, 0.11, 0.09]
         dr_per_seed = [0.20, 0.30, 0.50]  # all > 25% divergent
-        result = snipw_dr_cross_check_gate(
-            snipw_per_seed=snipw_per_seed, dr_per_seed=dr_per_seed
-        )
+        result = snipw_dr_cross_check_gate(snipw_per_seed=snipw_per_seed, dr_per_seed=dr_per_seed)
         assert result.passed is False
         assert result.max_relative_divergence > 0.25
 
     def test_single_seed_over_threshold_fails(self) -> None:
         snipw_per_seed = [0.10, 0.10, 0.10]
         dr_per_seed = [0.10, 0.10, 0.50]
-        result = snipw_dr_cross_check_gate(
-            snipw_per_seed=snipw_per_seed, dr_per_seed=dr_per_seed
-        )
+        result = snipw_dr_cross_check_gate(snipw_per_seed=snipw_per_seed, dr_per_seed=dr_per_seed)
         assert result.passed is False
         # Flag the offending seed index
         assert 2 in result.offending_seeds
 
     def test_mismatched_lengths_raises(self) -> None:
         with pytest.raises(ValueError, match="length"):
-            snipw_dr_cross_check_gate(
-                snipw_per_seed=[0.1, 0.2], dr_per_seed=[0.1]
-            )
+            snipw_dr_cross_check_gate(snipw_per_seed=[0.1, 0.2], dr_per_seed=[0.1])
 
     def test_zero_baseline_handled_gracefully(self) -> None:
         # When SNIPW is zero we can't divide; treat divergence as relative to
         # DR magnitude
-        result = snipw_dr_cross_check_gate(
-            snipw_per_seed=[0.0], dr_per_seed=[0.05]
-        )
+        result = snipw_dr_cross_check_gate(snipw_per_seed=[0.0], dr_per_seed=[0.05])
         # Very large relative divergence
         assert result.passed is False
+
+
+# ── Input validation (covers ValueError branches) ──────────────────
+
+
+class TestInputValidation:
+    def test_compute_min_propensity_clip_rejects_non_positive(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            compute_min_propensity_clip(n_actions=0, n_positions=3)
+        with pytest.raises(ValueError, match="positive"):
+            compute_min_propensity_clip(n_actions=3, n_positions=0)
+
+    def test_generate_synthetic_bandit_feedback_rejects_bad_inputs(self) -> None:
+        with pytest.raises(ValueError, match="n_rounds"):
+            generate_synthetic_bandit_feedback(n_rounds=0, n_actions=3, n_positions=1, seed=0)
+        with pytest.raises(ValueError, match="n_actions"):
+            generate_synthetic_bandit_feedback(n_rounds=10, n_actions=0, n_positions=1, seed=0)
+        with pytest.raises(ValueError, match="n_positions"):
+            generate_synthetic_bandit_feedback(n_rounds=10, n_actions=3, n_positions=0, seed=0)
+        with pytest.raises(ValueError, match="propensity_schema"):
+            generate_synthetic_bandit_feedback(
+                n_rounds=10,
+                n_actions=3,
+                n_positions=1,
+                seed=0,
+                propensity_schema="bogus",  # type: ignore[arg-type]
+            )
+        with pytest.raises(ValueError, match="reward_mean_by_action"):
+            generate_synthetic_bandit_feedback(
+                n_rounds=10,
+                n_actions=3,
+                n_positions=1,
+                seed=0,
+                reward_mean_by_action=[0.1, 0.2],  # wrong length
+            )
+
+    def test_uniform_policy_rejects_non_positive(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            uniform_policy(0, 3)
+
+    def test_peaked_policy_rejects_bad_inputs(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            peaked_policy(n_rounds=0, n_actions=3, best_action=0, peak_mass=0.5)
+        with pytest.raises(ValueError, match="best_action"):
+            peaked_policy(n_rounds=2, n_actions=3, best_action=5, peak_mass=0.5)
+        with pytest.raises(ValueError, match="peak_mass"):
+            peaked_policy(n_rounds=2, n_actions=3, best_action=0, peak_mass=1.5)
+
+    def test_degenerate_policy_rejects_bad_inputs(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            degenerate_policy(n_rounds=0, n_actions=3, support_action=0)
+        with pytest.raises(ValueError, match="support_action"):
+            degenerate_policy(n_rounds=2, n_actions=3, support_action=5)
+
+    def test_compute_dm_rejects_shape_mismatch(self) -> None:
+        with pytest.raises(ValueError, match="shape"):
+            compute_dm(np.zeros((5, 3)), np.zeros((4, 3)))
+
+    def test_evaluate_policy_rejects_row_mismatch(self) -> None:
+        bf = generate_synthetic_bandit_feedback(n_rounds=10, n_actions=3, n_positions=1, seed=0)
+        pol = uniform_policy(n_rounds=20, n_actions=3)  # wrong row count
+        with pytest.raises(ValueError, match="rows"):
+            evaluate_open_bandit_policy(bf, pol, min_propensity_clip=0.01)
+
+    def test_evaluate_policy_requires_reward_hat_for_dm(self) -> None:
+        bf = generate_synthetic_bandit_feedback(n_rounds=10, n_actions=3, n_positions=1, seed=0)
+        pol = uniform_policy(n_rounds=10, n_actions=3)
+        with pytest.raises(ValueError, match="reward_hat"):
+            evaluate_open_bandit_policy(bf, pol, min_propensity_clip=0.01, estimator="dm")
+
+    def test_evaluate_policy_requires_reward_hat_for_dr(self) -> None:
+        bf = generate_synthetic_bandit_feedback(n_rounds=10, n_actions=3, n_positions=1, seed=0)
+        pol = uniform_policy(n_rounds=10, n_actions=3)
+        with pytest.raises(ValueError, match="reward_hat"):
+            evaluate_open_bandit_policy(bf, pol, min_propensity_clip=0.01, estimator="dr")
+
+    def test_evaluate_policy_rejects_unknown_estimator(self) -> None:
+        bf = generate_synthetic_bandit_feedback(n_rounds=10, n_actions=3, n_positions=1, seed=0)
+        pol = uniform_policy(n_rounds=10, n_actions=3)
+        with pytest.raises(ValueError, match="estimator"):
+            evaluate_open_bandit_policy(bf, pol, min_propensity_clip=0.01, estimator="switch_dr")
+
+    def test_evaluate_policy_with_dm_estimator_returns_value(self) -> None:
+        bf = generate_synthetic_bandit_feedback(n_rounds=10, n_actions=3, n_positions=1, seed=0)
+        pol = uniform_policy(n_rounds=10, n_actions=3)
+        reward_hat = np.full((10, 3), 0.05)
+        out = evaluate_open_bandit_policy(
+            bf, pol, min_propensity_clip=0.01, reward_hat=reward_hat, estimator="dm"
+        )
+        assert out["estimator"] == "dm"
+        assert out["policy_value"] == pytest.approx(0.05)
+
+    def test_evaluate_policy_with_dr_estimator_returns_value(self) -> None:
+        bf = generate_synthetic_bandit_feedback(n_rounds=10, n_actions=3, n_positions=1, seed=0)
+        pol = uniform_policy(n_rounds=10, n_actions=3)
+        reward_hat = np.zeros((10, 3))
+        out = evaluate_open_bandit_policy(
+            bf, pol, min_propensity_clip=0.01, reward_hat=reward_hat, estimator="dr"
+        )
+        assert out["estimator"] == "dr"
+        assert np.isfinite(out["policy_value"])
+
+    def test_permute_rewards_requires_position(self) -> None:
+        bf = generate_synthetic_bandit_feedback(n_rounds=10, n_actions=3, n_positions=1, seed=0)
+        del bf["position"]
+        with pytest.raises(KeyError, match="position"):
+            permute_rewards_stratified(bf, seed=0)
+
+    def test_ess_gate_rejects_empty(self) -> None:
+        with pytest.raises(ValueError, match="empty"):
+            ess_gate(per_seed_ess=[], n_rows=100)
+
+    def test_ess_gate_rejects_negative_n_rows(self) -> None:
+        with pytest.raises(ValueError, match="non-negative"):
+            ess_gate(per_seed_ess=[1000], n_rows=-1)
+
+    def test_zero_support_gate_rejects_empty(self) -> None:
+        with pytest.raises(ValueError, match="empty"):
+            zero_support_gate(per_seed_zero_support=[])
+
+    def test_snipw_dr_cross_check_rejects_empty(self) -> None:
+        with pytest.raises(ValueError, match="empty"):
+            snipw_dr_cross_check_gate(snipw_per_seed=[], dr_per_seed=[])
+
+    def test_snipw_returns_zero_when_all_weights_zero(self) -> None:
+        # Evaluation policy places zero mass on every logged action → denom=0
+        bf = {
+            "n_rounds": 4,
+            "n_actions": 2,
+            "action": np.array([0, 0, 0, 0]),
+            "reward": np.array([1.0, 1.0, 1.0, 1.0]),
+            "pscore": np.full(4, 0.5),
+            "position": np.zeros(4, dtype=int),
+        }
+        # Put all mass on action 1 → pi_e on logged action 0 is always 0
+        pol = degenerate_policy(n_rounds=4, n_actions=2, support_action=1)
+        assert compute_snipw(bf, pol, min_propensity_clip=0.01) == 0.0
 
 
 # ── Provenance / schema constants ────────────────────────────────────

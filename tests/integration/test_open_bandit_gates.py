@@ -1,7 +1,7 @@
 """Integration tests for the Sprint 35 Open Bandit OPE gates.
 
 End-to-end gate runs against synthetic bandit-feedback dicts.  Verifies
-the five Section 7 gates interact cleanly with ``evaluate_policy`` and
+the five Section 7 gates interact cleanly with ``evaluate_open_bandit_policy`` and
 each gate has at least one passing-and-one-failing scenario that fires
 deterministically.
 """
@@ -14,9 +14,8 @@ from causal_optimizer.benchmarks.open_bandit import (
     PROPENSITY_SCHEMA_JOINT,
     GateReport,
     compute_snipw,
-    degenerate_policy,
     ess_gate,
-    evaluate_policy,
+    evaluate_open_bandit_policy,
     generate_synthetic_bandit_feedback,
     null_control_gate,
     peaked_policy,
@@ -51,9 +50,10 @@ class TestEndToEndPassingRun:
         per_seed_zero_support = []
         snipw_per_seed = []
         dr_per_seed = []
-        for seed in range(3):
+        clip = 1.0 / (2 * n_actions * n_positions)
+        for _seed in range(3):
             pol = uniform_policy(n_rounds, n_actions)
-            out = evaluate_policy(bf, pol, min_propensity_clip=1.0 / (2 * n_actions * n_positions))
+            out = evaluate_open_bandit_policy(bf, pol, min_propensity_clip=clip)
             per_seed_ess.append(out["ess"])
             per_seed_zero_support.append(out["zero_support_fraction"])
             snipw_per_seed.append(out["policy_value"])
@@ -105,15 +105,11 @@ class TestIndividualGateFailures:
         assert result.passed is False  # joint target is 1/102, not 1/34
 
     def test_dr_snipw_fails_on_divergence(self) -> None:
-        result = snipw_dr_cross_check_gate(
-            snipw_per_seed=[0.01], dr_per_seed=[0.50]
-        )
+        result = snipw_dr_cross_check_gate(snipw_per_seed=[0.01], dr_per_seed=[0.50])
         assert result.passed is False
 
     def test_null_control_fails_with_override(self) -> None:
-        bf = generate_synthetic_bandit_feedback(
-            n_rounds=500, n_actions=4, n_positions=2, seed=0
-        )
+        bf = generate_synthetic_bandit_feedback(n_rounds=500, n_actions=4, n_positions=2, seed=0)
         pol = uniform_policy(500, 4)
         # Use an override to drive the value well above the 5% band
         permuted_mean_upper_bound = 10.0  # synthetic reward mean guaranteed < this
@@ -130,18 +126,17 @@ class TestSnipwSanity:
     """SNIPW is the primary verdict estimator; cross-check vs a known result."""
 
     def test_snipw_on_degenerate_eval_policy_matches_logged_action_reward_mean(self) -> None:
-        bf = generate_synthetic_bandit_feedback(
-            n_rounds=2000, n_actions=5, n_positions=1, seed=3
-        )
+        bf = generate_synthetic_bandit_feedback(n_rounds=2000, n_actions=5, n_positions=1, seed=3)
         # Eval policy that perfectly mirrors the logger → SNIPW ≈ mean(reward)
         n_rounds = bf["n_rounds"]
         n_actions = bf["n_actions"]
         pol = np.full((n_rounds, n_actions), 1.0 / n_actions)
         expected = float(bf["reward"].mean())
         snipw_val = compute_snipw(bf, pol, min_propensity_clip=0.01)
-        assert snipw_val == float(
-            np.isclose(snipw_val, expected, atol=1e-6) * snipw_val
-        ) or np.isclose(snipw_val, expected, atol=1e-6)
+        # With a uniform eval policy matching the uniform logger, every
+        # SNIPW weight is 1 and the estimate collapses to the sample
+        # reward mean.
+        assert np.isclose(snipw_val, expected, atol=1e-9)
 
     def test_snipw_peaked_policy_moves_estimate(self) -> None:
         bf = generate_synthetic_bandit_feedback(
@@ -165,9 +160,7 @@ class TestDegeneratePolicyIsZeroSupportHeavy:
     """Degenerate policies on actions the logger never chose saturate the gate."""
 
     def test_degenerate_policy_flags_zero_support_gate(self) -> None:
-        bf = generate_synthetic_bandit_feedback(
-            n_rounds=500, n_actions=4, n_positions=1, seed=0
-        )
+        bf = generate_synthetic_bandit_feedback(n_rounds=500, n_actions=4, n_positions=1, seed=0)
         # Force every action to be NOT taken → exists some action the logger
         # never chose, but here the logger is uniform so every action gets hits.
         # Build a policy that places *negligible* probability on action 0
@@ -176,7 +169,7 @@ class TestDegeneratePolicyIsZeroSupportHeavy:
         n_actions = bf["n_actions"]
         pol = np.full((n_rounds, n_actions), 0.0)
         pol[:, 1] = 1.0  # all mass on action 1
-        out = evaluate_policy(bf, pol, min_propensity_clip=0.01)
+        out = evaluate_open_bandit_policy(bf, pol, min_propensity_clip=0.01)
         # zero_support_fraction = fraction of rows where pol[i, logged_action_i] == 0
         # Logged actions uniform across {0,1,2,3}; pol puts mass only on 1 → ~75% zero support
         assert out["zero_support_fraction"] > 0.5
@@ -184,9 +177,7 @@ class TestDegeneratePolicyIsZeroSupportHeavy:
 
 class TestGateReportStructure:
     def test_gate_report_individual_results_are_structured(self) -> None:
-        bf = generate_synthetic_bandit_feedback(
-            n_rounds=200, n_actions=3, n_positions=1, seed=0
-        )
+        bf = generate_synthetic_bandit_feedback(n_rounds=200, n_actions=3, n_positions=1, seed=0)
         policies = {"s": uniform_policy(200, 3)}
         report = run_section_7_gates(
             bf=bf,
