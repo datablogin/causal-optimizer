@@ -170,6 +170,66 @@ class TestObpVersionProvenance:
         assert version != OBP_VERSION_PLACEHOLDER
         assert "unavailable" in version.lower() or "not installed" in version.lower()
 
+    def test_get_obp_version_returns_sentinel_when_version_attr_is_non_string(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # CI runs the default matrix without the ``bandit`` extra, so we
+        # inject a synthetic ``obp`` module into ``sys.modules`` to cover
+        # the defensive guard path (``isinstance(version, str)``) without
+        # depending on an installed OBP. Exercises the ``not isinstance``
+        # branch of :func:`get_obp_version`.
+        import sys
+        import types
+
+        fake_obp = types.ModuleType("obp")
+        fake_obp.__version__ = 0.41  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "obp", fake_obp)
+
+        version = get_obp_version()
+        assert isinstance(version, str)
+        assert version != OBP_VERSION_PLACEHOLDER
+        assert "unavailable" in version.lower() or "not installed" in version.lower()
+
+    def test_get_obp_version_returns_sentinel_when_version_attr_is_empty_string(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Exercises the ``not version`` branch of :func:`get_obp_version`:
+        # a module that ships with ``__version__ = ""`` must still yield
+        # the sentinel rather than the empty string, so provenance dicts
+        # never carry a blank version. Injects a synthetic module so the
+        # test runs on CI without the optional ``bandit`` extra.
+        import sys
+        import types
+
+        fake_obp = types.ModuleType("obp")
+        fake_obp.__version__ = ""  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "obp", fake_obp)
+
+        version = get_obp_version()
+        assert isinstance(version, str)
+        assert version != OBP_VERSION_PLACEHOLDER
+        assert "unavailable" in version.lower() or "not installed" in version.lower()
+
+    def test_get_obp_version_returns_version_string_from_synthetic_module(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Happy-path coverage on CI runners that do not install the
+        # ``bandit`` extra: inject a synthetic ``obp`` module exposing a
+        # non-empty string ``__version__`` and verify the helper returns
+        # it verbatim (not the sentinel). Mirrors what a real ``obp`` pin
+        # would produce, so the success branch of :func:`get_obp_version`
+        # is exercised regardless of extra availability.
+        import sys
+        import types
+
+        fake_obp = types.ModuleType("obp")
+        fake_obp.__version__ = "0.4.1"  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "obp", fake_obp)
+
+        version = get_obp_version()
+        assert version == "0.4.1"
+        assert version != OBP_VERSION_PLACEHOLDER
+
 
 # ── Seam 3: conditional schema propagation ────────────────────────────
 
