@@ -422,6 +422,45 @@ class TestConstructorValidation:
         with pytest.raises(ValueError, match="pscore"):
             BanditLogAdapter(bandit_feedback=fb)
 
+    def test_action_out_of_range_raises(self) -> None:
+        fb = _synthetic_bandit_feedback()
+        fb["action"] = fb["action"].copy()
+        fb["action"][0] = fb["n_actions"]  # one past the last valid id
+        with pytest.raises(ValueError, match="action"):
+            BanditLogAdapter(bandit_feedback=fb)
+
+    def test_negative_action_raises(self) -> None:
+        fb = _synthetic_bandit_feedback()
+        fb["action"] = fb["action"].copy()
+        fb["action"][0] = -1
+        with pytest.raises(ValueError, match="action"):
+            BanditLogAdapter(bandit_feedback=fb)
+
+    def test_negative_position_raises(self) -> None:
+        fb = _synthetic_bandit_feedback()
+        fb["position"] = fb["position"].copy()
+        fb["position"][0] = -1
+        with pytest.raises(ValueError, match="position"):
+            BanditLogAdapter(bandit_feedback=fb)
+
+    def test_non_positive_n_rounds_raises(self) -> None:
+        fb = _synthetic_bandit_feedback()
+        fb["n_rounds"] = 0
+        with pytest.raises(ValueError, match="n_rounds"):
+            BanditLogAdapter(bandit_feedback=fb)
+
+    def test_too_few_actions_raises(self) -> None:
+        fb = _synthetic_bandit_feedback(n_actions=2)
+        fb["n_actions"] = 1  # a bandit with one arm is not multi-action
+        with pytest.raises(ValueError, match="n_actions"):
+            BanditLogAdapter(bandit_feedback=fb)
+
+    def test_action_context_with_zero_columns_raises(self) -> None:
+        fb = _synthetic_bandit_feedback()
+        fb["action_context"] = np.zeros((fb["n_actions"], 0))
+        with pytest.raises(ValueError, match="action_context"):
+            BanditLogAdapter(bandit_feedback=fb)
+
 
 class TestFromObpConstructor:
     """Section 8c: adapter must fail fast with a clear error if OBP is

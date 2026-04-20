@@ -563,3 +563,15 @@ class BanditLogAdapter(DomainAdapter):
                 f"bandit_feedback['action'] values must be in [0, {n_actions}); "
                 f"found range [{int(action.min())}, {int(action.max())}]"
             )
+
+        # The adapter only interprets ``position == 0`` as "position 1"
+        # (mirroring OBP's ``rankdata`` convention). Negative position
+        # values would silently distort the ``position_1_only`` subset
+        # without raising, so reject them at construction.
+        position = np.asarray(bandit_feedback["position"])
+        if position.min() < 0:
+            raise ValueError(
+                "bandit_feedback['position'] values must be non-negative; "
+                f"found min={int(position.min())}. OBP stores positions "
+                "as 0-indexed integers after ``rankdata(..., 'dense')``."
+            )
