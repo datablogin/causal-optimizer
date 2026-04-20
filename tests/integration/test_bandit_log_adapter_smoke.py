@@ -41,12 +41,11 @@ def _load_men_random_raw() -> tuple[Any, Any]:
     Issue B / Issue C can switch to a patched loader later; for the
     Sprint 35.A smoke test we only need the raw column shapes.
     """
-    import os
     from pathlib import Path
 
     import pandas as pd
 
-    root = Path(os.path.dirname(obp.__file__)) / "dataset" / "obd" / "random" / "men"
+    root = Path(obp.__file__).parent / "dataset" / "obd" / "random" / "men"
     data = pd.read_csv(root / "men.csv", index_col=0)
     item_context = pd.read_csv(root / "item_context.csv", index_col=0)
     return data, item_context

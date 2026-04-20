@@ -327,6 +327,46 @@ class TestRunExperimentSemantics:
         )
         assert 0.0 <= metrics["policy_value"] <= 1.0
 
+    def test_eps_zero_uniform_scores_produces_uniform_policy(
+        self, feedback: dict[str, Any]
+    ) -> None:
+        # With every weight zero and ``eps=0``, the softmax over a row
+        # of identical scores must be uniform (no numerical blow-up).
+        # n_effective_actions should equal the smallest k with
+        # cum_mass >= 0.95 under a uniform distribution: for n=5,
+        # 4/5=0.80 < 0.95 but 5/5=1.00, so k=5.
+        adapter = BanditLogAdapter(bandit_feedback=feedback, seed=0)
+        metrics = adapter.run_experiment(
+            {
+                "tau": 1.0,
+                "eps": 0.0,
+                "w_item_feature_0": 0.0,
+                "w_user_item_affinity": 0.0,
+                "w_item_popularity": 0.0,
+                "position_handling_flag": "marginalize",
+            }
+        )
+        assert metrics["n_effective_actions"] == float(feedback["n_actions"])
+        assert metrics["zero_support_fraction"] == 0.0
+
+    def test_negative_feature_weights_produce_valid_policy(self, adapter: BanditLogAdapter) -> None:
+        # Negative weights penalize rather than reward items; the
+        # adapter must still produce valid diagnostics (no NaN, no
+        # probability outside [0, 1], finite ESS).
+        metrics = adapter.run_experiment(
+            {
+                "tau": 1.0,
+                "eps": 0.05,
+                "w_item_feature_0": -2.0,
+                "w_user_item_affinity": -1.5,
+                "w_item_popularity": -0.5,
+                "position_handling_flag": "marginalize",
+            }
+        )
+        assert 0.0 <= metrics["policy_value"] <= 1.0
+        assert np.isfinite(metrics["ess"])
+        assert np.isfinite(metrics["weight_cv"])
+
     def test_sharp_softmax_reduces_n_effective_actions(self, adapter: BanditLogAdapter) -> None:
         # Small tau => sharp softmax => most mass on one action under
         # non-zero weights => n_effective_actions drops toward 1.
@@ -398,6 +438,14 @@ class TestFromObpConstructor:
         monkeypatch.setitem(sys.modules, "obp.dataset", None)
         with pytest.raises(ImportError, match="bandit"):
             BanditLogAdapter.from_obp(campaign="men", behavior_policy="random")
+
+    def test_from_obp_rejects_invalid_campaign(self) -> None:
+        with pytest.raises(ValueError, match="campaign"):
+            BanditLogAdapter.from_obp(campaign="bogus", behavior_policy="random")
+
+    def test_from_obp_rejects_invalid_behavior_policy(self) -> None:
+        with pytest.raises(ValueError, match="behavior_policy"):
+            BanditLogAdapter.from_obp(campaign="men", behavior_policy="epsilon_greedy")
 
     def test_from_obp_delegates_to_open_bandit_dataset(
         self, monkeypatch: pytest.MonkeyPatch

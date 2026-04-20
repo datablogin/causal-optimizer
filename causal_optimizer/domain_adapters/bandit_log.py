@@ -75,6 +75,8 @@ from causal_optimizer.domain_adapters.base import DomainAdapter
 from causal_optimizer.types import SearchSpace, Variable, VariableType
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from causal_optimizer.types import CausalGraph
 
 __all__ = ["BanditLogAdapter"]
@@ -102,6 +104,13 @@ _CONTEXT_WEIGHT_NAMES: tuple[str, ...] = (
 )
 
 _POSITION_HANDLING_CHOICES: tuple[str, ...] = ("marginalize", "position_1_only")
+
+# Accepted values for :meth:`BanditLogAdapter.from_obp`. These mirror
+# the values validated inside ``OpenBanditDataset.__post_init__``; we
+# check them up-front so the adapter fails fast with a consistent error
+# message regardless of which OBP version is installed.
+_OBP_CAMPAIGNS: frozenset[str] = frozenset({"all", "men", "women"})
+_OBP_BEHAVIOR_POLICIES: frozenset[str] = frozenset({"random", "bts"})
 
 # Search-space bounds — see Sprint 34 contract Section 4c.
 _TAU_LOWER: float = 0.1
@@ -167,7 +176,11 @@ class BanditLogAdapter(DomainAdapter):
         self._n_actions: int = int(bandit_feedback["n_actions"])
         self._action: np.ndarray = np.asarray(bandit_feedback["action"], dtype=np.int64)
         self._position: np.ndarray = np.asarray(bandit_feedback["position"], dtype=np.int64)
-        self._reward: np.ndarray = np.asarray(bandit_feedback["reward"], dtype=np.int64)
+        # Store reward as float64 (binary rewards are checked in
+        # ``_validate_feedback`` before this line). Storing as float
+        # avoids a per-call ``.astype(float)`` in ``run_experiment`` and
+        # matches ``pscore``'s dtype convention.
+        self._reward: np.ndarray = np.asarray(bandit_feedback["reward"], dtype=float)
         self._pscore: np.ndarray = np.asarray(bandit_feedback["pscore"], dtype=float)
         self._context: np.ndarray = np.asarray(bandit_feedback["context"], dtype=float)
         self._action_context: np.ndarray = np.asarray(
@@ -207,7 +220,7 @@ class BanditLogAdapter(DomainAdapter):
         *,
         campaign: str = "men",
         behavior_policy: str = "random",
-        data_path: Any | None = None,
+        data_path: Path | str | None = None,
         seed: int | None = None,
     ) -> BanditLogAdapter:
         """Build an adapter from an OBP ``OpenBanditDataset``.
@@ -234,6 +247,16 @@ class BanditLogAdapter(DomainAdapter):
         seed:
             Reproducibility seed; forwarded to the adapter constructor.
         """
+        if campaign not in _OBP_CAMPAIGNS:
+            msg = f"campaign must be one of {sorted(_OBP_CAMPAIGNS)!r}, got {campaign!r}"
+            raise ValueError(msg)
+        if behavior_policy not in _OBP_BEHAVIOR_POLICIES:
+            msg = (
+                "behavior_policy must be one of "
+                f"{sorted(_OBP_BEHAVIOR_POLICIES)!r}, got {behavior_policy!r}"
+            )
+            raise ValueError(msg)
+
         try:
             # Inside-function import is deliberate: the ``obp`` package
             # is the optional ``bandit`` extra, and keeping this import
@@ -358,7 +381,7 @@ class BanditLogAdapter(DomainAdapter):
 
         # ── SNIPW-style policy value ──────────────────────────────────
         active_action = self._action[mask]
-        active_reward = self._reward[mask].astype(float)
+        active_reward = self._reward[mask]
         active_pscore = self._pscore[mask]
 
         # Evaluation-policy probability of the logged action.
@@ -371,6 +394,12 @@ class BanditLogAdapter(DomainAdapter):
         weight_sum = float(weights.sum())
         if weight_sum > 0.0:
             # Self-normalized IPW: V_hat = sum(w_i r_i) / sum(w_i).
+            # For binary rewards in {0, 1}, SNIPW is a weighted average
+            # of {0, 1} values and is bounded in [0, 1]. It is *not*
+            # bounded in [0, 1] for non-binary rewards, so downstream
+            # callers that want a strict unit-interval guarantee should
+            # clip. Track A keeps binary-reward validation at
+            # ``_validate_feedback`` so this bound holds by construction.
             policy_value = float((weights * active_reward).sum() / weight_sum)
             # Kish ESS: (sum w)^2 / sum(w^2).
             ess = float(weight_sum * weight_sum / float((weights * weights).sum()))
@@ -384,6 +413,11 @@ class BanditLogAdapter(DomainAdapter):
         # Use population std (ddof=0) so the CV is well defined even at
         # tiny n_active; fall back to 0.0 when fewer than two positive
         # weights survive (no variability to report).
+        # NOTE: ``MarketingLogAdapter`` uses ``ddof=1`` for its
+        # ``weight_cv``. ``weight_cv`` values from the two adapters are
+        # therefore not directly comparable at small n; this adapter
+        # optimizes for stability under the ``position_1_only`` subset,
+        # not for cross-adapter parity.
         weight_cv = float(positive.std(ddof=0) / positive.mean()) if positive.size > 1 else 0.0
 
         # ── Zero-support fraction ─────────────────────────────────────
