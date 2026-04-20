@@ -179,6 +179,13 @@ class TestObpVersionProvenance:
         # This test needs ``obp`` importable so we can strip the
         # attribute off a real module object; skip cleanly if the
         # optional ``bandit`` extra is not installed.
+        #
+        # Note: ``monkeypatch.delattr(obp, "__version__")`` mutates the
+        # same module object cached in ``sys.modules``. ``get_obp_version``
+        # re-imports via ``import obp``, which returns that cached object
+        # (not a reloaded one), so it sees the missing attribute. If
+        # :func:`get_obp_version` ever uses ``importlib.reload``, this
+        # test would need a ``sys.modules`` reset instead.
         obp = pytest.importorskip("obp", reason="requires optional 'bandit' extra")
 
         monkeypatch.delattr(obp, "__version__", raising=False)
@@ -346,6 +353,13 @@ class TestBridgeEndToEnd:
     """
 
     def test_full_bridge_flow_produces_clean_gate_report(self) -> None:
+        # The final provenance assertion pins against ``obp.__version__``,
+        # so skip the whole test cleanly up-front when the optional
+        # ``bandit`` extra is absent. Placing this at the top avoids
+        # burning CI compute on the Men/Random feedback build + gate run
+        # only to skip at the last line.
+        obp = pytest.importorskip("obp", reason="requires optional 'bandit' extra")
+
         n_rounds = 2_000
         n_actions = 34
         n_positions = 3
@@ -421,14 +435,11 @@ class TestBridgeEndToEnd:
         assert report.propensity_sanity.target == pytest.approx(1.0 / n_actions)
 
         # Seam: provenance carries a real OBP version, not the Track B
-        # placeholder.
+        # placeholder. ``obp`` was bound at the top of the test via
+        # ``pytest.importorskip``, so it's guaranteed importable here.
         provenance = report.provenance
         assert "obp_version" in provenance
         assert provenance["obp_version"] != OBP_VERSION_PLACEHOLDER
-        # Installed via the ``bandit`` extra (skip if someone runs this
-        # test without the extra, but the top-level pytest marker would
-        # have already excluded it — we guard defensively).
-        obp = pytest.importorskip("obp")
         assert provenance["obp_version"] == obp.__version__
         # Schema is recorded in provenance for reproducibility.
         assert provenance["schema"] == PROPENSITY_SCHEMA_CONDITIONAL

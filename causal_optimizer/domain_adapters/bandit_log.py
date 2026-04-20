@@ -175,6 +175,11 @@ class BanditLogAdapter(DomainAdapter):
     # ``ClassVar`` to document that it is a per-class constant shared by
     # all instances (not a per-instance attribute) and to let type
     # checkers catch accidental instance-level shadowing.
+    #
+    # Men/Random-specific. BTS (Bernoulli Thompson Sampling) and other
+    # logging policies may use joint ``P(item, position)`` propensities;
+    # a future BTS-specific subclass should override this constant at
+    # the class level rather than mutating it per-instance.
     propensity_schema: ClassVar[PropensitySchema] = PROPENSITY_SCHEMA_CONDITIONAL
 
     def __init__(
