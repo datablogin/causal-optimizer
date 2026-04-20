@@ -71,6 +71,11 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from causal_optimizer.benchmarks.open_bandit import (
+    PROPENSITY_SCHEMA_CONDITIONAL,
+    PropensitySchema,
+    normalize_positions,
+)
 from causal_optimizer.domain_adapters.base import DomainAdapter
 from causal_optimizer.types import SearchSpace, Variable, VariableType
 
@@ -162,6 +167,12 @@ class BanditLogAdapter(DomainAdapter):
     (``policy_value``, ``ess``, ``weight_cv``, ``max_weight``,
     ``zero_support_fraction``, ``n_effective_actions``).
     """
+
+    # Sprint 35 bridge (issue #190): the Men/Random slice stores
+    # ``action_prob`` as conditional ``P(item | position) = 1 / n_items``.
+    # The adapter advertises this so callers threading feedback into
+    # :func:`run_section_7_gates` pass the right ``schema``.
+    propensity_schema: PropensitySchema = PROPENSITY_SCHEMA_CONDITIONAL
 
     def __init__(
         self,
@@ -455,6 +466,38 @@ class BanditLogAdapter(DomainAdapter):
             "max_weight": max_weight,
             "zero_support_fraction": zero_support_fraction,
             "n_effective_actions": n_effective_actions,
+        }
+
+    # ── Sprint 35 bridge: adapter → OPE feedback dict ─────────────────
+
+    def to_bandit_feedback(self) -> dict[str, Any]:
+        """Return an OBP-shaped ``bandit_feedback`` dict for the OPE stack.
+
+        Produces the exact dict shape that
+        :func:`causal_optimizer.benchmarks.open_bandit.evaluate_open_bandit_policy`
+        (and :func:`run_section_7_gates`) consume. Positions are piped
+        through :func:`normalize_positions` so Track B's
+        ``_validate_positions`` — which rejects anything that is not
+        0-indexed contiguous integers — accepts the output.
+
+        The dict uses fresh ndarray copies of the adapter's internal
+        arrays so the caller cannot mutate adapter state by editing the
+        returned dict.
+
+        Returns:
+            A dict with the keys ``n_rounds``, ``n_actions``, ``action``,
+            ``reward``, ``pscore``, ``position``, ``context``, and
+            ``action_context``.  ``position`` is 0-indexed contiguous.
+        """
+        return {
+            "n_rounds": int(self._n_rounds),
+            "n_actions": int(self._n_actions),
+            "action": self._action.copy(),
+            "reward": self._reward.copy(),
+            "pscore": self._pscore.copy(),
+            "position": normalize_positions(self._position),
+            "context": self._context.copy(),
+            "action_context": self._action_context.copy(),
         }
 
     def get_prior_graph(self) -> CausalGraph | None:

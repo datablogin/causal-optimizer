@@ -59,6 +59,9 @@ Public API
 - :class:`DrSnipwCrossCheckResult`
 - :class:`GateReport`
 - :data:`OBP_VERSION_PLACEHOLDER`
+- :data:`OBP_VERSION_UNAVAILABLE`
+- :func:`get_obp_version`
+- :func:`normalize_positions`
 """
 
 from __future__ import annotations
@@ -90,10 +93,82 @@ PropensitySchema = Literal["conditional", "joint"]
 OBP_VERSION_PLACEHOLDER: str = "<OBP version pin TBD — populate from obp.__version__ in Issue A>"
 """Provenance hook for the OBP version string.
 
-Issue A will replace this by reading ``obp.__version__`` from the
-optional extra at run time.  Track B keeps it as a static placeholder
-so the diagnostic dict always carries the key.
+Retained as a public constant so downstream callers can assert
+"provenance has been wired" by checking for inequality against this
+value.  The Sprint 35 bridge (issue #190) replaces it at runtime via
+:func:`get_obp_version`; Track B kept it as a static placeholder so the
+diagnostic dict always carries the key before the bridge landed.
 """
+
+OBP_VERSION_UNAVAILABLE: str = "obp-unavailable (bandit extra not installed)"
+"""Sentinel returned by :func:`get_obp_version` when ``obp`` is absent.
+
+The bandit extra is optional; a caller running without it still needs
+provenance to round-trip cleanly, so the helper returns this explicit
+string rather than raising.  It is deliberately distinct from
+:data:`OBP_VERSION_PLACEHOLDER` so tests can tell the two states apart.
+"""
+
+
+def get_obp_version() -> str:
+    """Return the installed OBP version string, or a graceful-degradation sentinel.
+
+    The Sprint 34 contract (Section 8c) pins OBP to the 0.4.x series
+    and records the exact version in every gate-report provenance dict
+    for reproducibility.  This helper is the single source of truth for
+    that lookup:
+
+    - When the ``bandit`` extra is installed, returns ``obp.__version__``
+      (e.g. ``"0.4.1"``).
+    - When the extra is missing, returns :data:`OBP_VERSION_UNAVAILABLE`
+      so the provenance dict keeps the key and any downstream report
+      reads an explicit sentinel rather than crashing.
+
+    The import is lazy: Track B core code must stay importable without
+    the optional extra, so the ``import`` lives inside the function.
+    """
+    try:
+        import obp  # noqa: PLC0415 — lazy import keeps ``bandit`` extra optional
+    except ImportError:
+        return OBP_VERSION_UNAVAILABLE
+    version = getattr(obp, "__version__", None)
+    if not isinstance(version, str) or not version:
+        # Defensive: a forked OBP with no __version__ attribute should
+        # still produce a usable provenance string rather than raising.
+        return OBP_VERSION_UNAVAILABLE
+    return version
+
+
+def normalize_positions(position: np.ndarray) -> np.ndarray:
+    """Remap any integer position labels to 0-indexed contiguous integers.
+
+    OBD-style loaders emit positions as ``{1, 2, 3}`` or
+    (post-filtering) as non-contiguous labels like ``{5, 10, 20}``.
+    Track B's :func:`_validate_positions` fails loudly on both, so the
+    Sprint 35 bridge pipes raw positions through this helper before the
+    OPE wrapper consumes them.
+
+    Ranks are assigned in ascending order of unique value, so the
+    relative order of position strata is preserved.  Shape and row
+    ordering are unchanged; dtype is coerced to ``int64`` so the
+    downstream validator sees the expected integer kind.
+
+    Args:
+        position: 1-D integer array of per-row position labels.
+
+    Returns:
+        A new array of the same shape whose values form 0-indexed
+        contiguous integers.  An empty input returns an empty array.
+    """
+    arr: np.ndarray = np.asarray(position, dtype=np.int64)
+    if arr.size == 0:
+        empty: np.ndarray = arr.copy()
+        return empty
+    unique_sorted = np.unique(arr)
+    # ``np.searchsorted`` maps each element to its 0-based index in the
+    # sorted unique list — the canonical dense-rank remap.
+    ranked: np.ndarray = np.searchsorted(unique_sorted, arr).astype(np.int64)
+    return ranked
 
 
 # ── Propensity clip floor ────────────────────────────────────────────
@@ -929,7 +1004,7 @@ def run_section_7_gates(
         tolerance_relative=dr_snipw_tolerance_relative,
     )
     provenance = {
-        "obp_version": OBP_VERSION_PLACEHOLDER,
+        "obp_version": get_obp_version(),
         "schema": schema,
         "n_actions": n_actions,
         "n_positions": n_positions,
