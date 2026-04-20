@@ -72,11 +72,6 @@ _DEFAULT_POSITION_HANDLING_FLAG: str = "position_1_only"
 evaluation of best-of-seed policies when the optimizer picked an
 invalid literal.  Matches the Sprint 34 contract Section 4c default."""
 
-_REWARD_MODEL_N_NEIGHBORS: int = 16
-"""Nearest-neighbor count for the action-conditional reward model used
-by DM and DR.  Small enough to stay cheap on ~453K rows; large enough
-that the per-action mean is not driven by a single observation."""
-
 
 # ── Loader: raw CSV → OBP-shaped bandit_feedback ──────────────────
 
@@ -244,7 +239,14 @@ def build_policy_action_dist(
     n_rounds = adapter._n_rounds  # noqa: SLF001 — adapter is our own private surface
     n_actions = adapter._n_actions  # noqa: SLF001
 
-    # Scores for every (row, action) candidate.
+    # Scores for every (row, action) candidate. Under
+    # ``position_1_only`` the adapter instead scores the position-0
+    # subset only (see :meth:`BanditLogAdapter.run_experiment`). Here
+    # we score every row up front and then, below, overwrite the
+    # non-position-0 rows with the uniform distribution; the overwrite
+    # discards the score values on those rows, so the two paths agree
+    # element-wise on position-0 rows and the benchmark SNIPW matches
+    # the adapter's own ``policy_value``.
     item_term = w_item * adapter._item_feature_0[None, :]  # noqa: SLF001
     pop_term = w_popularity * adapter._item_popularity[None, :]  # noqa: SLF001
     affinity_term = w_affinity * adapter._affinity  # noqa: SLF001
