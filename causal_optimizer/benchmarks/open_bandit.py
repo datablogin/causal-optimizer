@@ -159,8 +159,19 @@ def normalize_positions(position: np.ndarray) -> np.ndarray:
     Returns:
         A new array of the same shape whose values form 0-indexed
         contiguous integers.  An empty input returns an empty array.
+
+    Raises:
+        ValueError: If ``position`` is not one-dimensional. A 2-D input
+            would silently pass through ``np.unique`` + ``np.searchsorted``
+            with flattening semantics and produce a misleading result, so
+            the helper fails fast instead.
     """
     arr: np.ndarray = np.asarray(position, dtype=np.int64)
+    if arr.ndim != 1:
+        raise ValueError(
+            "normalize_positions expects a 1-D array of per-row position "
+            f"labels; got ndim={arr.ndim} with shape {arr.shape!r}."
+        )
     if arr.size == 0:
         empty: np.ndarray = arr.copy()
         return empty

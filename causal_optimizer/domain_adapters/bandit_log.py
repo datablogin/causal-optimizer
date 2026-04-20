@@ -67,7 +67,7 @@ actionable error if ``obp`` is missing.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import numpy as np
 
@@ -171,8 +171,11 @@ class BanditLogAdapter(DomainAdapter):
     # Sprint 35 bridge (issue #190): the Men/Random slice stores
     # ``action_prob`` as conditional ``P(item | position) = 1 / n_items``.
     # The adapter advertises this so callers threading feedback into
-    # :func:`run_section_7_gates` pass the right ``schema``.
-    propensity_schema: PropensitySchema = PROPENSITY_SCHEMA_CONDITIONAL
+    # :func:`run_section_7_gates` pass the right ``schema``. Typed as
+    # ``ClassVar`` to document that it is a per-class constant shared by
+    # all instances (not a per-instance attribute) and to let type
+    # checkers catch accidental instance-level shadowing.
+    propensity_schema: ClassVar[PropensitySchema] = PROPENSITY_SCHEMA_CONDITIONAL
 
     def __init__(
         self,
@@ -495,6 +498,10 @@ class BanditLogAdapter(DomainAdapter):
             "action": self._action.copy(),
             "reward": self._reward.copy(),
             "pscore": self._pscore.copy(),
+            # ``normalize_positions`` already returns a fresh ndarray
+            # (``np.searchsorted`` + ``.astype`` allocate a new array), so
+            # no extra ``.copy()`` is needed here. Do not add one — it
+            # would be a redundant allocation.
             "position": normalize_positions(self._position),
             "context": self._context.copy(),
             "action_context": self._action_context.copy(),

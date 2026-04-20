@@ -56,12 +56,20 @@ def _build_men_random_like_feedback(
     Uses conditional ``P(item | position) = 1 / n_actions`` to mirror the
     empirical OBD finding from Sprint 35.A. Positions are deliberately
     emitted 1-indexed so the test can prove the bridge remaps them.
+
+    ``n_positions`` drives the number of distinct position labels
+    emitted; labels are 1-indexed (``1..n_positions``) so the bridge
+    test exercises the 1→0 remap of :func:`normalize_positions`.
     """
     rng = np.random.default_rng(seed)
     action = rng.integers(low=0, high=n_actions, size=n_rounds).astype(np.int64)
-    # Emit positions as 1-indexed + non-contiguous (1, 2, 3 with gaps
-    # later simulated by picking {1, 3}), to exercise the remap path.
-    raw_positions = rng.choice([1, 2, 3], size=n_rounds).astype(np.int64)
+    # Emit positions as 1-indexed contiguous integers in the range
+    # ``[1, n_positions]``. ``normalize_positions`` must remap these to
+    # 0-indexed contiguous integers before Track B's ``_validate_positions``
+    # consumes them.
+    raw_positions = rng.choice(np.arange(1, n_positions + 1, dtype=np.int64), size=n_rounds).astype(
+        np.int64
+    )
     reward = rng.binomial(n=1, p=0.03, size=n_rounds).astype(float)
     pscore = np.full(n_rounds, 1.0 / n_actions, dtype=float)
     context = rng.standard_normal((n_rounds, n_actions)).astype(float)
@@ -113,6 +121,15 @@ class TestPositionNormalization:
         raw = np.array([], dtype=np.int64)
         out = normalize_positions(raw)
         assert out.shape == (0,)
+
+    def test_normalize_positions_rejects_non_1d_input(self) -> None:
+        # A 2-D array would pass through ``np.unique`` + ``np.searchsorted``
+        # with flattening semantics and silently produce a misleading
+        # result, so the helper must fail fast with a ``ValueError`` that
+        # names the bad shape.
+        raw = np.array([[1, 2], [3, 4]], dtype=np.int64)
+        with pytest.raises(ValueError, match="1-D array"):
+            normalize_positions(raw)
 
 
 # ── Seam 2: OBP version provenance ────────────────────────────────────
