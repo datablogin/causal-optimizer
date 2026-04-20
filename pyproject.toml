@@ -56,8 +56,17 @@ doe = [
 causal = [
     "dowhy>=0.11",
 ]
+bandit = [
+    # Open Bandit Pipeline. Powers the ``BanditLogAdapter.from_obp``
+    # data loader and the Sprint 35.B OPE stack (SNIPW / DM / DR).
+    # Pinned to the 0.4.x series: ``obp==0.4.1`` is the last release as
+    # of the Sprint 34 Open Bandit contract (issue #182). Apache 2.0;
+    # dataset is not redistributed by this repo. Upgrading OBP is an
+    # explicit sprint decision per contract Section 8c.
+    "obp>=0.4.1,<0.5",
+]
 all = [
-    "causal-optimizer[bayesian,doe,causal]",
+    "causal-optimizer[bayesian,doe,causal,bandit]",
 ]
 dev = [
     "pytest>=7.0",
@@ -111,4 +120,5 @@ testpaths = ["tests"]
 addopts = "-v --tb=short"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "obp: marks tests as requiring the optional 'bandit' extra (obp)",
 ]
