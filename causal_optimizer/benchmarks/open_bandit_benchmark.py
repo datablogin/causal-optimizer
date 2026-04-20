@@ -502,7 +502,9 @@ class OpenBanditScenario:
                 if pv > best_value:
                     best_value = pv
                     best_params = params
-                    best_metrics = {k: v for k, v in metrics.items() if k != "policy_value"}
+                    # Cast to float to match the typed `diagnostics` contract
+                    # and the engine-path branch below.
+                    best_metrics = {k: float(v) for k, v in metrics.items() if k != "policy_value"}
         else:
             graph = adapter.get_prior_graph() if strategy == "causal" else None
             engine = ExperimentEngine(

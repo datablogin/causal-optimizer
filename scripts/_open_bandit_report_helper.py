@@ -131,8 +131,18 @@ def main() -> None:
     print()
     print("| Strategy | Budget | Mean Policy Value | μ_null | Ratio | Within 5% band |")
     print("|----------|--------|-------------------|--------|-------|----------------|")
-    null_vals = np.asarray([r["policy_value_snipw"] for r in results if r["is_null_control"]])
-    mu_null = float(null_vals.mean())
+    # `_sanitize_for_json` rewrites non-finite SNIPW values to `None` before
+    # writing the artifact, so we must filter them out before taking the mean
+    # (an object array would raise `TypeError`).
+    null_vals = np.asarray(
+        [
+            r["policy_value_snipw"]
+            for r in results
+            if r["is_null_control"] and r["policy_value_snipw"] is not None
+        ],
+        dtype=float,
+    )
+    mu_null = float(null_vals.mean()) if null_vals.size > 0 else float("nan")
     # mu_null here is the mean over permuted policy values; the gates payload
     # carries the data-level raw reward mean which is what the report quotes.
     gates = payload.get("gates", {}).get("gates", {})
@@ -164,19 +174,22 @@ def main() -> None:
             print(f"- `{k}`: {v}")
         print()
 
-    # Per-seed B80 table
+    # Per-seed verdict-budget table (verdict_budget = max(budgets) in the artifact)
+    verdict_budget = int(payload.get("gates", {}).get("verdict_budget", 80))
     print()
-    print("## Per-Seed Detail (B80, SNIPW)")
+    print(f"## Per-Seed Detail (B{verdict_budget}, SNIPW)")
     print()
-    b80 = [r for r in results if r["budget"] == 80 and not r["is_null_control"]]
-    seeds = sorted({int(r["seed"]) for r in b80})
+    verdict_rows = [
+        r for r in results if r["budget"] == verdict_budget and not r["is_null_control"]
+    ]
+    seeds = sorted({int(r["seed"]) for r in verdict_rows})
     strategies = ["random", "surrogate_only", "causal"]
     print(f"| Seed | {' | '.join(strategies)} |")
     print(f"|------|{'|'.join(['-----'] * len(strategies))}|")
     for s in seeds:
         row = [str(s)]
         for strat in strategies:
-            match = [r for r in b80 if r["strategy"] == strat and int(r["seed"]) == s]
+            match = [r for r in verdict_rows if r["strategy"] == strat and int(r["seed"]) == s]
             if match:
                 row.append(f"{match[0]['policy_value_snipw']:.6f}")
             else:
