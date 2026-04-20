@@ -461,10 +461,10 @@ def evaluate_open_bandit_policy(
     weights = pi_e_logged / clipped_pscore
 
     # Diagnostics
-    if weights.sum() > 0.0:
-        ess = float((weights.sum() ** 2) / max(float((weights**2).sum()), 1e-300))
-    else:
-        ess = 0.0
+    # ``weights.sum() > 0`` implies at least one weight is positive, which
+    # implies ``(weights**2).sum()`` is also positive — so no divide-by-zero
+    # guard is needed on the active branch.
+    ess = float((weights.sum() ** 2) / float((weights**2).sum())) if weights.sum() > 0.0 else 0.0
     weight_mean = float(weights.mean())
     weight_std = float(weights.std(ddof=0))
     weight_cv = float(weight_std / weight_mean) if weight_mean > 0.0 else 0.0
@@ -660,12 +660,17 @@ def null_control_gate(
     permuted = permute_rewards_stratified(bandit_feedback, seed=permutation_seed)
     mu_null = float(permuted["reward"].mean())
 
-    # Assume positions are 0-indexed and contiguous (matches OBD's
+    # Positions must be 0-indexed contiguous integers (matches OBD's
     # {0, 1, 2} left/center/right convention and the synthetic generator).
-    # Issue A's smoke test must confirm this before real OBD data lands;
-    # gapped or 1-indexed positions would over-count ``n_positions`` here
-    # and produce a too-small propensity clip floor.
+    # Fail fast if the loader produces 1-indexed or gapped positions so
+    # Track A's smoke test catches the mismatch before the clip floor
+    # silently mis-scales.
     position = np.asarray(bandit_feedback["position"], dtype=int)
+    if position.size > 0 and int(position.min()) != 0:
+        raise ValueError(
+            f"bandit_feedback['position'] must be 0-indexed; "
+            f"got min(position)={int(position.min())}"
+        )
     n_positions = int(position.max() + 1) if position.size > 0 else 1
     n_actions = int(bandit_feedback["n_actions"])
     clip = (

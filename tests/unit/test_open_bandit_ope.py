@@ -35,7 +35,6 @@ from causal_optimizer.benchmarks.open_bandit import (
     DEFAULT_PROPENSITY_SCHEMA,
     PROPENSITY_SCHEMA_CONDITIONAL,
     PROPENSITY_SCHEMA_JOINT,
-    PropensitySchema,
     compute_dm,
     compute_dr,
     compute_min_propensity_clip,
@@ -405,6 +404,16 @@ class TestNullControlGate:
         assert inflated.passed is False
         assert np.isfinite(inflated.per_strategy_values["adversarial"])
 
+    def test_null_control_rejects_one_indexed_positions(self) -> None:
+        # OBD uses 0-indexed {0, 1, 2} positions; a 1-indexed loader
+        # would silently over-count n_positions and mis-scale the clip
+        # floor. The gate must refuse 1-indexed input.
+        bf = generate_synthetic_bandit_feedback(n_rounds=50, n_actions=4, n_positions=2, seed=0)
+        bf["position"] = bf["position"] + 1  # shift to 1-indexed
+        pol = uniform_policy(n_rounds=50, n_actions=4)
+        with pytest.raises(ValueError, match="0-indexed"):
+            null_control_gate(bf, strategy_policies={"s": pol}, permutation_seed=1)
+
 
 # ── 7b ESS floor ─────────────────────────────────────────────────────
 
@@ -737,7 +746,3 @@ class TestProvenance:
             PROPENSITY_SCHEMA_CONDITIONAL,
             PROPENSITY_SCHEMA_JOINT,
         }
-
-    def test_propensity_schema_literal_type(self) -> None:
-        # Runtime import smoke
-        assert PropensitySchema is not None
