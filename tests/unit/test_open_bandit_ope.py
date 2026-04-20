@@ -591,6 +591,16 @@ class TestInputValidation:
         with pytest.raises(ValueError, match="shape"):
             compute_dm(np.zeros((5, 3)), np.zeros((4, 3)))
 
+    def test_compute_dr_rejects_shape_mismatch(self) -> None:
+        bf = generate_synthetic_bandit_feedback(n_rounds=5, n_actions=3, n_positions=1, seed=0)
+        with pytest.raises(ValueError, match="shape"):
+            compute_dr(bf, np.zeros((5, 3)), np.zeros((5, 2)), min_propensity_clip=0.01)
+
+    def test_compute_dr_rejects_row_mismatch(self) -> None:
+        bf = generate_synthetic_bandit_feedback(n_rounds=5, n_actions=3, n_positions=1, seed=0)
+        with pytest.raises(ValueError, match="rows"):
+            compute_dr(bf, np.zeros((6, 3)), np.zeros((6, 3)), min_propensity_clip=0.01)
+
     def test_evaluate_policy_rejects_row_mismatch(self) -> None:
         bf = generate_synthetic_bandit_feedback(n_rounds=10, n_actions=3, n_positions=1, seed=0)
         pol = uniform_policy(n_rounds=20, n_actions=3)  # wrong row count

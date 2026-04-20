@@ -381,6 +381,16 @@ def compute_dr(
     action = np.asarray(bandit_feedback["action"], dtype=int)
     reward = np.asarray(bandit_feedback["reward"], dtype=float)
     pscore = np.asarray(bandit_feedback["pscore"], dtype=float)
+    if action_dist.shape != reward_hat.shape:
+        raise ValueError(
+            f"action_dist shape {action_dist.shape} does not match "
+            f"reward_hat shape {reward_hat.shape}"
+        )
+    if action_dist.shape[0] != action.shape[0]:
+        raise ValueError(
+            f"action_dist has {action_dist.shape[0]} rows but "
+            f"bandit_feedback['action'] has {action.shape[0]}"
+        )
     clipped_pscore, _ = _clip_pscore(pscore, min_propensity_clip)
 
     # Direct-method term
@@ -650,6 +660,11 @@ def null_control_gate(
     permuted = permute_rewards_stratified(bandit_feedback, seed=permutation_seed)
     mu_null = float(permuted["reward"].mean())
 
+    # Assume positions are 0-indexed and contiguous (matches OBD's
+    # {0, 1, 2} left/center/right convention and the synthetic generator).
+    # Issue A's smoke test must confirm this before real OBD data lands;
+    # gapped or 1-indexed positions would over-count ``n_positions`` here
+    # and produce a too-small propensity clip floor.
     position = np.asarray(bandit_feedback["position"], dtype=int)
     n_positions = int(position.max() + 1) if position.size > 0 else 1
     n_actions = int(bandit_feedback["n_actions"])
@@ -668,6 +683,11 @@ def null_control_gate(
         else:
             value = compute_snipw(permuted, pol, min_propensity_clip=clip)
         per_strategy_values[name] = float(value)
+        # Ratios are reported for diagnostic purposes only. When ``mu_null``
+        # is zero (a degenerate all-zero-reward slice) any positive SNIPW
+        # estimate is suspicious, so the ratio is reported as ``inf``;
+        # the pass/fail decision below uses the absolute ``threshold`` value
+        # (``0.0`` when ``mu_null`` is zero) rather than the ratio.
         per_strategy_ratios[name] = float(value / mu_null) if mu_null > 0.0 else float("inf")
 
     threshold = band_multiplier * mu_null
