@@ -269,6 +269,15 @@ def build_policy_action_dist(
         if not mask.all():
             policy = policy.copy()
             policy[~mask] = 1.0 / n_actions
+    elif position_flag != "marginalize":
+        # The Sprint 34 contract Section 4c only allows two values;
+        # reject unknown strings loudly rather than silently falling
+        # through to the marginalize branch. The adapter does the same
+        # validation on its own path.
+        raise ValueError(
+            f"position_handling_flag must be 'marginalize' or 'position_1_only', "
+            f"got {position_flag!r}"
+        )
 
     # Shape check on computed data (not a test assertion) — use an
     # explicit raise so the invariant survives `python -O`.
