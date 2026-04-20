@@ -486,8 +486,11 @@ class OpenBanditScenario:
             raise ValueError("permutation_seed is required when null_control=True")
 
         if null_control:
-            assert permutation_seed is not None  # narrowed by the check above
-            bf = permute_rewards_stratified(self._bandit_feedback, seed=int(permutation_seed))
+            # ``permutation_seed`` is already validated above; narrow to
+            # int without a runtime `assert` so the guard survives
+            # `python -O`.
+            perm_seed = int(permutation_seed) if permutation_seed is not None else 0
+            bf = permute_rewards_stratified(self._bandit_feedback, seed=perm_seed)
             reward_hat = compute_reward_model(bf, seed=0) if self._use_reward_model else None
         else:
             bf = self._bandit_feedback
