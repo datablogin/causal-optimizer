@@ -270,7 +270,13 @@ def build_policy_action_dist(
             policy = policy.copy()
             policy[~mask] = 1.0 / n_actions
 
-    assert policy.shape == (n_rounds, n_actions)
+    # Shape check on computed data (not a test assertion) — use an
+    # explicit raise so the invariant survives `python -O`.
+    if policy.shape != (n_rounds, n_actions):
+        raise ValueError(
+            f"build_policy_action_dist produced shape {policy.shape}, "
+            f"expected {(n_rounds, n_actions)}"
+        )
     return np.asarray(policy, dtype=float)
 
 
