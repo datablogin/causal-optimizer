@@ -61,7 +61,7 @@ class TestEndToEndPassingRun:
             dr_per_seed.append(out["policy_value"])
 
         report = run_section_7_gates(
-            bf=bf,
+            bandit_feedback=bf,
             strategy_policies=policies,
             per_seed_ess=per_seed_ess,
             per_seed_zero_support=per_seed_zero_support,
@@ -180,7 +180,7 @@ class TestGateReportStructure:
         bf = generate_synthetic_bandit_feedback(n_rounds=200, n_actions=3, n_positions=1, seed=0)
         policies = {"s": uniform_policy(200, 3)}
         report = run_section_7_gates(
-            bf=bf,
+            bandit_feedback=bf,
             strategy_policies=policies,
             per_seed_ess=[150] * 5,
             per_seed_zero_support=[0.0] * 5,

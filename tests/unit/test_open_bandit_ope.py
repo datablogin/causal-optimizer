@@ -516,6 +516,14 @@ class TestInputValidation:
                 seed=0,
                 reward_mean_by_action=[0.1, 0.2],  # wrong length
             )
+        with pytest.raises(ValueError, match=r"in \[0, 1\]"):
+            generate_synthetic_bandit_feedback(
+                n_rounds=10,
+                n_actions=3,
+                n_positions=1,
+                seed=0,
+                reward_mean_by_action=[0.1, 0.2, 1.5],  # out of [0, 1]
+            )
 
     def test_uniform_policy_rejects_non_positive(self) -> None:
         with pytest.raises(ValueError, match="positive"):
@@ -526,8 +534,12 @@ class TestInputValidation:
             peaked_policy(n_rounds=0, n_actions=3, best_action=0, peak_mass=0.5)
         with pytest.raises(ValueError, match="best_action"):
             peaked_policy(n_rounds=2, n_actions=3, best_action=5, peak_mass=0.5)
+        # peak_mass above 1.0 is rejected
         with pytest.raises(ValueError, match="peak_mass"):
             peaked_policy(n_rounds=2, n_actions=3, best_action=0, peak_mass=1.5)
+        # peak_mass below 1/n_actions would be "less peaked than uniform"
+        with pytest.raises(ValueError, match="peak_mass"):
+            peaked_policy(n_rounds=2, n_actions=4, best_action=0, peak_mass=0.1)
 
     def test_degenerate_policy_rejects_bad_inputs(self) -> None:
         with pytest.raises(ValueError, match="positive"):

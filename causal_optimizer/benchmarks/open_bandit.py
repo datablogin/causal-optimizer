@@ -180,6 +180,12 @@ def generate_synthetic_bandit_feedback(
             f"reward_mean_by_action must have length n_actions={n_actions}; "
             f"got {len(reward_mean_by_action)}"
         )
+    # Guard Bernoulli p out-of-range up front; numpy's own check raises a
+    # generic ValueError that does not identify which argument caused it.
+    if any(not 0.0 <= m <= 1.0 for m in reward_mean_by_action):
+        raise ValueError(
+            f"reward_mean_by_action values must be in [0, 1]; got {list(reward_mean_by_action)}"
+        )
 
     rng = np.random.default_rng(seed)
     action = rng.integers(low=0, high=n_actions, size=n_rounds)
@@ -245,8 +251,13 @@ def peaked_policy(
         )
     if not 0 <= best_action < n_actions:
         raise ValueError(f"best_action must be in [0, {n_actions}); got {best_action}")
-    if not 0.0 <= peak_mass <= 1.0:
-        raise ValueError(f"peak_mass must be in [0, 1]; got {peak_mass}")
+    # Lower bound is the uniform-policy mass; below that, ``best_action`` would
+    # carry less probability than the other actions — the opposite of "peaked".
+    min_peak = 1.0 / n_actions
+    if not min_peak <= peak_mass <= 1.0:
+        raise ValueError(
+            f"peak_mass must be in [1/n_actions, 1]; got {peak_mass} (n_actions={n_actions})"
+        )
 
     remainder = (1.0 - peak_mass) / max(n_actions - 1, 1)
     pol = np.full((n_rounds, n_actions), remainder, dtype=float)
@@ -812,7 +823,7 @@ def snipw_dr_cross_check_gate(
 
 def run_section_7_gates(
     *,
-    bf: dict[str, Any],
+    bandit_feedback: dict[str, Any],
     strategy_policies: dict[str, np.ndarray],
     per_seed_ess: list[float],
     per_seed_zero_support: list[float],
@@ -833,11 +844,11 @@ def run_section_7_gates(
     Convenience wrapper for Issue C: bundles the null-control, ESS,
     zero-support, propensity-sanity, and DR/SNIPW cross-check results
     into a single :class:`GateReport`.  ``n_rows`` for the ESS floor
-    is taken from ``bf["n_rounds"]``.
+    is taken from ``bandit_feedback["n_rounds"]``.
     """
-    n_rows = int(bf["n_rounds"])
+    n_rows = int(bandit_feedback["n_rounds"])
     null_result = null_control_gate(
-        bf,
+        bandit_feedback,
         strategy_policies=strategy_policies,
         permutation_seed=permutation_seed,
         min_propensity_clip=min_propensity_clip,
@@ -848,7 +859,7 @@ def run_section_7_gates(
         per_seed_zero_support=per_seed_zero_support, threshold=zero_support_threshold
     )
     prop_result = propensity_sanity_gate(
-        pscore=np.asarray(bf["pscore"], dtype=float),
+        pscore=np.asarray(bandit_feedback["pscore"], dtype=float),
         schema=schema,
         n_actions=n_actions,
         n_positions=n_positions,
