@@ -450,23 +450,34 @@ def _evaluate_gates(
     )
     zero_result = zero_support_gate(per_seed_zero_support=per_seed_zero_support)
 
-    # 7e DR/SNIPW — only defined when DR was computed. Take best-of-seed
-    # policy values per seed; one entry per B80 seed.
-    snipw_per_seed = [r.policy_value_snipw for r in b80_results]
-    dr_per_seed = [r.policy_value_dr for r in b80_results if r.policy_value_dr is not None]
-    if len(dr_per_seed) == len(snipw_per_seed) and dr_per_seed:
+    # 7e DR/SNIPW — only defined when DR was computed. Build the two
+    # lists in lockstep (one SNIPW for each seed that has a DR value)
+    # so a single seed with DR=None does not silently collapse the
+    # whole gate into "skipped".
+    cross_pairs = [
+        (r.policy_value_snipw, r.policy_value_dr)
+        for r in b80_results
+        if r.policy_value_dr is not None
+    ]
+    if cross_pairs and len(cross_pairs) == len(b80_results):
+        snipw_per_seed = [s for s, _ in cross_pairs]
+        dr_per_seed = [d for _, d in cross_pairs]
         cross_result = snipw_dr_cross_check_gate(
             snipw_per_seed=snipw_per_seed, dr_per_seed=dr_per_seed
         )
         cross_gate_passed = cross_result.passed
         cross_gate_payload = dataclasses.asdict(cross_result)
     else:
-        # DR not available — skip cleanly, but record it so the report
-        # flags the missing cross-check rather than silently passing.
+        # DR unavailable on at least one seed — skip cleanly, but record
+        # the count of seeds with DR so the report reader can tell the
+        # difference between "reward model disabled" and "one seed
+        # failed to produce DR".
         cross_gate_passed = False
         cross_gate_payload = {
             "passed": False,
             "skipped": True,
+            "n_b80_seeds": len(b80_results),
+            "n_dr_available": len(cross_pairs),
             "reason": "reward model disabled or DR unavailable",
         }
 
