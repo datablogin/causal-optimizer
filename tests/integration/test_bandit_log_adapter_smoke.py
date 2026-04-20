@@ -24,7 +24,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-pytestmark = pytest.mark.slow
+pytestmark = [pytest.mark.slow, pytest.mark.obp]
 
 # Skip cleanly if the optional extra is not installed. This keeps the
 # suite honest when running under ``uv sync`` without ``--extra bandit``.

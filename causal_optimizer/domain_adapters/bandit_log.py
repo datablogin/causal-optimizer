@@ -254,10 +254,18 @@ class BanditLogAdapter(DomainAdapter):
             data_path=data_path,
         )
         bandit_feedback = dataset.obtain_batch_bandit_feedback()
-        # OBP's obtain_batch_bandit_feedback returns a dict with exactly
-        # the keys we require; validate defensively so a future OBP
-        # upgrade does not silently break us.
-        assert isinstance(bandit_feedback, dict)
+        # OBP's ``obtain_batch_bandit_feedback`` returns a dict under the
+        # default call path, but it can return a ``(train, test)`` tuple
+        # when ``is_timeseries_split=True`` — we never pass that flag,
+        # but guard with a real TypeError (not ``assert``) so the check
+        # survives ``python -O`` / ``PYTHONOPTIMIZE=1``.
+        if not isinstance(bandit_feedback, dict):
+            raise TypeError(
+                "OpenBanditDataset.obtain_batch_bandit_feedback did not return a "
+                f"dict; got {type(bandit_feedback).__name__!r}. This likely means "
+                "the OBP API changed or timeseries splitting was accidentally "
+                "enabled."
+            )
         return cls(bandit_feedback=bandit_feedback, seed=seed)
 
     # ── DomainAdapter interface ────────────────────────────────────────
