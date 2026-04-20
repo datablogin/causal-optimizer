@@ -542,6 +542,7 @@ def permute_rewards_stratified(bandit_feedback: dict[str, Any], *, seed: int) ->
         )
     reward = np.asarray(bandit_feedback["reward"], dtype=float).copy()
     position = np.asarray(bandit_feedback["position"], dtype=int)
+    _validate_positions(position)
     rng = np.random.default_rng(seed)
     for pos_value in np.unique(position):
         mask = position == pos_value
@@ -551,6 +552,33 @@ def permute_rewards_stratified(bandit_feedback: dict[str, Any], *, seed: int) ->
     out = dict(bandit_feedback)
     out["reward"] = reward
     return out
+
+
+def _validate_positions(position: np.ndarray) -> None:
+    """Raise if ``position`` is not 0-indexed contiguous integers.
+
+    OBD uses ``{0, 1, 2}`` left/center/right positions; a 1-indexed or
+    gapped loader would silently over-count ``n_positions`` downstream
+    and mis-scale the propensity clip floor.  This helper is the single
+    source of truth for the precondition: both
+    :func:`permute_rewards_stratified` and :func:`null_control_gate`
+    invoke it.
+
+    An empty ``position`` array is allowed (no-op).
+    """
+    if position.size == 0:
+        return
+    unique = np.unique(position)
+    if int(unique[0]) != 0:
+        raise ValueError(
+            f"bandit_feedback['position'] must be 0-indexed; got min(position)={int(unique[0])}"
+        )
+    expected = np.arange(len(unique), dtype=int)
+    if not np.array_equal(unique, expected):
+        raise ValueError(
+            f"bandit_feedback['position'] must be 0-indexed contiguous "
+            f"integers; got unique positions {list(unique)}"
+        )
 
 
 # ── Gate result dataclasses ──────────────────────────────────────────
@@ -660,17 +688,10 @@ def null_control_gate(
     permuted = permute_rewards_stratified(bandit_feedback, seed=permutation_seed)
     mu_null = float(permuted["reward"].mean())
 
-    # Positions must be 0-indexed contiguous integers (matches OBD's
-    # {0, 1, 2} left/center/right convention and the synthetic generator).
-    # Fail fast if the loader produces 1-indexed or gapped positions so
-    # Track A's smoke test catches the mismatch before the clip floor
-    # silently mis-scales.
+    # Positions are 0-indexed contiguous integers; the precondition is
+    # enforced by ``permute_rewards_stratified`` above via the shared
+    # ``_validate_positions`` helper, so we can trust ``max() + 1`` here.
     position = np.asarray(bandit_feedback["position"], dtype=int)
-    if position.size > 0 and int(position.min()) != 0:
-        raise ValueError(
-            f"bandit_feedback['position'] must be 0-indexed; "
-            f"got min(position)={int(position.min())}"
-        )
     n_positions = int(position.max() + 1) if position.size > 0 else 1
     n_actions = int(bandit_feedback["n_actions"])
     clip = (

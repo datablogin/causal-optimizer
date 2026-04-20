@@ -414,6 +414,39 @@ class TestNullControlGate:
         with pytest.raises(ValueError, match="0-indexed"):
             null_control_gate(bf, strategy_policies={"s": pol}, permutation_seed=1)
 
+    def test_permute_rejects_one_indexed_positions(self) -> None:
+        # Validation must also fire from permute_rewards_stratified so
+        # independent callers cannot smuggle in a shifted position array.
+        bf = generate_synthetic_bandit_feedback(n_rounds=50, n_actions=3, n_positions=2, seed=0)
+        bf["position"] = bf["position"] + 1
+        with pytest.raises(ValueError, match="0-indexed"):
+            permute_rewards_stratified(bf, seed=1)
+
+    def test_permute_rejects_gapped_positions(self) -> None:
+        # Positions {0, 2} (missing 1) would make n_positions look like 3
+        # to downstream math and mis-scale the clip floor.
+        bf = generate_synthetic_bandit_feedback(n_rounds=50, n_actions=3, n_positions=2, seed=0)
+        # Replace all position=1 rows with position=2 so uniques become {0, 2}.
+        pos = bf["position"].copy()
+        pos[pos == 1] = 2
+        bf["position"] = pos
+        with pytest.raises(ValueError, match="contiguous"):
+            permute_rewards_stratified(bf, seed=1)
+
+    def test_permute_accepts_empty_positions(self) -> None:
+        # Defensive empty-input branch in _validate_positions: an empty
+        # position array is a no-op and must not raise.
+        bf: dict[str, Any] = {
+            "n_rounds": 0,
+            "n_actions": 3,
+            "action": np.array([], dtype=int),
+            "reward": np.array([], dtype=float),
+            "pscore": np.array([], dtype=float),
+            "position": np.array([], dtype=int),
+        }
+        out = permute_rewards_stratified(bf, seed=1)
+        assert out["reward"].size == 0
+
 
 # ── 7b ESS floor ─────────────────────────────────────────────────────
 
