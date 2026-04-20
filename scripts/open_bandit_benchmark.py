@@ -461,7 +461,16 @@ def _evaluate_gates(
             key = f"{r.strategy}_b{r.budget}_seed{r.seed}"
             per_cell_values[key] = r.policy_value_snipw
             per_cell_ratios[key] = r.policy_value_snipw / mu_null if mu_null > 0 else float("inf")
-        null_passed = all(v <= threshold for v in per_cell_values.values())
+        # Drop non-finite values (seed produced no best policy, e.g.
+        # CRASH during permuted run) before the all() check — NaN <= x
+        # is always False in Python and would spuriously fail the gate.
+        # The real-results `summarize_strategy_budget` path applies the
+        # same math.isfinite guard.
+        finite_null_values = [v for v in per_cell_values.values() if math.isfinite(v)]
+        n_skipped_null = len(per_cell_values) - len(finite_null_values)
+        null_passed = len(finite_null_values) > 0 and all(
+            v <= threshold for v in finite_null_values
+        )
         null_payload = {
             "passed": null_passed,
             "mu_null": mu_null,
@@ -469,6 +478,7 @@ def _evaluate_gates(
             "threshold": threshold,
             "per_cell_values": per_cell_values,
             "per_cell_ratios": per_cell_ratios,
+            "n_cells_non_finite": n_skipped_null,
             "permutation_seed": null_results[0].permutation_seed,
         }
     else:
