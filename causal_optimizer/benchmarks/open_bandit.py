@@ -212,10 +212,11 @@ def generate_synthetic_bandit_feedback(
 # ── Policy helpers ───────────────────────────────────────────────────
 
 
-def uniform_policy(n_rounds: int, n_actions: int) -> np.ndarray:
+def uniform_policy(*, n_rounds: int, n_actions: int) -> np.ndarray:
     """Return a ``[n_rounds, n_actions]`` uniform distribution.
 
-    Every row is ``1 / n_actions`` on every action.
+    Every row is ``1 / n_actions`` on every action.  Keyword-only for
+    consistency with :func:`peaked_policy` and :func:`degenerate_policy`.
     """
     if n_rounds <= 0 or n_actions <= 0:
         raise ValueError(
@@ -460,12 +461,14 @@ def evaluate_open_bandit_policy(
     max_weight = float(weights.max()) if weights.size > 0 else 0.0
     zero_support_fraction = float(np.mean(pi_e_logged == 0.0))
 
-    # n_effective_actions: smallest k s.t. top-k mean mass > threshold
+    # n_effective_actions: smallest k whose cumulative top-k mean mass
+    # *strictly* exceeds ``effective_action_mass_threshold``. ``side="right"``
+    # returns the index of the first entry that is > threshold (not merely
+    # equal), which matches the docstring's "exceeds" wording.
     mean_policy_mass = action_dist.mean(axis=0)
     sorted_mass = np.sort(mean_policy_mass)[::-1]
     cumsum = np.cumsum(sorted_mass)
-    # np.searchsorted returns the first index where cumsum exceeds threshold.
-    idx = int(np.searchsorted(cumsum, effective_action_mass_threshold, side="left"))
+    idx = int(np.searchsorted(cumsum, effective_action_mass_threshold, side="right"))
     n_effective_actions = min(idx + 1, n_actions)
 
     # Estimator dispatch
@@ -574,7 +577,7 @@ class PropensitySanityResult:
     passed: bool
     empirical_mean: float
     target: float
-    schema: str
+    schema: PropensitySchema
     relative_deviation: float
     tolerance_relative: float
 
@@ -642,10 +645,12 @@ def null_control_gate(
             strategy.  Used by tests to drive deterministic failure
             cases; production callers should not supply this.
     """
+    # ``permute_rewards_stratified`` requires ``position``; calling it first
+    # keeps a single, clear error path if the caller forgot that key.
     permuted = permute_rewards_stratified(bandit_feedback, seed=permutation_seed)
     mu_null = float(permuted["reward"].mean())
 
-    position = np.asarray(bandit_feedback.get("position", np.zeros(bandit_feedback["n_rounds"])))
+    position = np.asarray(bandit_feedback["position"], dtype=int)
     n_positions = int(position.max() + 1) if position.size > 0 else 1
     n_actions = int(bandit_feedback["n_actions"])
     clip = (
@@ -693,7 +698,9 @@ def ess_gate(*, per_seed_ess: list[float], n_rows: int) -> ESSResult:
         raise ValueError("per_seed_ess must not be empty")
     if n_rows < 0:
         raise ValueError(f"n_rows must be non-negative; got {n_rows}")
-    floor = int(max(1000, n_rows // 100))
+    # Use true division so the floor matches the contract's "n_rows / 100";
+    # ``int(...)`` truncates fractional rows downward.
+    floor = int(max(1000, n_rows / 100))
     median_ess = float(np.median(np.asarray(per_seed_ess, dtype=float)))
     return ESSResult(
         passed=median_ess >= floor,

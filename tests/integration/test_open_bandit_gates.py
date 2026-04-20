@@ -13,6 +13,7 @@ import numpy as np
 from causal_optimizer.benchmarks.open_bandit import (
     PROPENSITY_SCHEMA_JOINT,
     GateReport,
+    compute_dr,
     compute_snipw,
     ess_gate,
     evaluate_open_bandit_policy,
@@ -42,23 +43,25 @@ class TestEndToEndPassingRun:
             propensity_schema=PROPENSITY_SCHEMA_JOINT,
         )
         policies = {
-            "random": uniform_policy(n_rounds, n_actions),
-            "surrogate_only": uniform_policy(n_rounds, n_actions),
-            "causal": uniform_policy(n_rounds, n_actions),
+            "random": uniform_policy(n_rounds=n_rounds, n_actions=n_actions),
+            "surrogate_only": uniform_policy(n_rounds=n_rounds, n_actions=n_actions),
+            "causal": uniform_policy(n_rounds=n_rounds, n_actions=n_actions),
         }
         per_seed_ess = []
         per_seed_zero_support = []
         snipw_per_seed = []
         dr_per_seed = []
         clip = 1.0 / (2 * n_actions * n_positions)
+        # Non-trivial reward model: constant per-action estimate near the
+        # true base rate so DR actually exercises the residual correction.
+        reward_hat = np.full((n_rounds, n_actions), 0.02)
         for _seed in range(3):
-            pol = uniform_policy(n_rounds, n_actions)
+            pol = uniform_policy(n_rounds=n_rounds, n_actions=n_actions)
             out = evaluate_open_bandit_policy(bf, pol, min_propensity_clip=clip)
             per_seed_ess.append(out["ess"])
             per_seed_zero_support.append(out["zero_support_fraction"])
             snipw_per_seed.append(out["policy_value"])
-            # For this integration, DR == SNIPW (dummy reward model = 0)
-            dr_per_seed.append(out["policy_value"])
+            dr_per_seed.append(compute_dr(bf, pol, reward_hat, min_propensity_clip=clip))
 
         report = run_section_7_gates(
             bandit_feedback=bf,
@@ -110,7 +113,7 @@ class TestIndividualGateFailures:
 
     def test_null_control_fails_with_override(self) -> None:
         bf = generate_synthetic_bandit_feedback(n_rounds=500, n_actions=4, n_positions=2, seed=0)
-        pol = uniform_policy(500, 4)
+        pol = uniform_policy(n_rounds=500, n_actions=4)
         # Use an override to drive the value well above the 5% band
         permuted_mean_upper_bound = 10.0  # synthetic reward mean guaranteed < this
         result = null_control_gate(
@@ -178,7 +181,7 @@ class TestDegeneratePolicyIsZeroSupportHeavy:
 class TestGateReportStructure:
     def test_gate_report_individual_results_are_structured(self) -> None:
         bf = generate_synthetic_bandit_feedback(n_rounds=200, n_actions=3, n_positions=1, seed=0)
-        policies = {"s": uniform_policy(200, 3)}
+        policies = {"s": uniform_policy(n_rounds=200, n_actions=3)}
         report = run_section_7_gates(
             bandit_feedback=bf,
             strategy_policies=policies,
@@ -197,3 +200,24 @@ class TestGateReportStructure:
         assert hasattr(report.zero_support, "passed")
         assert hasattr(report.propensity_sanity, "passed")
         assert hasattr(report.dr_cross_check, "passed")
+
+    def test_all_passed_returns_false_when_any_gate_fails(self) -> None:
+        # ESS below the floor but every other gate green → all_passed() must
+        # return False. Protects against a GateReport.all_passed() that
+        # silently ignores one of the five fields.
+        bf = generate_synthetic_bandit_feedback(n_rounds=200, n_actions=3, n_positions=1, seed=0)
+        policies = {"s": uniform_policy(n_rounds=200, n_actions=3)}
+        report = run_section_7_gates(
+            bandit_feedback=bf,
+            strategy_policies=policies,
+            per_seed_ess=[10] * 5,  # median 10, floor 1000 → fails
+            per_seed_zero_support=[0.0] * 5,
+            snipw_per_seed=[0.05] * 5,
+            dr_per_seed=[0.05] * 5,
+            n_actions=3,
+            n_positions=1,
+            schema=PROPENSITY_SCHEMA_JOINT,
+            permutation_seed=1,
+        )
+        assert report.ess.passed is False
+        assert report.all_passed() is False

@@ -220,6 +220,30 @@ class TestEstimators:
         # With residual zero the DR IPW correction vanishes; DR collapses to DM.
         assert dr_val == pytest.approx(dm_val, abs=1e-9)
 
+    def test_dr_with_nonzero_residuals_matches_hand_computation(self) -> None:
+        # Hand-computed DR on 2 rows:
+        # - row 0: action 0, reward 1.0, pscore 0.5, pi_e(0)=0.5, reward_hat=[0.2, 0.3]
+        #   DM term = 0.5*0.2 + 0.5*0.3 = 0.25
+        #   IPW correction = (0.5/0.5) * (1.0 - 0.2) = 0.8
+        #   row 0 contribution = 0.25 + 0.8 = 1.05
+        # - row 1: action 1, reward 0.0, pscore 0.5, pi_e(1)=0.5, reward_hat=[0.2, 0.3]
+        #   DM term = 0.5*0.2 + 0.5*0.3 = 0.25
+        #   IPW correction = (0.5/0.5) * (0.0 - 0.3) = -0.3
+        #   row 1 contribution = 0.25 - 0.3 = -0.05
+        # DR = mean([1.05, -0.05]) = 0.5
+        bf: dict[str, Any] = {
+            "n_rounds": 2,
+            "n_actions": 2,
+            "action": np.array([0, 1]),
+            "reward": np.array([1.0, 0.0]),
+            "pscore": np.array([0.5, 0.5]),
+            "position": np.zeros(2, dtype=int),
+        }
+        pol = np.full((2, 2), 0.5)
+        reward_hat = np.array([[0.2, 0.3], [0.2, 0.3]])
+        dr_val = compute_dr(bf, pol, reward_hat, min_propensity_clip=0.01)
+        assert dr_val == pytest.approx(0.5)
+
 
 # ── evaluate_open_bandit_policy diagnostic dict ──────────────────────────────────
 
@@ -275,6 +299,22 @@ class TestEvaluatePolicyDiagnostics:
         out = evaluate_open_bandit_policy(bf, pol, min_propensity_clip=0.01)
         # 0.99 already exceeds 0.95 → only 1 effective action
         assert out["n_effective_actions"] == 1
+
+    def test_n_effective_actions_custom_threshold(self) -> None:
+        # Exercise the effective_action_mass_threshold keyword. With a
+        # peaked policy at 0.5 mass on the best action, a 0.4 threshold
+        # resolves to 1 (the peak alone exceeds 0.4), while the default
+        # 0.95 requires multiple actions.
+        bf = generate_synthetic_bandit_feedback(n_rounds=20, n_actions=5, n_positions=1, seed=0)
+        pol = peaked_policy(n_rounds=20, n_actions=5, best_action=0, peak_mass=0.5)
+        out_low = evaluate_open_bandit_policy(
+            bf, pol, min_propensity_clip=0.01, effective_action_mass_threshold=0.4
+        )
+        out_high = evaluate_open_bandit_policy(
+            bf, pol, min_propensity_clip=0.01, effective_action_mass_threshold=0.95
+        )
+        assert out_low["n_effective_actions"] == 1
+        assert out_high["n_effective_actions"] > 1
 
     def test_provenance_records_estimator_name(self) -> None:
         bf = generate_synthetic_bandit_feedback(n_rounds=20, n_actions=3, n_positions=1, seed=0)
@@ -527,7 +567,7 @@ class TestInputValidation:
 
     def test_uniform_policy_rejects_non_positive(self) -> None:
         with pytest.raises(ValueError, match="positive"):
-            uniform_policy(0, 3)
+            uniform_policy(n_rounds=0, n_actions=3)
 
     def test_peaked_policy_rejects_bad_inputs(self) -> None:
         with pytest.raises(ValueError, match="positive"):
