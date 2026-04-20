@@ -157,6 +157,14 @@ class TestObpVersionProvenance:
         # sentinel string so downstream provenance dicts keep the key
         # under graceful-degradation conditions.
         import builtins
+        import sys
+
+        # Evict any previously-imported ``obp`` module from ``sys.modules``
+        # so the lazy ``import obp`` inside ``get_obp_version`` actually
+        # re-enters the import machinery and hits the patched
+        # ``__import__`` below.  Without this, a prior test that imported
+        # ``obp`` would leave it cached and the patch would be bypassed.
+        monkeypatch.delitem(sys.modules, "obp", raising=False)
 
         real_import = builtins.__import__
 
