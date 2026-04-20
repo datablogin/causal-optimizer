@@ -402,6 +402,20 @@ def _evaluate_gates(
     level and needs no per-seed input.
     """
     verdict_budget = max(budgets)
+    # The Sprint 34 contract Section 6e declares B80 the verdict
+    # budget. If the caller asked for a different set of budgets we
+    # still gate against `max(budgets)` (so the gate payload is always
+    # populated), but log a loud warning so the artifact reader knows
+    # the ESS/zero-support/cross-check gates are not at the contract
+    # verdict budget.
+    if verdict_budget != 80:
+        logger.warning(
+            "Gate verdict budget is %d, not the Sprint 34 Section 6e default B80. "
+            "ESS, zero-support, and DR/SNIPW cross-check gates will run at "
+            "max(budgets)=%d; the report's verdict_budget field records this.",
+            verdict_budget,
+            verdict_budget,
+        )
 
     # ── 7d propensity sanity — operates on pscore directly ──
     pscore = np.asarray(bandit_feedback["pscore"], dtype=float)
