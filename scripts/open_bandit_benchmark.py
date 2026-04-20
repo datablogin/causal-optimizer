@@ -413,6 +413,17 @@ def _evaluate_gates(
     )
 
     # Helper: select B80 real results for ESS / zero-support / DR.
+    #
+    # All strategies at the verdict budget are aggregated into one
+    # ess/zero-support gate call — the Sprint 34 contract Section 7b
+    # defines the ESS floor against the full set of B80 seeds, not
+    # per-strategy. The per-strategy median is reported separately in
+    # the report's ESS diagnostics table for transparency, but the
+    # gate PASS/FAIL boundary is the aggregate median. Keeping the
+    # gate aggregate-level also means a high-ESS `random` policy can
+    # cover for a lower-ESS optimized policy only if the *aggregate*
+    # median still clears the floor, which the Sprint 34 contract
+    # explicitly allows.
     b80_results = [r for r in real_results if r.budget == verdict_budget]
     per_seed_ess = [float(r.diagnostics.get("ess", float("nan"))) for r in b80_results]
     per_seed_zero_support = [
