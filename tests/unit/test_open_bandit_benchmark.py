@@ -268,10 +268,85 @@ class TestBuildPolicyActionDist:
         # Shape must always be (n_rounds, n_actions); the restriction is
         # encoded by setting outside rows to uniform mass.
         assert action_dist.shape == (bf["n_rounds"], bf["n_actions"])
-        # Rows at position != 0 must sum to 1 (valid probability).
+        # Rows at position != 0 must be strictly uniform (not just
+        # sum-to-1), matching the documented behaviour.
+        n_actions = bf["n_actions"]
         off = bf["position"] != 0
         if off.any():
             assert np.allclose(action_dist[off].sum(axis=1), 1.0, atol=1e-10)
+            assert np.allclose(action_dist[off], 1.0 / n_actions, atol=1e-12)
+        # Rows at position 0 must sum to 1 and include at least one
+        # strictly non-uniform row (non-zero weights produce a softmax
+        # that differs from uniform).
+        on = bf["position"] == 0
+        if on.any():
+            assert np.allclose(action_dist[on].sum(axis=1), 1.0, atol=1e-10)
+            off_uniform = np.any(np.abs(action_dist[on] - 1.0 / n_actions) > 1e-6, axis=1)
+            assert off_uniform.any(), "expected at least one non-uniform row at position 0"
+
+    def test_action_dist_rejects_unknown_position_flag(self) -> None:
+        """Unknown position_handling_flag values must raise ValueError.
+
+        The Sprint 34 contract Section 4c only allows "marginalize" and
+        "position_1_only"; a typo like "position_one_only" should fail
+        loudly rather than silently falling through to the marginalize
+        branch.
+        """
+        bf = _synthetic_feedback()
+        adapter = BanditLogAdapter(bandit_feedback=bf, seed=0)
+        params = {
+            "tau": 1.0,
+            "eps": 0.0,
+            "w_item_feature_0": 0.5,
+            "w_user_item_affinity": 0.5,
+            "w_item_popularity": 0.5,
+            "position_handling_flag": "position_one_only",
+        }
+        with pytest.raises(ValueError, match="position_handling_flag"):
+            build_policy_action_dist(adapter=adapter, parameters=params)
+
+    def test_action_dist_matches_adapter_under_position_1_only(self) -> None:
+        """SNIPW on the built dist must match the adapter's own value
+        under `position_1_only` as well.
+
+        The function docstring notes that callers who want strict
+        subsetting should filter both the bandit_feedback and the
+        action_dist by ``position == 0`` in lockstep; this test
+        validates that the subsetted SNIPW matches the adapter value
+        (guarding against silent drift on the position-masked path the
+        benchmark actually uses for the B80 verdict).
+        """
+        from causal_optimizer.benchmarks.open_bandit import compute_snipw
+
+        bf = _synthetic_feedback()
+        adapter = BanditLogAdapter(bandit_feedback=bf, seed=0)
+        params = {
+            "tau": 2.0,
+            "eps": 0.05,
+            "w_item_feature_0": 0.3,
+            "w_user_item_affinity": 0.2,
+            "w_item_popularity": 0.1,
+            "position_handling_flag": "position_1_only",
+        }
+        action_dist = build_policy_action_dist(adapter=adapter, parameters=params)
+        # Subset both the feedback and the action dist to position 0 in
+        # lockstep (matching the adapter's own mask).
+        mask = bf["position"] == 0
+        bf_sub = {
+            "n_rounds": int(mask.sum()),
+            "n_actions": bf["n_actions"],
+            "action": bf["action"][mask],
+            "position": bf["position"][mask],
+            "reward": bf["reward"][mask],
+            "pscore": bf["pscore"][mask],
+            "context": bf["context"][mask],
+            "action_context": bf["action_context"],
+        }
+        action_dist_sub = action_dist[mask]
+        clip = 1.0 / (2 * bf["n_actions"] * 3)
+        snipw_value = compute_snipw(bf_sub, action_dist_sub, min_propensity_clip=clip)
+        adapter_metrics = adapter.run_experiment(params)
+        assert snipw_value == pytest.approx(adapter_metrics["policy_value"], abs=5e-4)
 
 
 # ── Reward model for DR/DM ─────────────────────────────────────────────
