@@ -35,6 +35,11 @@ class TestEndToEndPassingRun:
         n_rounds = 5000
         n_actions = 10
         n_positions = 3
+        # Use the first seed's feedback dict as the slice fed into
+        # run_section_7_gates (the null control and propensity gates
+        # operate on the actual data), while each seed evaluates on its
+        # own independently-sampled feedback so the per-seed lists
+        # contain distinct values.
         bf = generate_synthetic_bandit_feedback(
             n_rounds=n_rounds,
             n_actions=n_actions,
@@ -52,16 +57,21 @@ class TestEndToEndPassingRun:
         snipw_per_seed = []
         dr_per_seed = []
         clip = 1.0 / (2 * n_actions * n_positions)
-        # Non-trivial reward model: constant per-action estimate near the
-        # true base rate so DR actually exercises the residual correction.
         reward_hat = np.full((n_rounds, n_actions), 0.02)
-        for _seed in range(3):
+        for seed in range(3):
+            bf_seed = generate_synthetic_bandit_feedback(
+                n_rounds=n_rounds,
+                n_actions=n_actions,
+                n_positions=n_positions,
+                seed=seed,
+                propensity_schema=PROPENSITY_SCHEMA_JOINT,
+            )
             pol = uniform_policy(n_rounds=n_rounds, n_actions=n_actions)
-            out = evaluate_open_bandit_policy(bf, pol, min_propensity_clip=clip)
+            out = evaluate_open_bandit_policy(bf_seed, pol, min_propensity_clip=clip)
             per_seed_ess.append(out["ess"])
             per_seed_zero_support.append(out["zero_support_fraction"])
             snipw_per_seed.append(out["policy_value"])
-            dr_per_seed.append(compute_dr(bf, pol, reward_hat, min_propensity_clip=clip))
+            dr_per_seed.append(compute_dr(bf_seed, pol, reward_hat, min_propensity_clip=clip))
 
         report = run_section_7_gates(
             bandit_feedback=bf,

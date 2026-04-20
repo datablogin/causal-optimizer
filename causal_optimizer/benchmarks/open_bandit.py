@@ -412,7 +412,7 @@ def evaluate_open_bandit_policy(
     *,
     min_propensity_clip: float,
     reward_hat: np.ndarray | None = None,
-    estimator: str = "snipw",
+    estimator: Literal["snipw", "dm", "dr"] = "snipw",
     effective_action_mass_threshold: float = 0.95,
 ) -> dict[str, Any]:
     """Evaluate ``action_dist`` against ``bandit_feedback`` and return
@@ -776,6 +776,11 @@ def propensity_sanity_gate(
     Section 7d so it remains calibrated under either schema
     interpretation.
     """
+    if n_actions <= 0 or n_positions <= 0:
+        raise ValueError(
+            f"n_actions and n_positions must be positive; got "
+            f"n_actions={n_actions}, n_positions={n_positions}"
+        )
     if schema == PROPENSITY_SCHEMA_CONDITIONAL:
         target = 1.0 / n_actions
     elif schema == PROPENSITY_SCHEMA_JOINT:

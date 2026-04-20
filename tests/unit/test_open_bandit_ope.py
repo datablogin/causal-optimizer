@@ -187,6 +187,28 @@ class TestEstimators:
         val = compute_snipw(bf, pol, min_propensity_clip=0.01)
         assert 0.0 <= val <= 1.0
 
+    def test_snipw_with_heterogeneous_propensities(self) -> None:
+        # Real loggers rarely have uniform pscore. Verify SNIPW correctly
+        # reweights when pscore varies row-by-row: two rows with pscore 0.2
+        # and two rows with pscore 0.8, same eval policy mass → weights
+        # should scale inversely with pscore.
+        bf: dict[str, Any] = {
+            "n_rounds": 4,
+            "n_actions": 2,
+            "action": np.array([0, 0, 1, 1]),
+            "reward": np.array([1.0, 0.0, 1.0, 0.0]),
+            "pscore": np.array([0.2, 0.2, 0.8, 0.8]),
+            "position": np.zeros(4, dtype=int),
+        }
+        # Eval policy: uniform (pi_e = 0.5 on each logged action).
+        pol = np.full((4, 2), 0.5)
+        # Weights: 0.5/0.2 = 2.5 (rows 0,1), 0.5/0.8 = 0.625 (rows 2,3).
+        # Numerator = 2.5*1 + 2.5*0 + 0.625*1 + 0.625*0 = 3.125
+        # Denominator = 2.5 + 2.5 + 0.625 + 0.625 = 6.25
+        # SNIPW = 3.125 / 6.25 = 0.5
+        val = compute_snipw(bf, pol, min_propensity_clip=0.01)
+        assert val == pytest.approx(0.5)
+
     def test_dm_with_constant_reward_model(self) -> None:
         # reward_hat constant 0.3 for every (action, position) → DM = 0.3
         pol = uniform_policy(n_rounds=10, n_actions=3)
@@ -601,6 +623,23 @@ class TestInputValidation:
         with pytest.raises(ValueError, match="rows"):
             compute_dr(bf, np.zeros((6, 3)), np.zeros((6, 3)), min_propensity_clip=0.01)
 
+    def test_propensity_sanity_gate_rejects_non_positive_dims(self) -> None:
+        pscore = np.full(10, 0.01)
+        with pytest.raises(ValueError, match="positive"):
+            propensity_sanity_gate(
+                pscore=pscore,
+                schema=PROPENSITY_SCHEMA_JOINT,
+                n_actions=0,
+                n_positions=3,
+            )
+        with pytest.raises(ValueError, match="positive"):
+            propensity_sanity_gate(
+                pscore=pscore,
+                schema=PROPENSITY_SCHEMA_JOINT,
+                n_actions=3,
+                n_positions=0,
+            )
+
     def test_evaluate_policy_rejects_row_mismatch(self) -> None:
         bf = generate_synthetic_bandit_feedback(n_rounds=10, n_actions=3, n_positions=1, seed=0)
         pol = uniform_policy(n_rounds=20, n_actions=3)  # wrong row count
@@ -623,7 +662,12 @@ class TestInputValidation:
         bf = generate_synthetic_bandit_feedback(n_rounds=10, n_actions=3, n_positions=1, seed=0)
         pol = uniform_policy(n_rounds=10, n_actions=3)
         with pytest.raises(ValueError, match="estimator"):
-            evaluate_open_bandit_policy(bf, pol, min_propensity_clip=0.01, estimator="switch_dr")
+            evaluate_open_bandit_policy(
+                bf,
+                pol,
+                min_propensity_clip=0.01,
+                estimator="switch_dr",  # type: ignore[arg-type]
+            )
 
     def test_evaluate_policy_with_dm_estimator_returns_value(self) -> None:
         bf = generate_synthetic_bandit_feedback(n_rounds=10, n_actions=3, n_positions=1, seed=0)
