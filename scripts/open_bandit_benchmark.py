@@ -47,6 +47,7 @@ import numpy as np
 from causal_optimizer.benchmarks.open_bandit import (
     PROPENSITY_SCHEMA_CONDITIONAL,
     ess_gate,
+    get_obp_version,
     propensity_sanity_gate,
     snipw_dr_cross_check_gate,
     zero_support_gate,
@@ -60,7 +61,7 @@ from causal_optimizer.benchmarks.open_bandit_benchmark import (
     load_men_random_slice,
     summarize_strategy_budget,
 )
-from causal_optimizer.benchmarks.provenance import collect_provenance
+from causal_optimizer.benchmarks.provenance import collect_provenance, dataset_hash
 from causal_optimizer.domain_adapters.bandit_log import BanditLogAdapter
 
 logger = logging.getLogger(__name__)
@@ -340,9 +341,11 @@ def main() -> None:
         "data_provenance": {
             "data_path": str(args.data_path),
             "men_csv_path": str(Path(args.data_path) / "random" / "men" / "men.csv"),
-            "men_csv_sha256": _file_sha256(Path(args.data_path) / "random" / "men" / "men.csv"),
-            "item_context_csv_sha256": _file_sha256(
-                Path(args.data_path) / "random" / "men" / "item_context.csv"
+            "men_csv_sha256": dataset_hash(
+                str(Path(args.data_path) / "random" / "men" / "men.csv")
+            ),
+            "item_context_csv_sha256": dataset_hash(
+                str(Path(args.data_path) / "random" / "men" / "item_context.csv")
             ),
             "n_rounds": n_rounds,
             "n_actions": n_actions,
@@ -351,7 +354,7 @@ def main() -> None:
             "click_mean": click_mean,
             "propensity_schema": PROPENSITY_SCHEMA_CONDITIONAL,
             "position_handling_default": "position_1_only",
-            "obp_version": _obp_version(),
+            "obp_version": get_obp_version(),
             "min_propensity_clip": scenario.min_propensity_clip,
         },
         "results": [_sanitize_for_json(dataclasses.asdict(r)) for r in all_results],
@@ -509,36 +512,6 @@ def _evaluate_gates(
         "verdict_budget": verdict_budget,
         "gates": gates,
     }
-
-
-# ── Provenance helpers ─────────────────────────────────────────────
-
-
-def _file_sha256(path: Path) -> str | None:
-    """Return the SHA-256 of a file, or None when the file is absent."""
-    import hashlib
-
-    if not path.is_file():
-        return None
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
-def _obp_version() -> str:
-    """Return ``obp.__version__`` or ``"not installed"``.
-
-    Part of the Sprint 35 provenance requirement — the merged Open
-    Bandit contract pins the OBP version used for the verdict.
-    """
-    try:
-        import obp
-
-        return str(obp.__version__)
-    except Exception:  # pragma: no cover — exercised only when the extra is missing
-        return "not installed"
 
 
 # Keep ``BanditLogAdapter`` and ``build_policy_action_dist`` re-exports
