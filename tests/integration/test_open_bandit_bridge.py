@@ -122,7 +122,7 @@ class TestObpVersionProvenance:
     optional extra is installed and a sentinel otherwise."""
 
     def test_get_obp_version_returns_real_version_when_installed(self) -> None:
-        obp = pytest.importorskip("obp")
+        obp = pytest.importorskip("obp", reason="requires optional 'bandit' extra")
         version = get_obp_version()
         assert isinstance(version, str)
         assert version == obp.__version__
@@ -158,7 +158,10 @@ class TestObpVersionProvenance:
     ) -> None:
         # Defense-in-depth: a forked OBP without ``__version__`` must
         # still produce a usable provenance string rather than raising.
-        import obp
+        # This test needs ``obp`` importable so we can strip the
+        # attribute off a real module object; skip cleanly if the
+        # optional ``bandit`` extra is not installed.
+        obp = pytest.importorskip("obp", reason="requires optional 'bandit' extra")
 
         monkeypatch.delattr(obp, "__version__", raising=False)
         version = get_obp_version()
