@@ -191,7 +191,11 @@ def main() -> None:
         for strat in strategies:
             match = [r for r in verdict_rows if r["strategy"] == strat and int(r["seed"]) == s]
             if match:
-                row.append(f"{match[0]['policy_value_snipw']:.6f}")
+                # `_sanitize_for_json` rewrites NaN/Inf to None; fall back
+                # to a literal "nan" in the table rather than crashing the
+                # format spec.
+                pv = match[0]["policy_value_snipw"]
+                row.append(f"{pv:.6f}" if pv is not None else "nan")
             else:
                 row.append("—")
         print(f"| {' | '.join(row)} |")
