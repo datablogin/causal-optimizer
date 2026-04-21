@@ -67,10 +67,15 @@ actionable error if ``obp`` is missing.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import numpy as np
 
+from causal_optimizer.benchmarks.open_bandit import (
+    PROPENSITY_SCHEMA_CONDITIONAL,
+    PropensitySchema,
+    normalize_positions,
+)
 from causal_optimizer.domain_adapters.base import DomainAdapter
 from causal_optimizer.types import SearchSpace, Variable, VariableType
 
@@ -162,6 +167,20 @@ class BanditLogAdapter(DomainAdapter):
     (``policy_value``, ``ess``, ``weight_cv``, ``max_weight``,
     ``zero_support_fraction``, ``n_effective_actions``).
     """
+
+    # Sprint 35 bridge (issue #190): the Men/Random slice stores
+    # ``action_prob`` as conditional ``P(item | position) = 1 / n_items``.
+    # The adapter advertises this so callers threading feedback into
+    # :func:`run_section_7_gates` pass the right ``schema``. Typed as
+    # ``ClassVar`` to document that it is a per-class constant shared by
+    # all instances (not a per-instance attribute) and to let type
+    # checkers catch accidental instance-level shadowing.
+    #
+    # Men/Random-specific. BTS (Bernoulli Thompson Sampling) and other
+    # logging policies may use joint ``P(item, position)`` propensities;
+    # a future BTS-specific subclass should override this constant at
+    # the class level rather than mutating it per-instance.
+    propensity_schema: ClassVar[PropensitySchema] = PROPENSITY_SCHEMA_CONDITIONAL
 
     def __init__(
         self,
@@ -455,6 +474,42 @@ class BanditLogAdapter(DomainAdapter):
             "max_weight": max_weight,
             "zero_support_fraction": zero_support_fraction,
             "n_effective_actions": n_effective_actions,
+        }
+
+    # ── Sprint 35 bridge: adapter → OPE feedback dict ─────────────────
+
+    def to_bandit_feedback(self) -> dict[str, Any]:
+        """Return an OBP-shaped ``bandit_feedback`` dict for the OPE stack.
+
+        Produces the exact dict shape that
+        :func:`causal_optimizer.benchmarks.open_bandit.evaluate_open_bandit_policy`
+        (and :func:`run_section_7_gates`) consume. Positions are piped
+        through :func:`normalize_positions` so Track B's
+        ``_validate_positions`` — which rejects anything that is not
+        0-indexed contiguous integers — accepts the output.
+
+        The dict uses fresh ndarray copies of the adapter's internal
+        arrays so the caller cannot mutate adapter state by editing the
+        returned dict.
+
+        Returns:
+            A dict with the keys ``n_rounds``, ``n_actions``, ``action``,
+            ``reward``, ``pscore``, ``position``, ``context``, and
+            ``action_context``.  ``position`` is 0-indexed contiguous.
+        """
+        return {
+            "n_rounds": int(self._n_rounds),
+            "n_actions": int(self._n_actions),
+            "action": self._action.copy(),
+            "reward": self._reward.copy(),
+            "pscore": self._pscore.copy(),
+            # ``normalize_positions`` already returns a fresh ndarray
+            # (``np.searchsorted`` + ``.astype`` allocate a new array), so
+            # no extra ``.copy()`` is needed here. Do not add one — it
+            # would be a redundant allocation.
+            "position": normalize_positions(self._position),
+            "context": self._context.copy(),
+            "action_context": self._action_context.copy(),
         }
 
     def get_prior_graph(self) -> CausalGraph | None:
