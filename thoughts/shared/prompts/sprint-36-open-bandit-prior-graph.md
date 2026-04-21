@@ -1,12 +1,14 @@
-Work on Sprint 36: first Open Bandit prior graph and Men/Random rerun.
+Work on Sprint 36: preregister the first Open Bandit prior graph and
+the engine-surface change that would make it matter. Defer the rerun
+to Sprint 37.
 
 Canonical source: the Sprint 36 recommendation below is authoritative
 for every contract decision (graph shape, hard constraints,
-anti-patterns, Section 7 gates). This prompt duplicates those items
-so an implementation agent has a self-contained brief, but any
-conflict between the two documents is resolved in favor of the
-recommendation. If you amend this prompt, update the recommendation
-first.
+anti-patterns, the Option A / Option B Exit Criterion, what is in vs
+out of scope). This prompt duplicates those items so an
+implementation agent has a self-contained brief, but any conflict
+between the two documents is resolved in favor of the recommendation.
+If you amend this prompt, update the recommendation first.
 
 All paths below are **repo-relative** — resolve them from the root of
 your `causal-optimizer` checkout (or worktree).
@@ -26,164 +28,145 @@ Read first:
 9. `causal_optimizer/benchmarks/open_bandit_benchmark.py`
 10. `causal_optimizer/types.py` (`CausalGraph`)
 11. `causal_optimizer/optimizer/suggest.py`
-    (lines 1122–1134 `_get_focus_variables`; confirm ancestor-based
-    focus behavior before touching the graph)
+    All seven `causal_graph` read sites enumerated in the Sprint 36
+    recommendation's "Why This Sprint Now" section. In particular,
+    confirm both the ancestor-based focus behavior (lines 1122–1134)
+    **and** the soft-causal reranker behavior (lines 751–812) before
+    writing the preregistered graph spec. Missing the soft-causal
+    path is the specific misreading the PR #195 review flagged in an
+    earlier draft.
 12. `causal_optimizer/domain_adapters/marketing_logs.py`
     (existing prior-graph example: `MarketingLogAdapter.get_prior_graph`)
 13. `causal_optimizer/benchmarks/criteo.py`
     (existing prior-graph example: `criteo_projected_prior_graph`)
 
 Goal:
-- Author the first semantically correct prior graph for the
-  Men/Random Open Bandit slice, rerun the Sprint 35 benchmark
-  with that graph active, and publish a preregistered-hypothesis
-  verdict row in a new sprint-36 report.
-- The implementation must change exactly one adapter function
-  (`BanditLogAdapter.get_prior_graph`) plus the tests that cover
-  it; engine code is out of scope.
+- Ship a docs-only preregistration PR that (a) authors the first
+  semantically correct prior graph for the Men/Random Open Bandit
+  slice as a preregistered spec, (b) documents how the current engine
+  surface would consume that exact graph path by path, and (c) names
+  exactly one Option A engine change and one Option B graph widening
+  that Sprint 37 could pick between.
+- The implementation must not change any Python file. No adapter
+  edits, no engine edits, no test changes, no benchmark rerun. If
+  you find yourself opening `causal_optimizer/domain_adapters/bandit_log.py`
+  in an editor for anything other than reading line numbers, stop
+  and re-read the Sprint 36 recommendation's "What Sprint 36 Must
+  Not Do" section.
 
 Produce in one PR:
 
-1. Updated adapter:
-   `causal_optimizer/domain_adapters/bandit_log.py`
-   - Replace `get_prior_graph(self) -> CausalGraph | None: return None`
-     with a returned `CausalGraph` matching the Sprint 36 recommendation
-     exactly. Required shape:
-     - 7 nodes: `tau`, `eps`, `w_item_feature_0`,
-       `w_user_item_affinity`, `w_item_popularity`,
-       `position_handling_flag`, `policy_value`
-     - 6 directed edges, each from a search variable to `policy_value`
-     - 0 bidirected edges
-   - Keep the existing docstring content about Sprint 34 contract
-     Section 4e — rewrite it to cite Sprint 36 now that the adapter
-     ships a non-null graph.
+1. Updated Sprint 36 recommendation:
+   `thoughts/shared/plans/26-sprint-36-recommendation.md`
+   - Matches the structure of the canonical recommendation merged on
+     this branch. If you are re-running this prompt after a further
+     rescope, confirm the committed file still reflects the
+     preregistration-only framing before editing.
 
-2. Adapter tests (new or extended):
-   `tests/unit/test_bandit_log_adapter.py`
-   (the file already exists from Sprint 35.A; extend it in place)
+2. Updated Sprint 36 implementation prompt (this file):
+   `thoughts/shared/prompts/sprint-36-open-bandit-prior-graph.md`
+   - If you amend the scope of Sprint 36 again, the prompt must not
+     drift back into asking for the adapter change or the rerun.
 
-   First, delete or rewrite the existing
-   `test_prior_graph_is_none_by_default` at
-   `tests/unit/test_bandit_log_adapter.py:112`. That assertion
-   (`adapter.get_prior_graph() is None`) encodes the Sprint 35
-   behavior and will fail the moment Sprint 36's graph lands; replace
-   it with the six tests below rather than leaving it as a broken
-   "known failing" test.
-   - `test_get_prior_graph_returns_expected_nodes` — exactly the 7
-     nodes above.
-   - `test_get_prior_graph_has_six_directed_edges` — exactly 6 edges.
-   - `test_every_search_variable_is_ancestor_of_policy_value` — call
-     `graph.ancestors("policy_value")` and compare.
-   - `test_no_bidirected_edges` — `graph.bidirected_edges == []`.
-   - `test_search_space_variables_match_graph_nodes_minus_outcome` —
-     every name returned by `get_search_space().variable_names` is a
-     non-`policy_value` node of the returned graph.
-   - `test_focus_variables_equals_full_search_space_under_prior_graph`
-     — call `causal_optimizer.optimizer.suggest._get_focus_variables(
-     adapter.get_search_space(), adapter.get_prior_graph(),
-     adapter.get_objective_name())` and assert it returns a list whose
-     set equals `set(adapter.get_search_space().variable_names)`. This
-     mechanically verifies the Sprint 36 recommendation's H0
-     prediction before the expensive rerun runs. Annotate the test
-     with a comment flagging that `_get_focus_variables` is a private
-     helper (leading underscore) so a future refactor of that module
-     knows to update this test alongside the implementation.
+3. Nothing else. In particular, do **not**:
+   - edit `causal_optimizer/domain_adapters/bandit_log.py`
+   - edit `tests/unit/test_bandit_log_adapter.py`
+   - regenerate any benchmark artifact JSON
+   - edit `thoughts/shared/docs/handoff.md` or
+     `thoughts/shared/plans/07-benchmark-state.md` (Track A owns those)
+   - edit `README.md` (Track A owns that)
+   - edit the Sprint 35 report
 
-3. Benchmark rerun and report:
-   - Regenerate the Men/Random artifact JSON by running
-     `scripts/open_bandit_benchmark.py` with the same flags the Sprint
-     35 report documents (same `--data-path`, `--budgets 20,40,80`,
-     `--seeds 0,1,2,3,4,5,6,7,8,9`, `--strategies
-     random,surrogate_only,causal`, `--null-control`,
-     `--permutation-seed 20260419`). The rerun must execute under the
-     same Ax/BoTorch backend.
-   - Write:
-     `thoughts/shared/docs/sprint-36-open-bandit-prior-graph-report.md`
-     Same sectioning as the Sprint 35 report. In addition it must:
-     - embed the full seven-node / six-edge graph in the Configuration
-       section, including the per-edge code-line justifications copied
-       from the Sprint 36 recommendation
-     - quote preregistered H0 / H1 / H2 from the recommendation
-       verbatim before the verdict table
-     - classify the verdict under the unchanged Sprint 33 scorecard
-       labels (`p <= 0.05` certified, `0.05 < p <= 0.15` trending,
-       `p > 0.15` not significant, `within-noise identical` near-parity)
+Hard constraints (inherited from the Sprint 36 recommendation):
 
-4. Restart-doc updates (only if the rerun's outcome materially
-   changes the current scorecard line):
-   - `thoughts/shared/docs/handoff.md`
-   - `thoughts/shared/plans/07-benchmark-state.md`
-   If H0 is confirmed and the tie persists, a one-sentence update to
-   each file is sufficient. Do not rewrite prior-sprint sections.
-
-Hard constraints (inherited from Sprint 36 recommendation):
-
-1. Do not widen the graph after the rerun.
-2. Do not add bidirected edges to the first graph.
-3. Do not add edges into `ess`, `weight_cv`, `max_weight`,
+1. No Python change in this sprint. `BanditLogAdapter.get_prior_graph`
+   stays as `return None` until Sprint 37.
+2. No benchmark rerun in this sprint.
+3. Do not widen the preregistered graph to chase differentiation.
+4. Do not add bidirected edges to the first graph.
+5. Do not add edges into `ess`, `weight_cv`, `max_weight`,
    `zero_support_fraction`, or `n_effective_actions`.
-4. Do not change any Section 7 gate threshold.
-5. Do not touch `causal_optimizer/optimizer/`,
+6. Do not change any Section 7 gate threshold.
+7. Do not touch `causal_optimizer/optimizer/`,
    `causal_optimizer/engine/`, or the OPE stack.
-6. Do not run on Women, All, BTS, a second dataset, DRos-primary, or
-   slate OPE.
-7. Do not relabel a trending row as certified, or vice versa.
-8. Do not mix Ax/BoTorch and RF-fallback within a verdict row.
-9. Do not auto-merge the PR. Stop after `/gauntlet` and wait for human
-   approval.
+8. Do not preregister a run on Women, All, BTS, a second dataset,
+   DRos-primary, or slate OPE.
+9. Do not relabel a trending row as certified, or vice versa, in the
+   Sprint 37 preregistration.
+10. Do not preregister a run that mixes Ax/BoTorch and RF-fallback
+    within a verdict row.
+11. Do not auto-merge the PR. Stop after `/gauntlet` and wait for
+    human approval.
+
+Null-control permutation seed — source of truth:
+
+- The authoritative source for the Sprint 37 rerun's null-control
+  permutation seed is the committed Sprint 35 report,
+  `thoughts/shared/docs/sprint-35-open-bandit-benchmark-report.md`.
+  That report records `permutation seed = 20260419` in both its
+  "Configuration" block (line 83 at the time of writing) and the
+  Section 7a header. This is the single source Sprint 36 must cite
+  and Sprint 37 must use.
+- The Sprint 35 run also produced a local artifact JSON at
+  `artifacts/sprint-35-open-bandit-benchmark/men_random_results.json`
+  (local-only, not committed — see the Sprint 35 report, "Data
+  Provenance" section). That artifact's `provenance.permutation_seed`
+  field is optional *corroboration* only; a fresh agent on a clean
+  checkout is not required to have it. If the artifact is present,
+  an agent may cross-check the report's value against it, but a
+  mismatch is diagnosed by re-reading the report, not by trusting
+  the local artifact.
+- Sprint 36 itself does not run the benchmark, so neither source is
+  strictly required for this sprint. The seed is called out here so
+  that the Sprint 37 follow-up issue inherits the correct pointer.
 
 Environment prerequisites:
 
-- Ax/BoTorch must be installed and importable before the rerun starts
-  (`uv sync --extra bayesian` or `uv sync --extra all`). The
-  recommendation's "no RF-fallback mixing" rule means a BoTorch import
-  failure blocks the sprint; verify `ax-platform` and `botorch` both
-  load in a Python REPL before running the benchmark. If either
-  import still fails after `uv sync --extra all`, stop and report the
-  failure to the human reviewer — do not fall back to RF and do not
-  publish a verdict row.
-- The `bandit` extra (OBP) must be installed to load the Men/Random
-  slice: `uv sync --extra bandit`.
-- The full Men/Random slice must be available locally at the Sprint 35
-  `--data-path` location; do not substitute the 10,000-row OBP-bundled
-  sample.
-- Confirm the null-control permutation seed matches Sprint 35 by
-  reading the Sprint 35 artifact JSON's provenance dict (key
-  `permutation_seed`), not just the report text. The two must agree at
-  `20260419` for the null-control comparison to be apples-to-apples.
-- Before launching the rerun, confirm the CLI flags the Sprint 35
-  report quotes still exist on the current `scripts/open_bandit_benchmark.py`
-  (run `uv run python scripts/open_bandit_benchmark.py --help` and
-  check for `--data-path`, `--budgets`, `--seeds`, `--strategies`,
-  `--null-control`, `--permutation-seed`, `--output`). If any flag
-  has been renamed or removed since Sprint 35, stop and report —
-  silently adapting flag names would invalidate the
-  apples-to-apples comparison.
+- None beyond a normal repo checkout. Sprint 36 does not run the
+  benchmark; Ax/BoTorch, the `bandit` extra, and the full Men/Random
+  slice at `--data-path` are **not** required for this sprint and
+  must not be listed as blockers on the Sprint 36 PR.
+- Sprint 37 will inherit the Sprint 35 environment prerequisites
+  (ax-platform, botorch, and OBP installed; full Men/Random slice
+  local) unchanged. Capturing those as Sprint 37 prerequisites is
+  part of the Sprint 37 issue the Sprint 36 close-out creates, not
+  part of this PR.
 
 Required workflow:
 
-1. Use the `tdd` skill first:
-   - write the six adapter tests from Produce item 2 above; confirm
-     they fail against the current `return None` implementation
-2. Implement the graph change in `bandit_log.py`; run the adapter tests
-   locally until green; run the full fast test suite (`uv run pytest
-   -m "not slow"`) to confirm no regressions.
-3. Re-run `scripts/open_bandit_benchmark.py` as described above and
-   capture the artifact JSON.
-4. Write the Sprint 36 report; copy the per-edge justifications and
-   preregistered H0/H1/H2 text from the Sprint 36 recommendation.
-5. Run the `polish` skill on the changed files; address every finding.
-6. Open a PR with base `main`. Title roughly
-   "Sprint 36: first Open Bandit prior graph and Men/Random rerun".
+1. Review the merged Sprint 36 recommendation end to end. Confirm
+   that it names all seven `causal_graph` read sites in
+   `causal_optimizer/optimizer/suggest.py`, that the per-edge code
+   citations in the "Minimal Preregistered Graph" section match the
+   current `bandit_log.py` line numbers, and that the Option A /
+   Option B Exit Criterion fits in a single Sprint 37 PR each.
+2. If the engine surface in `suggest.py` has changed since the
+   recommendation was written (check `git log -p
+   causal_optimizer/optimizer/suggest.py` against the branch point),
+   update the line-number citations in the recommendation *before*
+   anything else. The recommendation's engine-surface analysis is
+   load-bearing — stale line numbers invalidate the preregistration.
+3. Run the `polish` skill on the two changed files
+   (`thoughts/shared/plans/26-sprint-36-recommendation.md` and
+   `thoughts/shared/prompts/sprint-36-open-bandit-prior-graph.md`).
+   Address every finding.
+4. Open a PR with base `main`. Title roughly
+   "Sprint 36: preregister first Open Bandit prior graph (docs-only)".
    Link the Sprint 36 issue with `Closes #<n>`.
-7. Run the `gauntlet` skill on the PR. Iterate until clean.
-8. Deliver back the PR URL and gauntlet status. Do not merge.
+5. Run the `gauntlet` skill on the PR. Iterate until clean.
+6. Deliver back the PR URL and gauntlet status. Do not merge.
+7. After human approval merges the PR, open the Sprint 37 issue
+   titled roughly "Sprint 37: Open Bandit prior graph rerun (Option
+   A or Option B)" and record in the Sprint 36 close-out comment
+   which option was picked and why.
 
-Reporting discipline (carried over from Sprint 35):
+Reporting discipline (preserved for when Sprint 37's report is
+written, not required in Sprint 36 itself):
 
 - All p-values are two-sided Mann-Whitney U unless otherwise noted.
-- Reserve "winner" for `p <= 0.05`; use "trending" for `0.05 < p <=
-  0.15`; use "near-parity" for within-noise identical distributions.
+- Reserve "winner" for `p <= 0.05`; use "trending" for
+  `0.05 < p <= 0.15`; use "near-parity" for within-noise identical
+  distributions.
 - Population std (ddof=0) in report tables; sample-pooled std
   (ddof=1) only when Cohen's d is quoted.
 - Record backend provenance explicitly on every verdict cell.
@@ -191,21 +174,38 @@ Reporting discipline (carried over from Sprint 35):
 
 Deliverables to include in the PR body:
 
-1. one-paragraph summary citing the Sprint 36 recommendation
-2. the seven-node / six-edge graph printed explicitly (a fenced block
-   is fine)
-3. the H0 / H1 / H2 preregistered hypotheses, copied verbatim
-4. the B80 verdict row with the chosen Sprint 33 label
-5. a Test plan checkbox list covering: unit tests green, fast suite
-   green, rerun Section 7 gates green, verdict preregistered
+1. one-paragraph summary citing the rescoped Sprint 36
+   recommendation and the PR #195 review that prompted the rescope
+2. the preregistered seven-node / six-edge graph printed explicitly
+   (a fenced block is fine)
+3. a one-paragraph engine-surface summary covering all seven
+   `causal_graph` read sites, explicitly calling out the soft-causal
+   reranker (`suggest.py:751`) as active under the default engine
+   config
+4. the Option A engine change and the Option B graph widening named
+   in the Exit Criterion, one sentence each
+5. a Test plan checkbox list covering: docs-only diff (no Python
+   files touched), engine-surface line numbers still match `HEAD`,
+   preregistration matches the `BanditLogAdapter` scoring code,
+   Sprint 37 issue stub drafted
 
 Anti-patterns to flag and refuse:
 
+- "Author the graph as code too, it's only a few lines" — the point
+  of Sprint 36 is that authoring the graph without a matching engine
+  surface change is what the Sprint 35 tie already told us about. The
+  adapter edit belongs in Sprint 37 gated by Option A or Option B.
+- "Run the benchmark anyway as a sanity check" — Sprint 35 is the
+  sanity check. Rerunning before naming the engine change that would
+  move the verdict is the scope expansion PR #195 asked the plan to
+  close.
 - "Drop `w_item_feature_0` because the optimizer picked a small
   weight" — post-hoc noise chasing. The adapter's scoring code makes
-  it a direct ancestor; do not drop it.
+  it a direct ancestor; do not drop it from the preregistered graph.
 - "Add a bidirected edge between `ess` and `weight_cv` because they
   are correlated" — correlated by shared computation, not by an
   unobserved confounder.
-- "Tighten the 7a null-control band because the rerun inflated past
-  it" — a gate failure is a blocker; fix the run, not the band.
+- "Require the local Sprint 35 artifact JSON as a Sprint 36 (or
+  Sprint 37) prerequisite" — it is not committed; the committed
+  report text is the source of truth for the permutation seed and
+  every other Sprint 35 configuration value.
