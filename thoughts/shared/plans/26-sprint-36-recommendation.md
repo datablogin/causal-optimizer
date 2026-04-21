@@ -52,8 +52,10 @@ structure:
 
 1. `optimizer/suggest.py::_get_focus_variables` is the only place the
    graph directly alters optimization during exploitation
-   (`suggest.py` line 185) and the optimization-phase screening
-   intersection (`suggest.py` lines 425–437). It returns
+   (`suggest.py` line 185:
+   `focus_variables = _get_focus_variables(search_space, causal_graph, objective_name)`)
+   and the optimization-phase screening intersection
+   (`suggest.py` lines 425–437). It returns
    `[v for v in search_space.variable_names if v in causal_graph.ancestors(objective_name)]`
    (`suggest.py` line 1132). When that list equals the full search
    space, focus behaves exactly like the no-graph case.
@@ -353,12 +355,24 @@ At the end of Sprint 36 we should know:
 1. whether the current engine's graph usage creates `causal`
    differentiation on a smooth multi-action scoring policy surface
    under a correctly authored minimal graph
-2. whether the Sprint 37+ question is "author a bigger graph with
-   non-ancestor nodes" or "invest in an engine feature that uses the
-   graph beyond ancestor-based focus"
+2. what Sprint 37 must address next, with the trigger depending on
+   which hypothesis lands:
+   - **H0 landed (tie persists):** Sprint 37 chooses between "author
+     a larger graph with non-ancestor nodes so `focus_variables` is
+     actually a proper subset" and "add an engine feature that uses
+     the graph beyond ancestor-based focus" (e.g., parent-conditional
+     priors on the Ax surrogate)
+   - **H1 landed (certified separation):** Sprint 37 reruns on a
+     second slice (Men/BTS as the contract-Section 3b sanity check)
+     to confirm the effect is not slice-specific, and updates the
+     generalization scorecard with the first multi-action causal
+     advantage row
+   - **H2 landed (trending):** Sprint 37 extends to 20 seeds on the
+     same graph / same slice to close the power gap before deciding
+     between the H0 and H1 follow-ups above
 
-Either answer is a concrete Sprint 37 trigger, which is the working
-definition of a good Sprint 36 exit.
+Each of those three follow-ups is a concrete Sprint 37 trigger, which
+is the working definition of a good Sprint 36 exit.
 
 ## References
 

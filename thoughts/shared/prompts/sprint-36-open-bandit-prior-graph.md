@@ -110,10 +110,23 @@ Hard constraints (inherited from Sprint 36 recommendation):
 9. Do not auto-merge the PR. Stop after `/gauntlet` and wait for human
    approval.
 
+Environment prerequisites:
+
+- Ax/BoTorch must be installed and importable before the rerun starts
+  (`uv sync --extra bayesian` or `uv sync --extra all`). The
+  recommendation's "no RF-fallback mixing" rule means a BoTorch import
+  failure blocks the sprint; verify `ax-platform` and `botorch` both
+  load in a Python REPL before running the benchmark.
+- The `bandit` extra (OBP) must be installed to load the Men/Random
+  slice: `uv sync --extra bandit`.
+- The full Men/Random slice must be available locally at the Sprint 35
+  `--data-path` location; do not substitute the 10,000-row OBP-bundled
+  sample.
+
 Required workflow:
 
 1. Use the `tdd` skill first:
-   - write the five adapter tests from Produce item 2 above; confirm
+   - write the six adapter tests from Produce item 2 above; confirm
      they fail against the current `return None` implementation
 2. Implement the graph change in `bandit_log.py`; run the adapter tests
    locally until green; run the full fast test suite (`uv run pytest
