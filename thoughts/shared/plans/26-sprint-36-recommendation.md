@@ -62,7 +62,9 @@ structure:
 2. `causal_exploration_weight` has been pinned to `0.0` since
    Sprint 29 (PR #160), so the LHS-candidate ancestor-bias code path
    in `suggest.py` lines 246–280 is inactive under the production
-   default.
+   default. The H0 prediction below assumes this pin stays at `0.0`
+   for the Sprint 36 rerun; if a future PR changes that default
+   before Sprint 36 runs, revisit the prediction first.
 3. POMIS requires bidirected edges to produce non-trivial
    intervention sets (`optimizer/pomis.py` lines 30–56). A graph with
    no bidirected edges collapses POMIS to the trivial case.
@@ -169,6 +171,14 @@ surface, this honest minimal graph should not separate `causal` from
 `surrogate_only`.** The Sprint 35 tie should reproduce. See the
 falsifiable-outcome section below.
 
+The prediction mechanically depends on the private helper
+`optimizer/suggest.py::_get_focus_variables`. The Sprint 36
+implementation PR's unit test for H0 (see the "Strategy" section)
+therefore imports that private function by name — a deliberate
+coupling so a future refactor that moves the focus logic out of
+`_get_focus_variables` will immediately break the Sprint 36 test and
+force a plan review rather than silently invalidating the prediction.
+
 ## Falsifiable Outcome
 
 The primary Sprint 36 hypothesis, stated as a concrete inequality the
@@ -208,6 +218,20 @@ Success gates that must also hold for the verdict row to publish:
    (`20260419`) so the permuted-baseline comparison is apples-to-apples
 3. backend provenance records `ax_botorch` on every verdict cell; no
    RF fallback mixing
+
+### Power and the H0-vs-H1 boundary
+
+Sprint 36 keeps the Sprint 33 / Sprint 35 convention of 10 seeds per
+arm. At n=10 per arm, a two-sided Mann-Whitney U test has limited
+power to detect small SNIPW differences: as a rough guide, it can
+reliably certify a separation only when the mean shift is comparable
+to or larger than the seed-level standard deviation (Cohen's d on the
+order of 1). Sprint 35's optimized-strategy B80 std is
+≈`8e-6` (report "Per-Budget Outcome Tables" section), so a real but
+small (~1%) causal advantage could still land in H2 rather than H1
+under 10 seeds. A Sprint 37 power-extension rerun (see "Exit
+Criterion" below) is the explicit answer to that risk, not a
+Sprint 36 widening.
 
 ## Recommended Issue Shape
 
@@ -380,7 +404,11 @@ is the working definition of a good Sprint 36 exit.
 - Sprint 35 Open Bandit benchmark report: [sprint-35-open-bandit-benchmark-report.md](../docs/sprint-35-open-bandit-benchmark-report.md)
 - `BanditLogAdapter`: `causal_optimizer/domain_adapters/bandit_log.py`
 - Open Bandit OPE stack and Section 7 gates: `causal_optimizer/benchmarks/open_bandit.py`
-- Open Bandit benchmark runner: `causal_optimizer/benchmarks/open_bandit_benchmark.py`
+- Open Bandit benchmark runner module: `causal_optimizer/benchmarks/open_bandit_benchmark.py`
+  (exposes `OpenBanditScenario` and `load_men_random_slice`)
+- Open Bandit CLI entry point: `scripts/open_bandit_benchmark.py`
+  (translates `--data-path` / `--budgets` / `--seeds` flags into an
+  invocation of the runner module and writes the artifact JSON)
 - Engine graph usage: `causal_optimizer/optimizer/suggest.py` lines 1122–1134 (`_get_focus_variables`)
 - `CausalGraph` type: `causal_optimizer/types.py` lines 167–263
 - `DomainAdapter.get_prior_graph` contract:

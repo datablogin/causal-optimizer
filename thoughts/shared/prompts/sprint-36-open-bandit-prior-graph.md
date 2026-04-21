@@ -140,6 +140,14 @@ Environment prerequisites:
   reading the Sprint 35 artifact JSON's provenance dict (key
   `permutation_seed`), not just the report text. The two must agree at
   `20260419` for the null-control comparison to be apples-to-apples.
+- Before launching the rerun, confirm the CLI flags the Sprint 35
+  report quotes still exist on the current `scripts/open_bandit_benchmark.py`
+  (run `uv run python scripts/open_bandit_benchmark.py --help` and
+  check for `--data-path`, `--budgets`, `--seeds`, `--strategies`,
+  `--null-control`, `--permutation-seed`, `--output`). If any flag
+  has been renamed or removed since Sprint 35, stop and report —
+  silently adapting flag names would invalidate the
+  apples-to-apples comparison.
 
 Required workflow:
 
