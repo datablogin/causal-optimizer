@@ -281,9 +281,13 @@ from the Sprint 35 report's explicit scope-boundary list:
    remains unused in Sprint 36.
 10. **No multi-objective extension.** The objective remains
     `policy_value` maximize.
-11. **No new engine features.** The graph must be testable against the
-    existing engine surface (`types.py::CausalGraph`,
-    `domain_adapters/base.py::DomainAdapter.get_prior_graph`).
+11. **No new engine features and no engine-code edits.** The graph
+    must be testable against the existing engine surface
+    (`types.py::CausalGraph`,
+    `domain_adapters/base.py::DomainAdapter.get_prior_graph`). The
+    implementation PR must not modify `causal_optimizer/optimizer/`,
+    `causal_optimizer/engine/`, or the OPE stack under
+    `causal_optimizer/benchmarks/open_bandit*.py`.
 12. **No force-push, no hook skipping, no auto-merge.** Standard
     project rules.
 

@@ -59,6 +59,13 @@ Produce in one PR:
    - `test_search_space_variables_match_graph_nodes_minus_outcome` —
      every name returned by `get_search_space().variable_names` is a
      non-`policy_value` node of the returned graph.
+   - `test_focus_variables_equals_full_search_space_under_prior_graph`
+     — call `causal_optimizer.optimizer.suggest._get_focus_variables(
+     adapter.get_search_space(), adapter.get_prior_graph(),
+     adapter.get_objective_name())` and assert it returns a list whose
+     set equals `set(adapter.get_search_space().variable_names)`. This
+     mechanically verifies the Sprint 36 recommendation's H0
+     prediction before the expensive rerun runs.
 
 3. Benchmark rerun and report:
    - Regenerate the Men/Random artifact JSON by running
