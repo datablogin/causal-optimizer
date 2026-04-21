@@ -98,14 +98,26 @@ inside `causal_optimizer/optimizer/suggest.py` (line numbers against
    `_causal_alignment_score` against the best-known params, averaged
    over all ancestor variables. The score is
    `mean(|c_norm - b_norm|)` across ancestors
-   (`suggest.py:1010–1021`), and `_rerank_alignment_only` picks the
-   candidate with the **highest** score
+   (`suggest.py:1010–1021`: `diffs.append(abs(c_norm - b_norm))`,
+   returned as `float(np.mean(diffs))`), and `_rerank_alignment_only`
+   picks the candidate with the **highest** score
    (`suggest.py:840–842`: `if adjusted > best_score`) — i.e. the one
    whose normalized ancestor-parameter vector is *farthest* from the
    best-known params, not closest. Despite the name "alignment", the
    reranker is an exploration-biased distance-from-best selector.
-   With every search variable as an ancestor, it ranks across the
-   full space — **not** a pure no-op.
+   The derivation is load-bearing for the Sprint 37 hypothesis
+   direction, so for a two-candidate sanity check: if `best_params`
+   has `tau = 0.2` and two Ax candidates propose `tau = 0.21` and
+   `tau = 0.28` (with every other ancestor equal), the per-variable
+   normalized displacements are `|0.01 / range|` and
+   `|0.08 / range|`, the means on the ancestor set are strictly
+   ordered the same way, and `adjusted > best_score` at
+   `suggest.py:840` picks the second (`tau = 0.28`) candidate — the
+   one *farther* from `best_params`. A Sprint 37 unit test that
+   replays this two-candidate case against `_rerank_alignment_only`
+   would fail immediately if the sign convention is ever flipped.
+   With every search variable as an ancestor, this reranker ranks
+   across the full space — **not** a pure no-op.
 5. Soft-causal path in `_suggest_surrogate` (lines 884–975). The RF
    fallback uses the same alignment-based reranking. Under the Section 7
    no-RF-fallback rule, this path should not execute on the Sprint 37
@@ -193,8 +205,17 @@ modeling it as a bidirected edge would misrepresent the code.
 Bidirected edges from auto-discovery are explicitly "heuristic proxies,
 not formally identified confounders" (CLAUDE.md discovery notes,
 Sprint 34 contract Section 4e). Without bidirected edges POMIS
-collapses to the trivial case, which is the correct behavior for this
-slice.
+collapses to the trivial case: on a DAG with no bidirected edges,
+every node has a singleton c-component, so the MUCT fixed-point
+(`causal_optimizer/optimizer/pomis.py` lines 30–56) converges to the
+outcome's own ancestor set and POMIS returns only the full-variable
+set. Under the preregistered graph, `ancestors(policy_value)` equals
+the full search space, so the sole POMIS is the full search space
+— which is the correct behavior for this slice and the reason
+Option A in the Exit Criterion section must pick between A1 (a
+non-POMIS minimality heuristic) and A2 (a graph widening that
+introduces bidirected edges or non-ancestor structural nodes so
+POMIS itself begins to restrict).
 
 ### Why the diagnostic outcomes are not nodes
 
@@ -286,7 +307,13 @@ Sprint 37 must additionally pick **one** of:
 
 Sprint 36 does not pick between A1 and A2; Sprint 37's issue body
 does, and the close-out comment records the choice with a one-line
-code-grounded justification.
+code-grounded justification. The recommendation leans toward **A1**
+because the screening result needed for a magnitude-thresholded
+minimality heuristic is already computed by `_suggest_optimization`
+at `suggest.py:425–437`, so A1 is a genuinely small one-function
+change, whereas A2 reopens the bidirected-edge scope that Sprint 34
+contract Section 4e and this plan's "Bidirected edges (none)"
+section both explicitly defer.
 
 **Option B — graph widening (add one non-ancestor structural node).**
 Add one or more non-ancestor structural nodes to the graph (for
