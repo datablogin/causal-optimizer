@@ -238,6 +238,15 @@ collapses to the trivial case. The derivation, step by step against
 
 This is the "trivial case" in that the sole POMIS is the full search
 space, but the route is `IB = parents(Y)`, **not** `MUCT = An(Y)`.
+For the preregistered graph, `parents(policy_value)` and
+`ancestors(policy_value)` happen to coincide with the full search
+space for different structural reasons — `parents` because every
+search variable has a direct edge to `policy_value`, and
+`ancestors` because the graph has no multi-step chains — so the
+two routes produce the same conclusion here but for non-equivalent
+reasons. A graph that changes only one of those (for example, a
+new intermediate node that changes `ancestors` without changing
+`parents`) would break the coincidence.
 The same conclusion (POMIS does not restrict the search) holds, and
 it is the reason Option A in the Exit Criterion section must pick
 between A1 (a non-POMIS minimality heuristic) and A2 (a graph
@@ -350,8 +359,10 @@ Add one or more non-ancestor structural nodes to the graph (for
 example, a `logged_position_distribution` node that parents
 `position_handling_flag` but is not itself a knob, or a
 `request_item_overlap` node that models the row-mask / action-support
-coupling) so that `ancestors(policy_value) ⊊ search_space.variable_names`
-and path 1 becomes a real restriction. Scope guardrails:
+coupling) so that not every search variable is an ancestor of
+`policy_value` — equivalently,
+`{v ∈ search_space.variable_names | v ∈ ancestors(policy_value)} ⊊ search_space.variable_names`
+— and path 1 becomes a real restriction. Scope guardrails:
 
 1. Graph change is authored by hand from the adapter code, not from
    convergence noise. Any added node must cite a specific

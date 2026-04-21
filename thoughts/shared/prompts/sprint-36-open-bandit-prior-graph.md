@@ -164,15 +164,17 @@ Reporting discipline (preserved for when Sprint 37's report is
 written, not required in Sprint 36 itself):
 
 - All p-values are two-sided Mann-Whitney U unless otherwise noted.
-- Reserve "winner" for `p <= 0.05`; use "trending" for
-  `0.05 < p <= 0.15`; use "not significant" (Sprint 34 contract
-  Section 6e) for `p > 0.15`. The recommendation uses "not
-  significant" as the canonical label for the H0 band; this prompt
-  follows the same convention. The term "near-parity" from the
-  Sprint 35 report is a stronger descriptor reserved for
-  within-noise identical distributions (e.g. the Sprint 35 exact
-  tie) and is a subset of the "not significant" band, not a
-  separate label.
+- Reserve "certified" (Sprint 33 scorecard label; Sprint 35 and
+  the Sprint 36 recommendation's H1 block both use this term) for
+  `p <= 0.05`; use "trending" for `0.05 < p <= 0.15`; use "not
+  significant" (Sprint 34 contract Section 6e) for `p > 0.15`.
+  The Sprint 35 report also uses "winner" as a synonym for
+  "certified" in reporting prose; either is acceptable so long as
+  the same row is not relabeled after the fact. The term
+  "near-parity" from the Sprint 35 report is a stronger descriptor
+  reserved for within-noise identical distributions (e.g. the
+  Sprint 35 exact tie) and is a subset of the "not significant"
+  band, not a separate label.
 - Population std (ddof=0) in report tables; sample-pooled std
   (ddof=1) only when Cohen's d is quoted.
 - Record backend provenance explicitly on every verdict cell.
