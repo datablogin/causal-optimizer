@@ -57,7 +57,15 @@ Produce in one PR:
 
 2. Adapter tests (new or extended):
    /Users/robertwelborn/Projects/causal-optimizer/tests/unit/test_bandit_log_adapter.py
-   (or the existing file if already present)
+   (the file already exists from Sprint 35.A; extend it in place)
+
+   First, delete or rewrite the existing
+   `test_prior_graph_is_none_by_default` at
+   `tests/unit/test_bandit_log_adapter.py:112`. That assertion
+   (`adapter.get_prior_graph() is None`) encodes the Sprint 35
+   behavior and will fail the moment Sprint 36's graph lands; replace
+   it with the six tests below rather than leaving it as a broken
+   "known failing" test.
    - `test_get_prior_graph_returns_expected_nodes` — exactly the 7
      nodes above.
    - `test_get_prior_graph_has_six_directed_edges` — exactly 6 edges.

@@ -65,9 +65,11 @@ structure:
    default. The H0 prediction below assumes this pin stays at `0.0`
    for the Sprint 36 rerun; if a future PR changes that default
    before Sprint 36 runs, revisit the prediction first.
-3. POMIS requires bidirected edges to produce non-trivial
-   intervention sets (`optimizer/pomis.py` lines 30–56). A graph with
-   no bidirected edges collapses POMIS to the trivial case.
+3. POMIS needs bidirected edges to produce non-trivial
+   (proper-subset) intervention sets (`optimizer/pomis.py` lines
+   30–56). Without bidirected edges the MUCT fixed-point collapses to
+   the outcome's own ancestor set, so POMIS returns the trivial
+   full-variable set rather than restricting the search.
 
 Running a Men/Random rerun with `get_prior_graph() -> None` again
 answers no new question. Running it with an *honest* graph isolates a
@@ -190,6 +192,14 @@ rerun either confirms or refutes:
 > `surrogate_only`, computed over 10 seeds on the full Men/Random
 > slice, satisfies `p > 0.15` (the Sprint 34 contract Section 6e "not
 > significant" band).
+>
+> The prediction assumes no engine code path other than
+> `_get_focus_variables` reads `self.causal_graph` between now and
+> the Sprint 36 rerun — i.e. no parent-conditional priors, no
+> graph-aware kernel selection, and no new auto-discovery overlay
+> added in parallel with Sprint 36. If any such path lands before
+> the rerun, the prediction must be revisited before the verdict is
+> quoted.
 
 H0 being confirmed is a non-trivial result — it is the first direct
 evidence that the engine's ancestor-based focus path is inert when
