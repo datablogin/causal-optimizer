@@ -8,26 +8,29 @@ conflict between the two documents is resolved in favor of the
 recommendation. If you amend this prompt, update the recommendation
 first.
 
-Primary recommendation:
-- /Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/26-sprint-36-recommendation.md
+All paths below are **repo-relative** — resolve them from the root of
+your `causal-optimizer` checkout (or worktree).
 
-Read first (absolute paths):
-1. /Users/robertwelborn/Projects/causal-optimizer/CLAUDE.md
-2. /Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/26-sprint-36-recommendation.md
-3. /Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-34-open-bandit-contract.md
-4. /Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-35-open-bandit-benchmark-report.md
-5. /Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/handoff.md
-6. /Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/07-benchmark-state.md
-7. /Users/robertwelborn/Projects/causal-optimizer/causal_optimizer/domain_adapters/bandit_log.py
-8. /Users/robertwelborn/Projects/causal-optimizer/causal_optimizer/benchmarks/open_bandit.py
-9. /Users/robertwelborn/Projects/causal-optimizer/causal_optimizer/benchmarks/open_bandit_benchmark.py
-10. /Users/robertwelborn/Projects/causal-optimizer/causal_optimizer/types.py (CausalGraph)
-11. /Users/robertwelborn/Projects/causal-optimizer/causal_optimizer/optimizer/suggest.py
-    (lines 1122–1134 `_get_focus_variables`; confirm ancestor-based focus
-    behavior before touching the graph)
-12. /Users/robertwelborn/Projects/causal-optimizer/causal_optimizer/domain_adapters/marketing_logs.py
+Primary recommendation:
+- `thoughts/shared/plans/26-sprint-36-recommendation.md`
+
+Read first:
+1. `CLAUDE.md`
+2. `thoughts/shared/plans/26-sprint-36-recommendation.md`
+3. `thoughts/shared/docs/sprint-34-open-bandit-contract.md`
+4. `thoughts/shared/docs/sprint-35-open-bandit-benchmark-report.md`
+5. `thoughts/shared/docs/handoff.md`
+6. `thoughts/shared/plans/07-benchmark-state.md`
+7. `causal_optimizer/domain_adapters/bandit_log.py`
+8. `causal_optimizer/benchmarks/open_bandit.py`
+9. `causal_optimizer/benchmarks/open_bandit_benchmark.py`
+10. `causal_optimizer/types.py` (`CausalGraph`)
+11. `causal_optimizer/optimizer/suggest.py`
+    (lines 1122–1134 `_get_focus_variables`; confirm ancestor-based
+    focus behavior before touching the graph)
+12. `causal_optimizer/domain_adapters/marketing_logs.py`
     (existing prior-graph example: `MarketingLogAdapter.get_prior_graph`)
-13. /Users/robertwelborn/Projects/causal-optimizer/causal_optimizer/benchmarks/criteo.py
+13. `causal_optimizer/benchmarks/criteo.py`
     (existing prior-graph example: `criteo_projected_prior_graph`)
 
 Goal:
@@ -42,7 +45,7 @@ Goal:
 Produce in one PR:
 
 1. Updated adapter:
-   /Users/robertwelborn/Projects/causal-optimizer/causal_optimizer/domain_adapters/bandit_log.py
+   `causal_optimizer/domain_adapters/bandit_log.py`
    - Replace `get_prior_graph(self) -> CausalGraph | None: return None`
      with a returned `CausalGraph` matching the Sprint 36 recommendation
      exactly. Required shape:
@@ -56,7 +59,7 @@ Produce in one PR:
      ships a non-null graph.
 
 2. Adapter tests (new or extended):
-   /Users/robertwelborn/Projects/causal-optimizer/tests/unit/test_bandit_log_adapter.py
+   `tests/unit/test_bandit_log_adapter.py`
    (the file already exists from Sprint 35.A; extend it in place)
 
    First, delete or rewrite the existing
@@ -95,7 +98,7 @@ Produce in one PR:
      `--permutation-seed 20260419`). The rerun must execute under the
      same Ax/BoTorch backend.
    - Write:
-     /Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/sprint-36-open-bandit-prior-graph-report.md
+     `thoughts/shared/docs/sprint-36-open-bandit-prior-graph-report.md`
      Same sectioning as the Sprint 35 report. In addition it must:
      - embed the full seven-node / six-edge graph in the Configuration
        section, including the per-edge code-line justifications copied
@@ -108,8 +111,8 @@ Produce in one PR:
 
 4. Restart-doc updates (only if the rerun's outcome materially
    changes the current scorecard line):
-   - /Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/docs/handoff.md
-   - /Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/07-benchmark-state.md
+   - `thoughts/shared/docs/handoff.md`
+   - `thoughts/shared/plans/07-benchmark-state.md`
    If H0 is confirmed and the tie persists, a one-sentence update to
    each file is sufficient. Do not rewrite prior-sprint sections.
 
