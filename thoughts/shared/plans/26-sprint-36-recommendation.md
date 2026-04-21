@@ -133,11 +133,11 @@ inside `causal_optimizer/optimizer/suggest.py` (line numbers against
    The Sprint 37 prediction assumes this pin stays at `0.0`; a future
    PR that changes that default would require revisiting the
    prediction.
-7. `_suggest_causal_gp` (line 451). Activated only when
-   `strategy == "causal_gp"` is explicitly requested. The benchmark
-   `causal` strategy goes through `_suggest_bayesian`, not
-   `_suggest_causal_gp`, so this path is out of scope for the Sprint 37
-   rerun.
+7. `_suggest_causal_gp` routing (lines 450–458; guard at line 451,
+   call at line 458). Activated only when `strategy == "causal_gp"`
+   is explicitly requested. The benchmark `causal` strategy goes
+   through `_suggest_bayesian`, not `_suggest_causal_gp`, so this
+   path is out of scope for the Sprint 37 rerun.
 
 The earlier Sprint 36 draft leaned on path 1 and predicted a pure
 no-op ("this honest minimal graph should not separate `causal` from
@@ -209,17 +209,36 @@ modeling it as a bidirected edge would misrepresent the code.
 Bidirected edges from auto-discovery are explicitly "heuristic proxies,
 not formally identified confounders" (CLAUDE.md discovery notes,
 Sprint 34 contract Section 4e). Without bidirected edges POMIS
-collapses to the trivial case: on a DAG with no bidirected edges,
-every node has a singleton c-component, so the MUCT fixed-point
-(`causal_optimizer/optimizer/pomis.py` lines 30–56) converges to the
-outcome's own ancestor set and POMIS returns only the full-variable
-set. Under the preregistered graph, `ancestors(policy_value)` equals
-the full search space, so the sole POMIS is the full search space
-— which is the correct behavior for this slice and the reason
-Option A in the Exit Criterion section must pick between A1 (a
-non-POMIS minimality heuristic) and A2 (a graph widening that
-introduces bidirected edges or non-ancestor structural nodes so
-POMIS itself begins to restrict).
+collapses to the trivial case. The derivation, step by step against
+`causal_optimizer/optimizer/pomis.py`:
+
+1. With no bidirected edges, every node's c-component is a singleton
+   (`types.py:214`).
+2. `_muct` (`pomis.py:59–124`) starts from `{outcome}`, takes the
+   c-component of each frontier node (a singleton here, so no
+   expansion), and adds descendants-of-c-component within the
+   ancestral subgraph. Descendants of `policy_value` inside
+   `An(policy_value)` ∪ `{policy_value}` is the empty set, so the
+   frontier never grows. Therefore `MUCT = {policy_value}`.
+3. `_interventional_border` (`pomis.py:127–132`) returns
+   `parents(MUCT) - MUCT = parents(policy_value) - {policy_value}`,
+   which under the preregistered graph is exactly the six search
+   variables (every search variable has a direct edge to
+   `policy_value`). So the interventional border equals the full
+   search space.
+4. `compute_pomis` (`pomis.py:17–56`) adds `frozenset(ib)` to the
+   result at line 54 — i.e. the full-search-space frozenset.
+   The POMIS list is therefore a single element equal to the full
+   search space.
+
+This is the "trivial case" in that the sole POMIS is the full search
+space, but the route is `IB = parents(Y)`, **not** `MUCT = An(Y)`.
+The same conclusion (POMIS does not restrict the search) holds, and
+it is the reason Option A in the Exit Criterion section must pick
+between A1 (a non-POMIS minimality heuristic) and A2 (a graph
+widening that introduces bidirected edges or non-ancestor
+structural nodes so POMIS itself begins to restrict — e.g. by
+shrinking IB below the full variable set).
 
 ### Why the diagnostic outcomes are not nodes
 
@@ -566,9 +585,10 @@ the scope lock the PR #195 review asked for.
     `_suggest_bayesian` reranker and the `_suggest_surrogate`
     scorer both consume)
 - POMIS implementation: `causal_optimizer/optimizer/pomis.py`
-  (MUCT fixed-point at lines 30–56; Option A / POMIS trivial-case
-  derivation in the "Bidirected edges (none)" section relies on
-  this file)
+  (`compute_pomis` at lines 17–56, `_muct` at lines 59–124,
+  `_interventional_border` at lines 127–132; the Option A / POMIS
+  trivial-case derivation in the "Bidirected edges (none)" section
+  walks through all three of these against the preregistered graph)
 - `CausalGraph` type: `causal_optimizer/types.py` lines 167–263
 - `DomainAdapter.get_prior_graph` contract:
   `causal_optimizer/domain_adapters/base.py` line 39
