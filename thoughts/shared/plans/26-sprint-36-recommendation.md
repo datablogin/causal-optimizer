@@ -81,7 +81,7 @@ inside `causal_optimizer/optimizer/suggest.py` (line numbers against
    Combines `graph_focus` with the screening result. When
    `graph_focus == search_space.variable_names`, the intersection
    equals `screened_variables`, matching the no-graph case.
-3. `_suggest_exploitation` parent-weighted perturbation (lines 571–586).
+3. `_suggest_exploitation` parent-weighted perturbation (lines 569–586).
    Uses `causal_graph.parents(objective_name)` to bias the random choice
    of which variable to perturb. The weighting activates only when
    `parent_focus` is a *proper* subset of `eligible_vars` (line 575:
@@ -98,8 +98,12 @@ inside `causal_optimizer/optimizer/suggest.py` (line numbers against
    `_causal_alignment_score` against the best-known params, averaged
    over all ancestor variables. The score is
    `mean(|c_norm - b_norm|)` across ancestors
-   (`suggest.py:1010–1021`: `diffs.append(abs(c_norm - b_norm))`,
-   returned as `float(np.mean(diffs))`), and `_rerank_alignment_only`
+   (`suggest.py:982–1021` for the full function, including the
+   `_normalize_value` call that makes the two-candidate example
+   below rescale `tau` onto `[0, 1]` before differencing; the
+   per-ancestor inner loop at lines 1010–1019 appends
+   `abs(c_norm - b_norm)` and line 1021 returns
+   `float(np.mean(diffs))`), and `_rerank_alignment_only`
    picks the candidate with the **highest** score
    (`suggest.py:840–842`: `if adjusted > best_score`) — i.e. the one
    whose normalized ancestor-parameter vector is *farthest* from the
@@ -118,7 +122,7 @@ inside `causal_optimizer/optimizer/suggest.py` (line numbers against
    would fail immediately if the sign convention is ever flipped.
    With every search variable as an ancestor, this reranker ranks
    across the full space — **not** a pure no-op.
-5. Soft-causal path in `_suggest_surrogate` (lines 884–975). The RF
+5. Soft-causal path in `_suggest_surrogate` (lines 883–979). The RF
    fallback uses the same alignment-based reranking. Under the Section 7
    no-RF-fallback rule, this path should not execute on the Sprint 37
    rerun, but it is reachable if Ax fails to import and must therefore
@@ -549,14 +553,22 @@ the scope lock the PR #195 review asked for.
     (`_get_focus_variables`)
   - `causal_optimizer/optimizer/suggest.py` lines 425–437
     (screening intersection inside `_suggest_optimization`)
-  - `causal_optimizer/optimizer/suggest.py` lines 571–586
+  - `causal_optimizer/optimizer/suggest.py` lines 569–586
     (parent-weighted perturbation inside `_suggest_exploitation`)
   - `causal_optimizer/optimizer/suggest.py` lines 751–812
     (soft-causal reranker inside `_suggest_bayesian`)
-  - `causal_optimizer/optimizer/suggest.py` lines 884–975
+  - `causal_optimizer/optimizer/suggest.py` lines 883–979
     (soft-causal path inside `_suggest_surrogate`)
   - `causal_optimizer/optimizer/suggest.py` lines 246–280
     (`causal_exploration_weight` LHS bias, pinned to `0.0`)
+  - `causal_optimizer/optimizer/suggest.py` lines 982–1021
+    (`_causal_alignment_score`, the distance metric the
+    `_suggest_bayesian` reranker and the `_suggest_surrogate`
+    scorer both consume)
+- POMIS implementation: `causal_optimizer/optimizer/pomis.py`
+  (MUCT fixed-point at lines 30–56; Option A / POMIS trivial-case
+  derivation in the "Bidirected edges (none)" section relies on
+  this file)
 - `CausalGraph` type: `causal_optimizer/types.py` lines 167–263
 - `DomainAdapter.get_prior_graph` contract:
   `causal_optimizer/domain_adapters/base.py` line 39
