@@ -143,17 +143,22 @@ The earlier Sprint 36 draft leaned on path 1 and predicted a pure
 no-op ("this honest minimal graph should not separate `causal` from
 `surrogate_only`"). That prediction was subtly wrong: path 4 is
 active under the default engine config, and its alignment reranker
-*does* use the graph — it just happens to have produced a bit-identical
-tie in Sprint 35 because, empirically, the 5-candidate Ax pool
-collapses to one candidate under the Sprint 35 seed sequence when the
-graph is absent, and the soft-mode reranker's distance-to-best tiebreaker
-does not move the winner when the history is identical. That collapse
-is not guaranteed under a non-trivial graph, and it is not the kind
-of prediction Sprint 36 should stake a benchmark rerun on.
+*does* use the graph — it just happened to produce a bit-identical
+tie in Sprint 35 because, empirically, the branches on each side of
+`use_soft` generate a single winning candidate under the Sprint 35
+seed sequence. In the no-graph case (`use_soft = False`) Ax returns
+exactly one candidate and the reranker is skipped entirely
+(`suggest.py:771–773`); in the with-graph case (`use_soft = True`)
+Ax generates five candidates and `_rerank_alignment_only` picks one,
+but with an empty history and matching seeds the five-candidate pool
+and the one-candidate call in the control arm select the same
+parameter dict. That empirical coincidence is not guaranteed under a
+non-trivial graph, and it is not the kind of prediction Sprint 36
+should stake a benchmark rerun on.
 
 Running Men/Random again with the minimal graph wired in therefore
 does not answer a well-posed question. Either the tie persists (weakly
-interesting — confirms the empirical collapse but does not tell us
+interesting — confirms the empirical coincidence but does not tell us
 which of paths 1–5 was responsible) or it breaks (the rerun then
 needs a diagnostic harness Sprint 36 has not specified to attribute
 the break to a specific code path). Preregistering the graph, the
@@ -280,12 +285,14 @@ available):
 
 This means the minimal graph is **not** a pure no-op under the current
 engine surface — path 4 produces a different candidate reranking.
-Empirically Sprint 35 saw a bit-identical tie, but that is an
-observation about Ax's 5-candidate collapse under the specific Sprint 35
-seed sequence, not a guarantee. Sprint 37's rerun must explicitly
-report both the winning candidate and the top-5 pool alignment scores
-so a recurrence of the Sprint 35 tie is diagnosable rather than
-mysterious.
+Empirically Sprint 35 saw a bit-identical tie, but that is the
+coincidence described above (the one-candidate control arm and the
+five-candidate soft-mode arm pick the same parameter dict under the
+Sprint 35 seed sequence with an empty history), not a guarantee.
+Sprint 37's rerun must explicitly report both the winning candidate
+and, on the `causal` arm, the five-candidate pool and their
+`_causal_alignment_score` values, so a recurrence of the Sprint 35
+tie is diagnosable rather than mysterious.
 
 ## Exit Criterion (what Sprint 37 must do)
 
