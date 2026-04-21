@@ -1,5 +1,13 @@
 Work on Sprint 36: first Open Bandit prior graph and Men/Random rerun.
 
+Canonical source: the Sprint 36 recommendation below is authoritative
+for every contract decision (graph shape, hard constraints,
+anti-patterns, Section 7 gates). This prompt duplicates those items
+so an implementation agent has a self-contained brief, but any
+conflict between the two documents is resolved in favor of the
+recommendation. If you amend this prompt, update the recommendation
+first.
+
 Primary recommendation:
 - /Users/robertwelborn/Projects/causal-optimizer/thoughts/shared/plans/26-sprint-36-recommendation.md
 
@@ -65,7 +73,10 @@ Produce in one PR:
      adapter.get_objective_name())` and assert it returns a list whose
      set equals `set(adapter.get_search_space().variable_names)`. This
      mechanically verifies the Sprint 36 recommendation's H0
-     prediction before the expensive rerun runs.
+     prediction before the expensive rerun runs. Annotate the test
+     with a comment flagging that `_get_focus_variables` is a private
+     helper (leading underscore) so a future refactor of that module
+     knows to update this test alongside the implementation.
 
 3. Benchmark rerun and report:
    - Regenerate the Men/Random artifact JSON by running
@@ -116,12 +127,19 @@ Environment prerequisites:
   (`uv sync --extra bayesian` or `uv sync --extra all`). The
   recommendation's "no RF-fallback mixing" rule means a BoTorch import
   failure blocks the sprint; verify `ax-platform` and `botorch` both
-  load in a Python REPL before running the benchmark.
+  load in a Python REPL before running the benchmark. If either
+  import still fails after `uv sync --extra all`, stop and report the
+  failure to the human reviewer — do not fall back to RF and do not
+  publish a verdict row.
 - The `bandit` extra (OBP) must be installed to load the Men/Random
   slice: `uv sync --extra bandit`.
 - The full Men/Random slice must be available locally at the Sprint 35
   `--data-path` location; do not substitute the 10,000-row OBP-bundled
   sample.
+- Confirm the null-control permutation seed matches Sprint 35 by
+  reading the Sprint 35 artifact JSON's provenance dict (key
+  `permutation_seed`), not just the report text. The two must agree at
+  `20260419` for the null-control comparison to be apples-to-apples.
 
 Required workflow:
 
