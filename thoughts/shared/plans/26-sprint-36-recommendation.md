@@ -96,9 +96,16 @@ inside `causal_optimizer/optimizer/suggest.py` (line numbers against
    silently turns soft mode on. Soft mode generates 5 Ax candidates,
    injects categorical diversity, and reranks by
    `_causal_alignment_score` against the best-known params, averaged
-   over all ancestor variables. With every search variable as an
-   ancestor, the reranker is a distance-from-best exploration
-   reranker across the full space — **not** a pure no-op.
+   over all ancestor variables. The score is
+   `mean(|c_norm - b_norm|)` across ancestors
+   (`suggest.py:1010–1021`), and `_rerank_alignment_only` picks the
+   candidate with the **highest** score
+   (`suggest.py:840–842`: `if adjusted > best_score`) — i.e. the one
+   whose normalized ancestor-parameter vector is *farthest* from the
+   best-known params, not closest. Despite the name "alignment", the
+   reranker is an exploration-biased distance-from-best selector.
+   With every search variable as an ancestor, it ranks across the
+   full space — **not** a pure no-op.
 5. Soft-causal path in `_suggest_surrogate` (lines 884–975). The RF
    fallback uses the same alignment-based reranking. Under the Section 7
    no-RF-fallback rule, this path should not execute on the Sprint 37
@@ -246,8 +253,8 @@ plan rewrite.
 **Option A — small engine change that makes the graph matter.** The
 minimal candidate is to extend `_get_focus_variables` (or a new
 sibling helper) to return a *proper subset* of the search space when
-every search variable is an ancestor but a POMIS-style minimality
-criterion can identify one. Scope guardrails:
+every search variable is an ancestor but a minimality criterion can
+identify one. Scope guardrails:
 
 1. Single function edit inside `causal_optimizer/optimizer/suggest.py`,
    plus unit tests.
@@ -259,11 +266,27 @@ criterion can identify one. Scope guardrails:
    below, with `causal` re-interpreted to mean "graph + flag on" and
    `surrogate_only` unchanged.
 
-POMIS is the right concept here because `causal_optimizer/optimizer/pomis.py`
-already computes minimal intervention sets for a given graph. The
-bidirected-edge-free graph above makes POMIS return the full set,
-which is exactly why "Option A" requires a widened graph — see
-Option B.
+The natural minimality criterion is POMIS, since
+`causal_optimizer/optimizer/pomis.py` already computes minimal
+intervention sets for a given graph. However, under the preregistered
+bidirected-edge-free graph above, POMIS returns the full set, so
+plain-POMIS Option A reduces to a no-op. For Option A to bind,
+Sprint 37 must additionally pick **one** of:
+
+- **A1.** A non-POMIS minimality heuristic (for example, return the
+  subset of ancestors whose estimated effect-on-objective magnitude
+  exceeds a threshold, using the screening result that
+  `_suggest_optimization` already computes at `suggest.py:425–437`).
+  This keeps the graph unchanged and the change is isolated inside
+  `_get_focus_variables` + its screening input.
+- **A2.** A companion graph widening that adds one or more
+  bidirected edges or non-ancestor structural nodes so that POMIS
+  itself returns a proper subset (see Option B for the graph-only
+  version of this path).
+
+Sprint 36 does not pick between A1 and A2; Sprint 37's issue body
+does, and the close-out comment records the choice with a one-line
+code-grounded justification.
 
 **Option B — graph widening (add one non-ancestor structural node).**
 Add one or more non-ancestor structural nodes to the graph (for
