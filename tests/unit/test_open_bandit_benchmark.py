@@ -443,3 +443,178 @@ class TestSummarizeStrategyBudget:
         assert "std_policy_value_snipw" in cell
         assert "n_seeds" in cell
         assert cell["n_seeds"] == 3
+
+    def test_null_control_rows_are_filtered(self) -> None:
+        bf = _synthetic_feedback()
+        scenario = OpenBanditScenario(bandit_feedback=bf)
+        real = scenario.run_strategy("random", budget=2, seed=0)
+        null = scenario.run_strategy(
+            "random", budget=2, seed=0, null_control=True, permutation_seed=42
+        )
+        summary = summarize_strategy_budget([real, null])
+        # Null-control row must be skipped; only the real row survives.
+        assert ("random", 2) in summary
+        assert summary[("random", 2)]["n_seeds"] == 1
+
+
+# ── Error-path coverage ──────────────────────────────────────────────
+
+
+class TestLoaderValidation:
+    """Explicit error paths for ``build_bandit_feedback_from_raw``."""
+
+    def _base_frames(self, n_rounds: int = 50, n_actions: int = 4):
+        import pandas as pd
+
+        rng = np.random.default_rng(0)
+        data = pd.DataFrame(
+            {
+                "item_id": rng.integers(0, n_actions, size=n_rounds),
+                "position": rng.integers(1, 4, size=n_rounds),
+                "click": (rng.random(n_rounds) < 0.02).astype(int),
+                "propensity_score": np.full(n_rounds, 1.0 / n_actions, dtype=float),
+            }
+        )
+        for k in range(n_actions):
+            data[f"user-item_affinity_{k}"] = rng.normal(size=n_rounds)
+        item_context = pd.DataFrame(
+            {
+                "item_id": np.arange(n_actions),
+                "item_feature_0": rng.uniform(-0.7, 0.7, size=n_actions),
+            }
+        )
+        return data, item_context
+
+    def test_missing_required_data_column_raises(self) -> None:
+        data, item_context = self._base_frames()
+        with pytest.raises(ValueError, match="raw data frame is missing"):
+            build_bandit_feedback_from_raw(
+                data=data.drop(columns=["click"]), item_context=item_context
+            )
+
+    def test_missing_required_item_context_column_raises(self) -> None:
+        data, item_context = self._base_frames()
+        with pytest.raises(ValueError, match="item_context frame is missing"):
+            build_bandit_feedback_from_raw(
+                data=data, item_context=item_context.drop(columns=["item_feature_0"])
+            )
+
+    def test_action_id_out_of_range_raises(self) -> None:
+        data, item_context = self._base_frames(n_actions=4)
+        # Inject an action id beyond the item_context size.
+        data.loc[0, "item_id"] = 99
+        with pytest.raises(ValueError, match="item_context provides"):
+            build_bandit_feedback_from_raw(data=data, item_context=item_context)
+
+    def test_narrow_context_is_padded_to_n_actions(self) -> None:
+        # When raw data has fewer affinity columns than n_actions, the
+        # loader pads the context with zeros so the adapter's slice stays
+        # well defined.
+        import pandas as pd
+
+        rng = np.random.default_rng(0)
+        n_rounds, n_actions = 20, 5
+        data = pd.DataFrame(
+            {
+                "item_id": rng.integers(0, n_actions, size=n_rounds),
+                "position": rng.integers(1, 4, size=n_rounds),
+                "click": np.zeros(n_rounds, dtype=int),
+                "propensity_score": np.full(n_rounds, 1.0 / n_actions, dtype=float),
+                # Only two affinity columns; n_actions = 5 so loader must pad.
+                "user-item_affinity_0": rng.normal(size=n_rounds),
+                "user-item_affinity_1": rng.normal(size=n_rounds),
+            }
+        )
+        item_context = pd.DataFrame(
+            {
+                "item_id": np.arange(n_actions),
+                "item_feature_0": rng.uniform(-0.7, 0.7, size=n_actions),
+            }
+        )
+        bf = build_bandit_feedback_from_raw(data=data, item_context=item_context)
+        assert bf["context"].shape == (n_rounds, n_actions)
+
+
+class TestLoadMenRandomSliceHappyPath:
+    """``load_men_random_slice`` happy path + missing-item_context branch."""
+
+    def _write_random_men_fixture(self, root: Any, *, n_rounds: int = 30, n_actions: int = 4):
+        import pandas as pd
+
+        men_dir = root / "random" / "men"
+        men_dir.mkdir(parents=True)
+        rng = np.random.default_rng(0)
+        data = pd.DataFrame(
+            {
+                "timestamp": np.arange(n_rounds),
+                "item_id": rng.integers(0, n_actions, size=n_rounds),
+                "position": rng.integers(1, 4, size=n_rounds),
+                "click": np.zeros(n_rounds, dtype=int),
+                "propensity_score": np.full(n_rounds, 1.0 / n_actions, dtype=float),
+            }
+        )
+        for k in range(n_actions):
+            data[f"user-item_affinity_{k}"] = rng.normal(size=n_rounds)
+        data.to_csv(men_dir / "men.csv")
+        item_context = pd.DataFrame(
+            {
+                "item_id": np.arange(n_actions),
+                "item_feature_0": rng.uniform(-0.7, 0.7, size=n_actions),
+            }
+        )
+        item_context.to_csv(men_dir / "item_context.csv")
+        return men_dir
+
+    def test_happy_path_reads_csvs_and_returns_bf(self, tmp_path: Any) -> None:
+        self._write_random_men_fixture(tmp_path)
+        bf = load_men_random_slice(data_path=tmp_path)
+        assert set(bf.keys()) >= {
+            "n_rounds",
+            "n_actions",
+            "action",
+            "position",
+            "reward",
+            "pscore",
+            "context",
+            "action_context",
+        }
+
+    def test_missing_item_context_csv_raises(self, tmp_path: Any) -> None:
+        men_dir = self._write_random_men_fixture(tmp_path)
+        (men_dir / "item_context.csv").unlink()
+        with pytest.raises(FileNotFoundError, match="item_context.csv"):
+            load_men_random_slice(data_path=tmp_path)
+
+
+class TestScenarioAccessorsAndValidation:
+    """Property accessors and ``run_strategy`` argument validation."""
+
+    def test_accessors_return_constructor_values(self) -> None:
+        bf = _synthetic_feedback()
+        scenario = OpenBanditScenario(bandit_feedback=bf, use_reward_model=False)
+        assert scenario.n_actions == int(bf["n_actions"])
+        assert scenario.n_positions == int(np.asarray(bf["position"]).max() + 1)
+        assert scenario.min_propensity_clip > 0.0
+        assert scenario.bandit_feedback is bf
+
+    def test_use_reward_model_false_leaves_reward_hat_none(self) -> None:
+        bf = _synthetic_feedback()
+        scenario = OpenBanditScenario(bandit_feedback=bf, use_reward_model=False)
+        # DR/DM require reward_hat; when disabled, scenario leaves it None
+        # and ``run_strategy`` should still produce a SNIPW value.
+        result = scenario.run_strategy("random", budget=2, seed=0)
+        assert result.policy_value_dm is None
+        assert result.policy_value_dr is None
+        assert np.isfinite(result.policy_value_snipw)
+
+    def test_run_strategy_rejects_nonpositive_budget(self) -> None:
+        bf = _synthetic_feedback()
+        scenario = OpenBanditScenario(bandit_feedback=bf)
+        with pytest.raises(ValueError, match="budget must be positive"):
+            scenario.run_strategy("random", budget=0, seed=0)
+
+    def test_run_strategy_requires_permutation_seed_for_null_control(self) -> None:
+        bf = _synthetic_feedback()
+        scenario = OpenBanditScenario(bandit_feedback=bf)
+        with pytest.raises(ValueError, match="permutation_seed is required"):
+            scenario.run_strategy("random", budget=2, seed=0, null_control=True)
