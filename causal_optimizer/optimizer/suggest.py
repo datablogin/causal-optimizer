@@ -117,6 +117,7 @@ def suggest_parameters(
     seed: int | None = None,
     causal_exploration_weight: float = 0.0,
     causal_softness: float = 0.5,
+    pomis_minimal_focus: bool = False,
 ) -> dict[str, Any]:
     """Suggest next experiment parameters based on current phase and history.
 
@@ -138,6 +139,15 @@ def suggest_parameters(
             (changed from 0.3 in Sprint 29 after ablation evidence).
         causal_softness: Strength of causal alignment bonus during optimization
             (0.0 = no bonus, large = approximates hard focus). Default 0.5.
+        pomis_minimal_focus: Sprint 37 Option A1 flag. When ``True``, the
+            focus helper may restrict optimization and exploitation to
+            ``screened_variables ∩ ancestors`` whenever (a) a causal graph
+            is supplied, (b) every search variable is an ancestor of
+            ``objective_name``, and (c) the resulting intersection is a
+            non-empty proper subset of the search space. When ``False``
+            (the default), behavior is preserved exactly. The Open
+            Bandit benchmark harness sets this to ``True`` only for the
+            ``causal`` arm.
     """
     if phase == "exploration":
         step_seed = _derive_seed(seed, len(experiment_log.results))
@@ -180,9 +190,20 @@ def suggest_parameters(
                 strategy=strategy,
                 seed=seed,
                 causal_softness=causal_softness,
+                pomis_minimal_focus=pomis_minimal_focus,
             )
         elif phase == "exploitation":
-            focus_variables = _get_focus_variables(search_space, causal_graph, objective_name)
+            # Apply A1 here so B80 (which crosses the >= 50 exploitation
+            # boundary) does not silently revert to full-space perturbation.
+            base_focus = _get_focus_variables(search_space, causal_graph, objective_name)
+            focus_variables = _apply_minimal_focus_a1(
+                base_focus=base_focus,
+                search_space=search_space,
+                causal_graph=causal_graph,
+                objective_name=objective_name,
+                screened_variables=screened_variables,
+                enable=pomis_minimal_focus,
+            )
             step_seed = _derive_seed(seed, len(experiment_log.results))
             return _suggest_exploitation(
                 search_space,
@@ -399,6 +420,7 @@ def _suggest_optimization(
     strategy: str = "bayesian",
     seed: int | None = None,
     causal_softness: float = 0.5,
+    pomis_minimal_focus: bool = False,
 ) -> dict[str, Any]:
     """Optimization: Bayesian optimization with optional soft causal guidance.
 
@@ -435,6 +457,17 @@ def _suggest_optimization(
         focus_variables = screened_variables
     else:
         focus_variables = graph_focus
+
+    # When the A1 flag is on the helper may restrict ``focus_variables``
+    # further; otherwise it returns the input unchanged.
+    focus_variables = _apply_minimal_focus_a1(
+        base_focus=focus_variables,
+        search_space=search_space,
+        causal_graph=causal_graph,
+        objective_name=objective_name,
+        screened_variables=screened_variables,
+        enable=pomis_minimal_focus,
+    )
 
     # If POMIS sets available, use them to constrain intervention variables
     if pomis_sets is not None and len(pomis_sets) > 0:
@@ -1119,6 +1152,21 @@ def _perturb_variable(
             params[var.name] = rng.choice(var.choices)
 
 
+def _ancestors_in_space(
+    search_space: SearchSpace,
+    causal_graph: CausalGraph,
+    objective_name: str,
+) -> list[str]:
+    """Return search-space variables that are graph ancestors of the objective.
+
+    Order matches ``search_space.variable_names`` so callers can compare
+    by length (the result is always a subset of the search space, so
+    equal length implies equal membership).
+    """
+    ancestors = causal_graph.ancestors(objective_name)
+    return [v for v in search_space.variable_names if v in ancestors]
+
+
 def _get_focus_variables(
     search_space: SearchSpace,
     causal_graph: CausalGraph | None,
@@ -1128,9 +1176,64 @@ def _get_focus_variables(
     if causal_graph is None:
         return search_space.variable_names
 
-    ancestors = causal_graph.ancestors(objective_name)
-    focus = [v for v in search_space.variable_names if v in ancestors]
+    focus = _ancestors_in_space(search_space, causal_graph, objective_name)
     return focus if focus else search_space.variable_names
+
+
+def _apply_minimal_focus_a1(
+    *,
+    base_focus: list[str],
+    search_space: SearchSpace,
+    causal_graph: CausalGraph | None,
+    objective_name: str,
+    screened_variables: list[str] | None,
+    enable: bool,
+) -> list[str]:
+    """Sprint 37 Option A1 minimal-focus heuristic.
+
+    Despite the ``pomis`` in the engine flag name (preregistered in the
+    Sprint 36 plan), this is **not** strict POMIS -- under the Open
+    Bandit preregistered graph plain POMIS still returns the full
+    search space.  A1 is a screening-magnitude restriction that only
+    kicks in when the graph alone cannot restrict the search.
+
+    When *enable* is ``True`` and the supplied causal graph makes every
+    search variable an ancestor of *objective_name*, return
+    ``screened_variables ∩ ancestors`` -- but **only if** that
+    intersection is a non-empty proper subset of the search space.
+    Otherwise return *base_focus* unchanged.
+
+    The two boundary conditions:
+
+    1. Empty intersection -- screening agreed on nothing the graph
+       considers ancestral. Falling back avoids collapsing onto an
+       empty focus set.
+    2. Intersection equals the full search space -- the "restriction"
+       would not actually restrict anything; staying on *base_focus*
+       keeps the engine path mechanically identical.
+    """
+    if not enable or causal_graph is None or not screened_variables:
+        return base_focus
+
+    all_var_names = search_space.variable_names
+    ancestors_in_space = _ancestors_in_space(search_space, causal_graph, objective_name)
+
+    # A1 binds only when graph ancestors cover the entire search space.
+    # ``ancestors_in_space`` is built by filtering ``all_var_names``, so it
+    # is always a subset; equal length implies equal membership.
+    if len(ancestors_in_space) != len(all_var_names):
+        return base_focus
+
+    screened_set = set(screened_variables)
+    intersection = [v for v in ancestors_in_space if v in screened_set]
+
+    # ``intersection`` is a subset of ``ancestors_in_space``, which is a
+    # subset of ``all_var_names``, so equality with the full search space
+    # is the only "no-op restriction" case.
+    if not intersection or len(intersection) == len(all_var_names):
+        return base_focus
+
+    return intersection
 
 
 def _select_pomis_set(

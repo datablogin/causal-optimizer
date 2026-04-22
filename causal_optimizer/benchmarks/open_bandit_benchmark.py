@@ -527,6 +527,10 @@ class OpenBanditScenario:
                     best_metrics = {k: float(v) for k, v in metrics.items() if k != "policy_value"}
         else:
             graph = adapter.get_prior_graph() if strategy == "causal" else None
+            # Sprint 37 Option A1 (issue #197): only the ``causal`` arm
+            # opts in to the minimal-focus heuristic; ``surrogate_only``
+            # remains mechanically identical to its Sprint 35 behavior so
+            # the comparison row is unchanged on the surrogate side.
             engine = ExperimentEngine(
                 search_space=space,
                 runner=adapter,
@@ -534,6 +538,7 @@ class OpenBanditScenario:
                 objective_name=OBD_ENGINE_OBJECTIVE,
                 minimize=False,
                 seed=seed,
+                pomis_minimal_focus=(strategy == "causal"),
             )
             engine.run_loop(budget)
             best_result = engine.log.best_result(OBD_ENGINE_OBJECTIVE, minimize=False)

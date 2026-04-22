@@ -77,12 +77,10 @@ from causal_optimizer.benchmarks.open_bandit import (
     normalize_positions,
 )
 from causal_optimizer.domain_adapters.base import DomainAdapter
-from causal_optimizer.types import SearchSpace, Variable, VariableType
+from causal_optimizer.types import CausalGraph, SearchSpace, Variable, VariableType
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    from causal_optimizer.types import CausalGraph
 
 __all__ = ["BanditLogAdapter"]
 
@@ -513,14 +511,34 @@ class BanditLogAdapter(DomainAdapter):
         }
 
     def get_prior_graph(self) -> CausalGraph | None:
-        """Sprint 34 contract Section 4e: prior graph is optional, minimal,
-        or deferred. Returns ``None`` for the first implementation.
+        """Return the Sprint 37 preregistered seven-node / six-edge prior graph.
 
-        Authoring a multi-action prior graph is a Sprint 36+ decision —
-        see contract Section 4e. The engine will run without a graph;
-        ``focus_variables`` degrades to the full search space.
+        The graph is defined in
+        ``thoughts/shared/plans/26-sprint-36-recommendation.md`` (Minimal
+        Preregistered Graph section): every search-space variable is a
+        direct parent of the ``policy_value`` outcome, with no bidirected
+        edges.  Per-edge code justifications are tabulated in that plan
+        and grounded in this adapter's :meth:`run_experiment`.
+
+        Under the preregistered graph, ancestors of ``policy_value``
+        equal the full search space, so :func:`_get_focus_variables` in
+        the optimizer alone does not restrict the search.  Sprint 37
+        Option A1 pairs this graph with an explicit
+        ``pomis_minimal_focus`` engine flag that lets the focus helper
+        intersect with the screening result; that flag is enabled only
+        for the ``causal`` arm by the Open Bandit benchmark harness.
+        See issue #197 for the full lane.
+
+        Returns:
+            The preregistered :class:`CausalGraph` (six directed edges,
+            zero bidirected).  This adapter never returns ``None`` after
+            Sprint 37 -- callers that want the no-graph baseline should
+            instantiate :class:`ExperimentEngine` with
+            ``causal_graph=None`` directly (the ``surrogate_only`` arm
+            in the benchmark harness does exactly this).
         """
-        return None
+        edges = [(name, "policy_value") for name in self.get_search_space().variable_names]
+        return CausalGraph(edges=edges)
 
     def get_objective_name(self) -> str:
         return "policy_value"

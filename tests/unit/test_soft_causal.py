@@ -672,6 +672,69 @@ def test_rerank_alignment_only_single_candidate() -> None:
     assert result is candidate
 
 
+def test_rerank_alignment_only_picks_higher_score_candidate() -> None:
+    """Sign-convention regression test (Sprint 36 plan, lines 113-122).
+
+    Replays the two-candidate sanity check from the Sprint 36
+    recommendation: ``best_params`` has the ancestor near ``0.2``, and two
+    candidates propose values closer (``0.21``) or farther (``0.28``) from
+    that point.  ``_rerank_alignment_only`` must pick the **farther**
+    candidate -- the one with the strictly higher
+    ``_causal_alignment_score``.
+
+    A sign flip in :func:`_rerank_alignment_only` would silently pick the
+    closer candidate and quietly invert the Sprint 37 hypothesis direction.
+    This test pins the convention so the flip cannot land unnoticed.
+    """
+    from causal_optimizer.optimizer.suggest import (
+        _causal_alignment_score,
+        _rerank_alignment_only,
+    )
+
+    # One ancestor with a non-trivial range so the alignment score
+    # depends on the actual displacement, not a degenerate constant.
+    ss = SearchSpace(
+        variables=[
+            Variable(name="tau", variable_type=VariableType.CONTINUOUS, lower=0.0, upper=1.0),
+            Variable(name="other", variable_type=VariableType.CONTINUOUS, lower=0.0, upper=1.0),
+        ]
+    )
+    ancestor_names = {"tau"}
+    best_params = {"tau": 0.2, "other": 0.5}
+    near = {"tau": 0.21, "other": 0.5}
+    far = {"tau": 0.28, "other": 0.5}
+
+    score_near = _causal_alignment_score(near, best_params, ancestor_names, ss)
+    score_far = _causal_alignment_score(far, best_params, ancestor_names, ss)
+    assert score_far > score_near, (
+        "Test setup invariant: the farther candidate must score strictly higher."
+    )
+
+    result = _rerank_alignment_only(
+        candidates=[near, far],
+        best_params=best_params,
+        ancestor_names=ancestor_names,
+        search_space=ss,
+        causal_softness=0.5,
+    )
+    assert result is far, (
+        "Sign-convention regression: _rerank_alignment_only must pick the candidate "
+        "with the higher alignment score. If this fails, somebody flipped the > to a "
+        "< inside the reranker -- the Sprint 37 hypothesis direction would silently "
+        "invert."
+    )
+
+    # Order independence: the convention must not depend on candidate ordering.
+    result_swapped = _rerank_alignment_only(
+        candidates=[far, near],
+        best_params=best_params,
+        ancestor_names=ancestor_names,
+        search_space=ss,
+        causal_softness=0.5,
+    )
+    assert result_swapped is far
+
+
 def test_bayesian_alignment_only_is_default_path() -> None:
     """_suggest_bayesian in soft mode always uses alignment-only re-ranking.
 
