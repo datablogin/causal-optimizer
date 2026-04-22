@@ -1191,6 +1191,12 @@ def _apply_minimal_focus_a1(
 ) -> list[str]:
     """Sprint 37 Option A1 minimal-focus heuristic.
 
+    Despite the ``pomis`` in the engine flag name (preregistered in the
+    Sprint 36 plan), this is **not** strict POMIS -- under the Open
+    Bandit preregistered graph plain POMIS still returns the full
+    search space.  A1 is a screening-magnitude restriction that only
+    kicks in when the graph alone cannot restrict the search.
+
     When *enable* is ``True`` and the supplied causal graph makes every
     search variable an ancestor of *objective_name*, return
     ``screened_variables ∩ ancestors`` -- but **only if** that
