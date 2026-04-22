@@ -1218,9 +1218,13 @@ def _apply_minimal_focus_a1(
     if len(ancestors_in_space) != len(all_var_names):
         return base_focus
 
-    intersection = [v for v in ancestors_in_space if v in screened_variables]
+    screened_set = set(screened_variables)
+    intersection = [v for v in ancestors_in_space if v in screened_set]
 
-    if not intersection or len(intersection) >= len(all_var_names):
+    # ``intersection`` is a subset of ``ancestors_in_space``, which is a
+    # subset of ``all_var_names``, so equality with the full search space
+    # is the only "no-op restriction" case.
+    if not intersection or len(intersection) == len(all_var_names):
         return base_focus
 
     return intersection
