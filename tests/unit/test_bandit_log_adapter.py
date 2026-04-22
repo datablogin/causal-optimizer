@@ -109,8 +109,16 @@ class TestAdapterContract:
     def test_strategy_is_bayesian(self, adapter: BanditLogAdapter) -> None:
         assert adapter.get_strategy() == "bayesian"
 
-    def test_prior_graph_is_none_by_default(self, adapter: BanditLogAdapter) -> None:
-        assert adapter.get_prior_graph() is None
+    def test_prior_graph_returns_preregistered_graph(self, adapter: BanditLogAdapter) -> None:
+        # Sprint 37 (issue #197) lands the preregistered seven-node /
+        # six-edge prior graph. Detailed structural assertions live in
+        # ``tests/unit/test_bandit_log_prior_graph.py``; this smoke check
+        # only locks the contract that ``get_prior_graph`` is no longer
+        # ``None`` after Sprint 37 so a regression to ``None`` cannot
+        # land silently.
+        graph = adapter.get_prior_graph()
+        assert graph is not None
+        assert "policy_value" in graph.nodes
 
 
 class TestSearchSpace:

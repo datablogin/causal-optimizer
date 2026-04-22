@@ -426,6 +426,43 @@ class TestOpenBanditScenario:
         assert result.is_null_control
         assert result.permutation_seed == 42
 
+    @pytest.mark.parametrize(
+        ("strategy", "expected_flag", "expected_graph_present"),
+        [
+            ("causal", True, True),
+            ("surrogate_only", False, False),
+        ],
+    )
+    def test_engine_flag_only_enabled_for_causal_arm(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        strategy: str,
+        expected_flag: bool,
+        expected_graph_present: bool,
+    ) -> None:
+        """Sprint 37 A1: the ``pomis_minimal_focus`` flag and prior graph
+        are wired only on the ``causal`` arm; ``surrogate_only`` (and
+        ``random``) stay mechanically identical to Sprint 35."""
+        from causal_optimizer.benchmarks import open_bandit_benchmark as obb
+        from causal_optimizer.engine.loop import ExperimentEngine
+
+        captured: dict[str, Any] = {}
+
+        def _spy_engine(**kwargs: Any) -> ExperimentEngine:
+            captured.update(
+                graph=kwargs.get("causal_graph"),
+                pomis_minimal_focus=kwargs.get("pomis_minimal_focus", False),
+            )
+            return ExperimentEngine(**kwargs)
+
+        monkeypatch.setattr(obb, "ExperimentEngine", _spy_engine)
+
+        scenario = obb.OpenBanditScenario(bandit_feedback=_synthetic_feedback())
+        scenario.run_strategy(strategy, budget=3, seed=0)
+
+        assert captured["pomis_minimal_focus"] is expected_flag
+        assert (captured["graph"] is not None) is expected_graph_present
+
 
 # ── Summary helper ───────────────────────────────────────────────────
 

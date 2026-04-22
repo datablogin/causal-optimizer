@@ -122,6 +122,7 @@ class ExperimentEngine:
         audit_skip_rate: float = 0.0,
         causal_exploration_weight: float = 0.0,
         causal_softness: float = 0.5,
+        pomis_minimal_focus: bool = False,
     ) -> None:
         """Initialize the experiment engine.
 
@@ -172,6 +173,21 @@ class ExperimentEngine:
                 optimization (0.0 = no bonus, large = approximates hard focus).
                 Default 0.5.  ``causal_exploration_weight=0.0`` +
                 ``causal_softness=inf`` recovers Sprint 18 behavior.
+            pomis_minimal_focus: Sprint 37 Option A1 flag. When ``True``,
+                the optimizer's focus helper may restrict optimization
+                and exploitation to ``screened ∩ ancestors`` whenever
+                the supplied causal graph makes every search variable
+                an ancestor of ``objective_name`` and the resulting
+                intersection is a non-empty proper subset of the
+                search space. When ``False`` (the default), behavior
+                is preserved exactly. The Open Bandit benchmark
+                harness sets this to ``True`` only for the ``causal``
+                arm; non-Open-Bandit workloads should leave it off
+                until they have explicit evidence that the heuristic
+                helps. Despite the name (preregistered in the Sprint
+                36 plan), the heuristic is not strict POMIS -- under
+                the Open Bandit preregistered graph, plain POMIS still
+                returns the full search space.
         """
         if not 0.0 <= audit_skip_rate <= 1.0:
             raise ValueError(f"audit_skip_rate must be in [0.0, 1.0], got {audit_skip_rate!r}")
@@ -225,6 +241,7 @@ class ExperimentEngine:
         self._prior_causal_graph: CausalGraph | None = causal_graph
         self.causal_exploration_weight: float = causal_exploration_weight
         self.causal_softness: float = causal_softness
+        self.pomis_minimal_focus: bool = pomis_minimal_focus
         self._discovery_method: str | None = discovery_method
         self._discovery_threshold: float = discovery_threshold
         self._discovery_bidir_threshold: float = discovery_bidir_threshold
@@ -587,6 +604,7 @@ class ExperimentEngine:
                         seed=self._seed,
                         causal_exploration_weight=self.causal_exploration_weight,
                         causal_softness=self.causal_softness,
+                        pomis_minimal_focus=self.pomis_minimal_focus,
                     )
 
         # Only pass pomis_sets during optimization phase (not used in exploitation)
@@ -605,6 +623,7 @@ class ExperimentEngine:
             seed=self._seed,
             causal_exploration_weight=self.causal_exploration_weight,
             causal_softness=self.causal_softness,
+            pomis_minimal_focus=self.pomis_minimal_focus,
         )
 
     def step(self) -> ExperimentResult:
