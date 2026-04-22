@@ -58,13 +58,10 @@ graph (`get_prior_graph() -> None` per Sprint 34 contract Section 4e),
 not evidence that causal guidance is inert on multi-action data in
 general. Answering that question requires a bandit-log-compatible
 multi-action prior graph (authored or principled discovery), which is
-the most direct Sprint 36+ move. Sprint 36 detailed planning is
-**pending in companion PR #195** (separate recommendation and prompt
-documents owned by a different track) and is **not yet on `main`** as of
-this PR; once PR #195 merges, those artifacts will live at
+the most direct Sprint 36+ move. Sprint 36 detailed planning lives at
 `thoughts/shared/plans/26-sprint-36-recommendation.md` and
-`thoughts/shared/prompts/sprint-36-open-bandit-prior-graph.md`. Either
-way, Sprint 36 scope is not owned by this file.
+`thoughts/shared/prompts/sprint-36-open-bandit-prior-graph.md`,
+owned by a different track. Sprint 36 scope is not owned by this file.
 
 ## Current Sprint Status
 
@@ -342,7 +339,7 @@ The active lane is now **Sprint 36 planning**. Do **not** open new Sprint
 2. read the [Sprint 34 Open Bandit contract](../docs/sprint-34-open-bandit-contract.md) for the Men/Random slice, adapter interface, OPE stack, Section 7 support gates, and OBP dependency decision
 3. read the [Sprint 33 generalization scorecard](../docs/sprint-33-generalization-scorecard.md) for the synthesized verdict across ERCOT, Hillstrom, and Criteo
 4. read the [handoff document](../docs/handoff.md) for the post-Sprint-35 restart instructions
-5. Sprint 36 detailed planning is **pending in companion PR #195** (separate recommendation and prompt documents owned by a different track) and is not yet on `main` as of this PR; once PR #195 merges, those artifacts will live at `thoughts/shared/plans/26-sprint-36-recommendation.md` and `thoughts/shared/prompts/sprint-36-open-bandit-prior-graph.md`. Do not start new Sprint 36 implementation scope from this file
+5. Sprint 36 detailed planning lives at `thoughts/shared/plans/26-sprint-36-recommendation.md` and `thoughts/shared/prompts/sprint-36-open-bandit-prior-graph.md`, owned by a different track. Do not start new Sprint 36 implementation scope from this file
 6. do not describe the Sprint 35 exact tie as evidence that causal guidance is inert on multi-action data in general — the tie is mechanical (null prior graph), not empirical
 7. do not reopen Hillstrom or Criteo as the Sprint 36 main lane
 8. the ERCOT 10-seed rerun remains on the backlog but is not the Sprint 36 critical path
@@ -677,7 +674,7 @@ What we learned:
 6. both optimized strategies consistently converge to the same softmax policy each seed (low `tau` ≈ 0.285, `eps=0.0`, `w_user_item_affinity=3.0`, negative `w_item_popularity`, `position_handling_flag="position_1_only"`), confirming the tie is driven by the missing causal prior rather than by optimizer-state drift
 7. Sprint 34 contract Section 12 classification: "least valuable but acceptable" first-run outcome — a clean Open Bandit row that carries the same weight as the Criteo near-parity row in the generalization scorecard
 8. Open Bandit is now a real, merged benchmark lane; causal-vs-surrogate differentiation on multi-action data remains unanswered and the next missing ingredient is causal structure (a defensible multi-action prior graph or a principled way to discover one for bandit logs), not more plumbing
-9. Sprint 36: multi-action prior graph authoring or discovery for Open Bandit; detailed planning is **pending in companion PR #195** (separate recommendation and prompt documents) and is not yet on `main`. Once PR #195 merges, those artifacts will live at `thoughts/shared/plans/26-sprint-36-recommendation.md` and `thoughts/shared/prompts/sprint-36-open-bandit-prior-graph.md`
+9. Sprint 36: multi-action prior graph authoring or discovery for Open Bandit; detailed planning lives at `thoughts/shared/plans/26-sprint-36-recommendation.md` and `thoughts/shared/prompts/sprint-36-open-bandit-prior-graph.md`, owned by a different track
 
 ### Sprint 29 (Adaptive Causal Guidance Under Clean Backend Gates)
 
@@ -812,7 +809,7 @@ Sprint 35 is **complete**. Summary:
 5. `causal` vs `surrogate_only`: exact bit-identical tie on every seed (p=1.000 at every budget) — mechanical tie driven by `BanditLogAdapter.get_prior_graph() -> None`
 6. `causal` vs `random` and `surrogate_only` vs `random`: both certified (p=0.0002, 10/10 wins, every budget)
 7. Sprint 33 closure verdict GENERALITY IS REAL BUT CONDITIONAL carries forward unchanged; the Sprint 35 Open Bandit row is a clean "least valuable but acceptable" first-run outcome per Sprint 34 contract Section 12
-8. Sprint 36: multi-action prior graph authoring or discovery for Open Bandit; detailed planning is **pending in companion PR #195** (separate recommendation and prompt documents owned by a different track) and is not yet on `main`. Once PR #195 merges, those artifacts will live at `thoughts/shared/plans/26-sprint-36-recommendation.md` and `thoughts/shared/prompts/sprint-36-open-bandit-prior-graph.md`
+8. Sprint 36: multi-action prior graph authoring or discovery for Open Bandit; detailed planning lives at `thoughts/shared/plans/26-sprint-36-recommendation.md` and `thoughts/shared/prompts/sprint-36-open-bandit-prior-graph.md`, owned by a different track
 
 ## Practical Next Step
 
@@ -822,7 +819,7 @@ If resuming from here:
 2. read the [Sprint 34 Open Bandit contract](../docs/sprint-34-open-bandit-contract.md) for the pinning contract (slice, adapter interface, OPE stack, Section 7 gates, OBP dependency decision)
 3. read the [Sprint 33 generalization scorecard](../docs/sprint-33-generalization-scorecard.md) for the synthesized verdict across ERCOT, Hillstrom, and Criteo
 4. read the [handoff document](../docs/handoff.md) for the post-Sprint-35 restart instructions
-5. do **not** open new Sprint 35 issues — the lane is complete; Sprint 36 detailed planning is **pending in companion PR #195** (separate recommendation and prompt documents owned by a different track) and is not yet on `main` as of this PR. Once PR #195 merges, those artifacts will live at `thoughts/shared/plans/26-sprint-36-recommendation.md` and `thoughts/shared/prompts/sprint-36-open-bandit-prior-graph.md`
+5. do **not** open new Sprint 35 issues — the lane is complete; Sprint 36 detailed planning lives at `thoughts/shared/plans/26-sprint-36-recommendation.md` and `thoughts/shared/prompts/sprint-36-open-bandit-prior-graph.md`, owned by a different track
 6. do not describe the Sprint 35 exact tie as evidence that causal guidance is inert on multi-action data in general — the tie is mechanical (null prior graph), not empirical
 7. keep the ERCOT 10-seed rerun on the backlog but do not make it the Sprint 36 critical path
 8. do not reopen Hillstrom or Criteo as the Sprint 36 main lane

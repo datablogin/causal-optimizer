@@ -169,13 +169,11 @@ multi-action prior graph, not more plumbing.
 
 ## What Sprint 36 Should Do
 
-Sprint 35 is complete. Planning for Sprint 36 is **pending in companion
-PR #195** (recommendation and prompt docs owned by a separate track) and
-is **not yet on `main`** as of this PR. Once PR #195 merges, Sprint 36
-planning will live in `thoughts/shared/plans/26-sprint-36-recommendation.md`
-and `thoughts/shared/prompts/sprint-36-open-bandit-prior-graph.md`; until
-then, treat those paths as forthcoming rather than available. The
-high-level framing the next agent should start from:
+Sprint 35 is complete. Detailed Sprint 36 planning lives in
+`thoughts/shared/plans/26-sprint-36-recommendation.md` and
+`thoughts/shared/prompts/sprint-36-open-bandit-prior-graph.md`,
+owned by a separate track. The high-level framing the next agent
+should start from:
 
 1. The Open Bandit lane is now real: adapter, OPE stack, Section 7 gates, and a published Men/Random benchmark all exist on `main`.
 2. The causal-vs-surrogate differentiation question on multi-action data is still unanswered. The Sprint 35 tie is mechanical, not empirical.
@@ -216,7 +214,7 @@ is Sprint 36 planning:
 
 1. Read the [Sprint 35 Open Bandit benchmark report](sprint-35-open-bandit-benchmark-report.md) first -- it is the new evidence since the Sprint 33 scorecard and pins the exact shape of the Open Bandit result (clean diagnostics, exact `causal == surrogate_only` tie explained by `get_prior_graph() -> None`, both beat `random` at certified significance).
 2. Read the [Sprint 34 Open Bandit contract](sprint-34-open-bandit-contract.md) for the Men/Random slice, adapter interface, SNIPW-primary OPE stack, Section 7 support gates, and OBP-as-optional-extra dependency decision.
-3. Sprint 36 planning itself is **pending in companion PR #195** (separate prompt and recommendation docs owned by that track) and is not yet on `main`; once PR #195 merges, those docs will be at `thoughts/shared/plans/26-sprint-36-recommendation.md` and `thoughts/shared/prompts/sprint-36-open-bandit-prior-graph.md`. Let that track own it. Do not start new Sprint 36 implementation scope from this doc.
+3. Sprint 36 planning itself lives in `thoughts/shared/plans/26-sprint-36-recommendation.md` and `thoughts/shared/prompts/sprint-36-open-bandit-prior-graph.md`, owned by a separate track. Let that track own it. Do not start new Sprint 36 implementation scope from this doc.
 4. Do not describe the Sprint 35 tie as evidence that causal guidance is inert on multi-action data in general -- the tie is mechanical (null prior graph), not empirical.
 5. Do not reopen Hillstrom or Criteo as the main lane.
 6. Do not claim `causal` beats `random` on real data as a general statement; ERCOT has not closed that gap. Note that on Open Bandit Men/Random both optimized strategies do beat `random` at certified significance, but both optimized strategies are bit-identical on that slice, so it is not a `causal`-specific claim.
