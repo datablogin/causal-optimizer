@@ -4,10 +4,35 @@ Updated: 2026-04-22
 
 ## Sprint Theme
 
-**Option B — graph widening. Add one non-ancestor structural node
-(`logged_position_distribution`) to the Open Bandit prior graph so
-`_get_focus_variables` returns a real proper subset directly, instead
-of relying on the A1 screening intersection to do the restriction.**
+**Option B — graph widening. Add one non-search-space structural node
+(`logged_position_distribution`) to the Open Bandit prior graph. The
+widening is a preregistered structural test of the Sprint 37
+engine-surface analysis — confirmed below as a predicted no-op along
+every engine path that already existed under the Sprint 37
+`pomis_minimal_focus=True` wiring. Under the widened graph,
+`_get_focus_variables` still returns the full search space (the new
+node is not a search-space variable), `_apply_minimal_focus_a1` still
+binds and still returns the same `screened ∩ ancestors` intersection
+as Sprint 37, and the soft-causal reranker's alignment score is
+unchanged. The no-op prediction *is* the falsifiable claim — a B80
+certified or trending row in either direction would prove the
+Sprint 37 engine-path analysis incomplete.**
+
+**Terminology note.** The Sprint 38 orchestration prompt and the
+Sprint 36 plan both used the phrase "non-ancestor structural node"
+as shorthand for "a structural node that is not itself a
+search-space knob." That shorthand is graph-theoretically imprecise
+once the edge
+`logged_position_distribution -> position_handling_flag` is added,
+because `logged_position_distribution` then *is* an ancestor of
+`policy_value` via the two-hop path through `position_handling_flag`.
+To keep the engine-path reasoning unambiguous, this recommendation
+uses **"non-search-space structural node"** (or simply "structural
+node") instead of "non-ancestor" from this point forward. The A1
+binding condition holds under the widened graph precisely because
+`logged_position_distribution` is not a search-space variable
+(`_ancestors_in_space` filters it out of its search-space
+intersection), not because it is a non-ancestor of the objective.
 
 Sprint 37 landed Option A1 cleanly (PR #198). The preregistered
 seven-node / six-edge graph is now live in
@@ -25,16 +50,17 @@ explicitly say not to chase. See
 
 Sprint 38 picks exactly one of the three follow-ups the Sprint 37
 report named. The pick is **Option B** — graph widening with one
-non-ancestor structural node, because it is the next structurally
-distinct test of whether the Men/Random slice can separate `causal`
-from `surrogate_only` under the verdict rule. Options C and D are
-rejected below, on the evidence, not queue pressure.
+non-search-space structural node, because it is the next
+structurally distinct test of whether the Men/Random slice can
+separate `causal` from `surrogate_only` under the verdict rule.
+Options C and D are rejected below, on the evidence, not queue
+pressure.
 
 ## Goal
 
 Sprint 38 should end with:
 
-1. one new non-ancestor structural node
+1. one new non-search-space structural node
    (`logged_position_distribution`) added to the preregistered graph
    returned by `BanditLogAdapter.get_prior_graph()`, with a single
    directed edge `logged_position_distribution -> position_handling_flag`
@@ -49,8 +75,10 @@ Sprint 38 should end with:
    `0.05 < p <= 0.15` at B80 — same two-sided MWU convention as
    Sprint 35 and Sprint 37
 4. a Sprint 38 report that answers one question end-to-end: does
-   graph widening change the B80 verdict or does it recapitulate the
-   Sprint 37 near-parity under a genuinely restricted focus set?
+   pure graph widening (one new non-search-space ancestor of
+   `policy_value`, same search space, same engine surface) move the
+   B80 verdict, or does it recapitulate the Sprint 37 near-parity as
+   the engine-path analysis predicts?
 
 No second node in Sprint 38. No bidirected edges. No new slice. No
 DRos-primary. No second dataset. No new heuristic. No power extension
@@ -58,7 +86,7 @@ on A1. The scope is one node, one edge, one rerun, one verdict row.
 
 ## Why This Sprint Now
 
-### Why Option B (this sprint, Men/Random, one non-ancestor node)
+### Why Option B (this sprint, Men/Random, one non-search-space structural node)
 
 Under the preregistered graph Sprint 37 landed, every search variable
 is already an ancestor of `policy_value`. That means
@@ -74,13 +102,21 @@ produce a different trajectory (the Sprint 35 exact tie is broken)
 but does not move the verdict-budget mean.
 
 The natural next test is to add structure to the graph itself —
-specifically, one non-ancestor node that makes the ancestor DAG
-non-trivial. This is Option B in the Sprint 36 plan and in the
-Sprint 37 "Sprint 38+ Implications" section. The Sprint 36 plan's
-"Exit Criterion" section names two candidate structural nodes:
-`logged_position_distribution` and `request_item_overlap`. Sprint 38
-commits to exactly one: `logged_position_distribution` with a
-directed edge `logged_position_distribution -> position_handling_flag`.
+specifically, one non-search-space structural node that makes the
+ancestor DAG non-trivial (some search-space variables gain
+non-search-space parents; the objective gains an ancestor that is
+not itself a knob). This is Option B in the Sprint 36 plan and in
+the Sprint 37 "Sprint 38+ Implications" section. The Sprint 36
+plan's "Exit Criterion" section names two candidate structural
+nodes: `logged_position_distribution` and `request_item_overlap`.
+Sprint 38 commits to exactly one: `logged_position_distribution`
+with a directed edge
+`logged_position_distribution -> position_handling_flag`. (The
+Sprint 36 plan and the Sprint 38 orchestration prompt called these
+"non-ancestor" nodes; after adding the two-hop edge,
+`logged_position_distribution` is in fact an ancestor of
+`policy_value`. The accurate term is "non-search-space" — see the
+Sprint Theme terminology note above.)
 
 **Honest prediction about what this widening changes.** Under the
 Sprint 37 engine surface, the widened graph is predicted to be a

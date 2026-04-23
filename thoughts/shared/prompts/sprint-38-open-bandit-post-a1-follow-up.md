@@ -1,7 +1,17 @@
 Work on Sprint 38: land Option B — Open Bandit prior-graph widening
-with one non-ancestor structural node
+with one non-search-space structural node
 (`logged_position_distribution`) — and run the Sprint 37-shape rerun
 against the widened graph.
+
+**Terminology.** The orchestration prompt and the Sprint 36 plan
+used the phrase "non-ancestor structural node" for this
+(`logged_position_distribution`); the Sprint 38 recommendation
+retires that phrase because after adding the edge
+`logged_position_distribution -> position_handling_flag`, the node
+*is* an ancestor of `policy_value` via the two-hop path. The A1
+binding condition still holds because the node is not a
+search-space variable, not because it is a non-ancestor. See the
+Sprint 38 recommendation's "Sprint Theme" terminology note.
 
 Canonical source: the Sprint 38 recommendation is authoritative for
 every contract decision (graph shape, hard constraints,
