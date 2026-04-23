@@ -1,3 +1,10 @@
+> **If you edit anything in this prompt, edit
+> `thoughts/shared/plans/27-sprint-38-recommendation.md` first and
+> copy the change down.** The recommendation is the single source
+> of truth for graph shape, exclusion list, H0/H1/H2, and the
+> reproducibility command. Any conflict is resolved in favor of
+> the recommendation.
+
 Work on Sprint 38: land Option B — Open Bandit prior-graph widening
 with one non-search-space structural node
 (`logged_position_distribution`) — and run the Sprint 37-shape rerun

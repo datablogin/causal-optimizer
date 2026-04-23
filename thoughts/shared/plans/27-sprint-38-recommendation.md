@@ -510,6 +510,21 @@ seeds. A Sprint 39 power-extension rerun is the explicit answer to
 that risk if Sprint 38 produces a trending row (H2); **Sprint 38
 itself does not extend power on A1 or on Option B**.
 
+**Null-result asymmetry.** H0 is also 10-seed-gated. If the true
+effect is null *and* the 10-seed test would be underpowered to
+certify a small true effect, H0 passes — but it can pass for two
+very different reasons: (a) the widening is genuinely a no-op along
+every engine path (the prediction), or (b) the widening produces a
+real but sub-power effect that 10 seeds cannot distinguish from a
+no-op. Sprint 38 partially guards against (b) by treating B20/B40
+near-parity *alongside* B80 near-parity as the exhaustion
+criterion. The Sprint 38 report's reconciliation section must
+address this asymmetry explicitly: a B80 near-parity that is paired
+with B20 and B40 near-parity reads as genuine no-op (path to
+Sprint 39 Option D); a B80 near-parity paired with non-trivial B20
+or B40 movement reads as a potential sub-power miss and should be
+flagged for Sprint 39 diagnostic triage rather than Option D.
+
 ## Recommended Issue Shape
 
 **One issue for Sprint 38.** The scope is a single graph widening
