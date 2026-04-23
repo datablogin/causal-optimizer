@@ -331,8 +331,11 @@ engine or optimizer change):
    `{v in search_space.variable_names | v in ancestors(policy_value)}`
    still equals the full search space, because
    `logged_position_distribution` is **not** itself a search-space
-   variable. So path 1 on its own remains a no-op — the full
-   search-space fallback triggers.
+   variable. `_get_focus_variables` returns that full-search-space
+   intersection verbatim (the intersection is truthy, so the
+   `focus if focus else search_space.variable_names` guard at line
+   1180 does not trigger a fallback — it just returns the already-equal
+   set). Path 1 on its own is therefore a no-op.
 2. A1 minimal-focus (`_apply_minimal_focus_a1`, `suggest.py` lines
    1183–1236): the binding condition — every search-space variable
    is an ancestor of `policy_value` — still holds, so the A1 helper
@@ -361,26 +364,56 @@ engine or optimizer change):
    ancestors of the objective. The ancestor set grows by one
    (`logged_position_distribution`), but that variable is not in
    the search space, so `_causal_alignment_score` skips it in the
-   per-variable normalized-displacement loop at lines 1043–1052 —
-   the filter is search-space membership
-   (`var = var_map.get(name); if var is None: continue` at lines
-   1044–1046, where `var_map = {v.name: v for v in search_space.variables}`
-   at line 1040), not key-presence in `candidate`/`best_params`
-   (those fall back to `mid` via `candidate.get(name, mid)` at line
-   1050). The reranker's per-seed output is therefore identical to
-   Sprint 37.
+   per-variable normalized-displacement loop at lines 1043–1052 via
+   the continue guard at line 1045:
+
+   ```python
+   if var is None or var.lower is None or var.upper is None:
+       continue
+   ```
+
+   `var_map = {v.name: v for v in search_space.variables}` at line
+   1040, so `var_map.get("logged_position_distribution")` returns
+   `None` and the loop continues before the `_normalize_value`
+   calls at lines 1050–1051 (which would otherwise fall back to
+   `mid` via `candidate.get(name, mid)` / `best_params.get(name, mid)`).
+   As an aside: the same guard already skips categorical variables
+   — `var.lower is None` is true for `position_handling_flag` — so
+   Sprint 37 was already computing the alignment score over the
+   five continuous ancestors only. That strengthens rather than
+   weakens the no-op claim: under the widened graph the reranker's
+   score is averaged over exactly the same five continuous
+   search-space ancestors as in Sprint 37.
 5. `_suggest_causal_gp`: inert (not requested by the benchmark).
 6. `causal_exploration_weight`: pinned to `0.0`, inert.
 
 So — honestly — the Sprint 38 widened graph is **predicted to be a
-no-op** along every engine path that already existed. That is
-exactly the point. Sprint 37 broke the Sprint 35 bit-identical tie
-by turning `pomis_minimal_focus` on; if Sprint 38's widened graph
-reproduces the Sprint 37 B80 near-parity, that is strong evidence
-the Open Bandit A1 lane is genuinely exhausted along the pure
-graph-widening axis under this engine surface, and Sprint 39 has
-clean grounds to pick between a bidirected-edge Option A2 variant
-or Option D.
+no-op** along every engine path that already existed. The prediction
+rests on exactly two structural conditions the Sprint 38 widening
+satisfies by design:
+
+1. the new node `logged_position_distribution` is **not** a
+   search-space variable, so `_ancestors_in_space` filters it out
+   of path 1 and `_causal_alignment_score` filters it out of path 4
+2. the new edge `logged_position_distribution -> position_handling_flag`
+   does **not** add a new parent to `policy_value`
+   (`parents(policy_value)` still equals the six search-space
+   vars), so path 3's `parent_focus` set does not change and
+   `weights = None` still holds
+
+If either condition were relaxed — a future sprint widens with a
+node that *is* a search-space variable, or with an edge whose
+target is `policy_value` — the no-op prediction does not transfer
+to that widening. A Sprint 39+ plan that copies this one must
+re-derive the per-path analysis, not reuse it.
+
+That is exactly the point. Sprint 37 broke the Sprint 35
+bit-identical tie by turning `pomis_minimal_focus` on; if Sprint
+38's widened graph reproduces the Sprint 37 B80 near-parity, that
+is strong evidence the Open Bandit A1 lane is genuinely exhausted
+along the pure graph-widening axis under this engine surface, and
+Sprint 39 has clean grounds to pick between a bidirected-edge
+Option A2 variant or Option D.
 
 **This is a preregistered no-op prediction, not a hidden one.** The
 value of running it is that the *prediction itself* is the

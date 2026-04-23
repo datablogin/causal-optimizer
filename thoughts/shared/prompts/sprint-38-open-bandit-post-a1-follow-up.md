@@ -113,6 +113,24 @@ Produce in one PR:
      `position_handling_flag`).
    - Pin that `logged_position_distribution` is **not** a search-space
      variable.
+   - Concrete before/after edits required in this file:
+     - `test_graph_has_*_directed_edges` at line 71 — change
+       `assert len(graph.edges) == 6` to `assert len(graph.edges) == 7`
+       (and rename the test to match).
+     - `test_every_search_variable_is_an_ancestor_of_policy_value`
+       at line 92 — change
+       `assert ancestors == set(_SEARCH_VARIABLES)` to
+       `assert ancestors == set(_SEARCH_VARIABLES) | {"logged_position_distribution"}`.
+     - `test_no_chain_edges_between_search_variables` at line 94 —
+       the assertion `assert v == "policy_value"` for every edge no
+       longer holds because the new edge terminates at
+       `position_handling_flag`. Either narrow the assertion to the
+       six Sprint 37 edges, or replace with a shape-explicit edge-set
+       equality check.
+     - `test_graph_has_*_nodes` at line 66 — change
+       `assert len(graph.nodes) == 7` to `assert len(graph.nodes) == 8`
+       and add `"logged_position_distribution"` to the expected-node
+       set literal.
    - Keep every Sprint 37 assertion that is still true; update only
      the cells that changed.
 
