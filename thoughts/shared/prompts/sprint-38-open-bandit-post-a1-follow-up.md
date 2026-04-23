@@ -114,9 +114,16 @@ Produce in one PR:
    - Pin that `logged_position_distribution` is **not** a search-space
      variable.
    - Concrete before/after edits required in this file:
-     - `test_graph_has_*_directed_edges` at line 71 — change
-       `assert len(graph.edges) == 6` to `assert len(graph.edges) == 7`
-       (and rename the test to match).
+     - `test_graph_has_seven_nodes` at line 66 (the count is in the
+       name) — change `assert len(graph.nodes) == 7` to
+       `assert len(graph.nodes) == 8`, add
+       `"logged_position_distribution"` to the expected-node set
+       literal, and rename the test to
+       `test_graph_has_eight_nodes`.
+     - `test_graph_has_six_directed_edges` at line 71 — change
+       `assert len(graph.edges) == 6` to
+       `assert len(graph.edges) == 7`, and rename the test to
+       `test_graph_has_seven_directed_edges`.
      - `test_every_search_variable_is_an_ancestor_of_policy_value`
        at line 92 — change
        `assert ancestors == set(_SEARCH_VARIABLES)` to
@@ -127,10 +134,20 @@ Produce in one PR:
        `position_handling_flag`. Either narrow the assertion to the
        six Sprint 37 edges, or replace with a shape-explicit edge-set
        equality check.
-     - `test_graph_has_*_nodes` at line 66 — change
-       `assert len(graph.nodes) == 7` to `assert len(graph.nodes) == 8`
-       and add `"logged_position_distribution"` to the expected-node
-       set literal.
+   - Add **one new test** with a dedicated positive assertion for
+     the new edge, so a typo in the added-node name (e.g.
+     `logged_position_distro`) does not slip past the count + chain
+     checks. Minimum shape:
+
+     ```python
+     def test_logged_position_distribution_parents_position_handling_flag(
+         self, adapter: BanditLogAdapter
+     ) -> None:
+         graph = adapter.get_prior_graph()
+         assert graph is not None
+         assert ("logged_position_distribution", "position_handling_flag") in graph.edges
+     ```
+
    - Keep every Sprint 37 assertion that is still true; update only
      the cells that changed.
 
