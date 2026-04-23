@@ -246,10 +246,10 @@ Sprint 38 adds exactly one new node and exactly one new directed edge.
 8. `logged_position_distribution`
 
 **Code-grounded justification.** The adapter's `run_experiment`
-branches on the `position_handling_flag` categorical to pick the
-logged-row subset that enters the SNIPW sum
 ([`causal_optimizer/domain_adapters/bandit_log.py`](../../causal_optimizer/domain_adapters/bandit_log.py)
-lines 352–369):
+lines 346–369) branches on the `position_handling_flag` categorical
+to pick the logged-row subset that enters the SNIPW sum. The
+row-mask branch itself is at lines 364–367:
 
 ```python
 if position_flag == "position_1_only":
@@ -278,12 +278,13 @@ bullet) and the Sprint 37 report's "Sprint 38+ Implications" section.
 
 **Code-grounded justification.** The flag's behavior is a direct
 function of `self._position`
-(`bandit_log.py` lines 352–369, cited above). Per the Sprint 36
-plan's edge-justification discipline, each added edge must cite a
-specific line that makes the upstream variable structural. The line
-range above — the row-mask branch inside `run_experiment` — is the
-site that makes `logged_position_distribution` structurally upstream
-of `position_handling_flag`.
+(`bandit_log.py` lines 364–367, cited above, inside
+`run_experiment` at lines 346–369). Per the Sprint 36 plan's
+edge-justification discipline, each added edge must cite a
+specific line that makes the upstream variable structural. The
+row-mask branch is the site that makes
+`logged_position_distribution` structurally upstream of
+`position_handling_flag`.
 
 No edge from `logged_position_distribution` directly to `policy_value`
 is added. The flow is:
@@ -685,8 +686,9 @@ that forced the choice.
 - Sprint 36 preregistration plan: [26-sprint-36-recommendation.md](26-sprint-36-recommendation.md)
 - Sprint 37 Open Bandit prior-graph report: [sprint-37-open-bandit-prior-graph-report.md](../docs/sprint-37-open-bandit-prior-graph-report.md)
 - `BanditLogAdapter`: `causal_optimizer/domain_adapters/bandit_log.py`
-  (see `get_prior_graph`, lines 513–541, and `run_experiment` row-mask
-  branch, lines 352–369, for the Option B node justification)
+  (see `get_prior_graph`, lines 513–541, and `run_experiment`
+  row-mask branch, lines 364–367 within `run_experiment` 346–369,
+  for the Option B node justification)
 - Open Bandit OPE stack and Section 7 gates: `causal_optimizer/benchmarks/open_bandit.py`
 - Open Bandit benchmark runner: `causal_optimizer/benchmarks/open_bandit_benchmark.py`
   (enables `pomis_minimal_focus` only on the `causal` arm, line 541)

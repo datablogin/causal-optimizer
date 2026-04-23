@@ -38,7 +38,7 @@ Read first:
 8. `thoughts/shared/plans/07-benchmark-state.md`
 9. `causal_optimizer/domain_adapters/bandit_log.py`
    Specifically re-read `run_experiment` lines 346–475 (the row-mask
-   branch at 352–369 is the code site that grounds the
+   branch at 364–367 is the code site that grounds the
    `logged_position_distribution -> position_handling_flag` edge) and
    `get_prior_graph` lines 513–541 (the function you are editing).
 10. `causal_optimizer/benchmarks/open_bandit.py`
@@ -51,8 +51,10 @@ Read first:
     All the `causal_graph` read sites the Sprint 36 plan enumerated,
     in particular `_get_focus_variables` (lines 1170–1180),
     `_apply_minimal_focus_a1` (lines 1183–1236), and
-    `_causal_alignment_score` (lines 982–1021). Sprint 38 does **not**
-    edit any of these — the sprint is graph-only.
+    `_causal_alignment_score` (lines 1015–1054; the per-variable
+    displacement loop is at 1043–1052 with the search-space-membership
+    filter at 1044–1046). Sprint 38 does **not** edit any of these —
+    the sprint is graph-only.
 14. `tests/unit/test_bandit_log_prior_graph.py`
 15. `tests/unit/test_a1_minimal_focus.py`
 
@@ -230,8 +232,10 @@ Workflow (mandatory, in this order):
   simplify / lint / format / mypy / coverage issue it surfaces.
 - `gh pr create`: PR title under 70 characters, e.g.
   "feat: sprint 38 open bandit graph widening (option B)". Body
-  uses a HEREDOC, references the Sprint 38 issue, and includes a
-  Summary + Test plan.
+  uses a HEREDOC, references the Sprint 38 implementation issue
+  (opened by the orchestration coordinator after the Sprint 38
+  planning PR, which was tracked by issue `#201`, lands), and
+  includes a Summary + Test plan.
 - `/gauntlet`: run after the PR is open. Let it iterate until
   greploop + claudeloop + check-pr all pass.
 - **Do not merge.** Human review and explicit approval are required
