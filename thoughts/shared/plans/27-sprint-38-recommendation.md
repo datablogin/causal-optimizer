@@ -340,23 +340,34 @@ engine or optimizer change):
    ancestor set inside the search space is unchanged, so the A1
    result is the same set the Sprint 37 rerun computed at every
    (seed, budget, phase) triple.
-3. Parent-weighted exploitation (`suggest.py` lines 569–586): uses
-   `causal_graph.parents(objective_name)`. Sprint 37 graph gave
-   `parents(policy_value) = 6` search-space vars → `weights = None`
-   (no restriction). Sprint 38 widened graph still gives
-   `parents(policy_value) = 6` search-space vars (the new edge
-   targets `position_handling_flag`, not `policy_value`) → still
-   `weights = None`, still no-op.
-4. Soft-causal reranker (`_rerank_alignment_only` +
-   `_causal_alignment_score`, `suggest.py` lines 751–812 and
-   982–1021): averages over ancestors of the objective. The
-   ancestor set grows by one (`logged_position_distribution`), but
-   that variable is not in the search space, so
-   `_causal_alignment_score` skips it when it iterates over
-   ancestors in the search space (the per-variable normalized
-   displacement loop at lines 1010–1019 only fires when the
-   ancestor name is a key in `candidate` and `best_params`). The
-   reranker's per-seed output is therefore identical to Sprint 37.
+3. Parent-weighted exploitation (`suggest.py` lines 604–619, inside
+   `_suggest_exploitation` which starts at line 532): uses
+   `causal_graph.parents(objective_name)`. The 70/30 weighting
+   activates only when `parent_focus` is a *proper* subset of
+   `eligible_vars` (line 608:
+   `if parent_focus and len(parent_focus) < len(eligible_vars)`).
+   Sprint 37 graph gave `parents(policy_value) = 6` search-space
+   vars → `weights = None` (no restriction). Sprint 38 widened
+   graph still gives `parents(policy_value) = 6` search-space vars
+   (the new edge targets `position_handling_flag`, not
+   `policy_value`) → still `weights = None`, still no-op.
+4. Soft-causal reranker (`_rerank_alignment_only` at `suggest.py`
+   lines 848–877, called from `_suggest_bayesian` at line 839; soft
+   path entered via `use_soft = causal_graph is not None and
+   causal_softness < _HARD_FOCUS_THRESHOLD` at line 784, with
+   ancestor set built at lines 810–813; alignment score function
+   `_causal_alignment_score` at lines 1015–1054): averages over
+   ancestors of the objective. The ancestor set grows by one
+   (`logged_position_distribution`), but that variable is not in
+   the search space, so `_causal_alignment_score` skips it in the
+   per-variable normalized-displacement loop at lines 1043–1052 —
+   the filter is search-space membership
+   (`var = var_map.get(name); if var is None: continue` at lines
+   1044–1046, where `var_map = {v.name: v for v in search_space.variables}`
+   at line 1040), not key-presence in `candidate`/`best_params`
+   (those fall back to `mid` via `candidate.get(name, mid)` at line
+   1050). The reranker's per-seed output is therefore identical to
+   Sprint 37.
 5. `_suggest_causal_gp`: inert (not requested by the benchmark).
 6. `causal_exploration_weight`: pinned to `0.0`, inert.
 
@@ -685,10 +696,16 @@ that forced the choice.
     (`_get_focus_variables`)
   - `causal_optimizer/optimizer/suggest.py` lines 1183–1236
     (`_apply_minimal_focus_a1`, Sprint 37 A1 helper)
-  - `causal_optimizer/optimizer/suggest.py` lines 751–812
-    (soft-causal reranker inside `_suggest_bayesian`)
-  - `causal_optimizer/optimizer/suggest.py` lines 982–1021
-    (`_causal_alignment_score`)
+  - `causal_optimizer/optimizer/suggest.py` lines 604–619
+    (parent-weighted 70/30 split inside `_suggest_exploitation`,
+    which starts at line 532)
+  - `causal_optimizer/optimizer/suggest.py` lines 848–877
+    (`_rerank_alignment_only`, called from `_suggest_bayesian` at
+    line 839 when `use_soft` is true at line 784)
+  - `causal_optimizer/optimizer/suggest.py` lines 1015–1054
+    (`_causal_alignment_score`; per-variable normalized-displacement
+    loop at 1043–1052 with search-space-membership filter at
+    1044–1046)
 - `CausalGraph` type: `causal_optimizer/types.py`
 - `DomainAdapter.get_prior_graph` contract:
   `causal_optimizer/domain_adapters/base.py`

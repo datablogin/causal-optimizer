@@ -74,6 +74,23 @@ Produce in one PR:
    - `get_prior_graph()` returns the eight-node / seven-edge widened
      graph from the Sprint 38 recommendation's "Minimal Preregistered
      Graph (Sprint 38 widening)" section, verbatim.
+   - **Implementation note.** The Sprint 37 `get_prior_graph` body
+     programmatically enumerates the search space:
+     `edges = [(name, "policy_value") for name in self.get_search_space().variable_names]`
+     (`bandit_log.py` line 540). That pattern cannot express the new
+     Sprint 38 edge, because
+     `logged_position_distribution -> position_handling_flag` has a
+     source that is not a search-space variable. The implementation
+     must switch to an explicit edge list — build
+     `search_edges = [(name, "policy_value") for name in self.get_search_space().variable_names]`
+     and then extend with the Sprint 38 edge, or write out all seven
+     edges as literal tuples. Do not keep the list-comprehension-only
+     pattern; it silently drops the new edge.
+   - Unit tests must pin edges by name tuple (see item 2 below), not
+     by counting `len(search_space.variables)`. The Sprint 37 shape of
+     `len(edges) == len(search_space.variables)` no longer holds
+     under the widened graph (seven edges, six search-space
+     variables).
    - The function's docstring cites Sprint 38 (this document and the
      plan) and keeps the Sprint 37 lane reference for context.
    - No other edits to `bandit_log.py`. The search space stays at six
