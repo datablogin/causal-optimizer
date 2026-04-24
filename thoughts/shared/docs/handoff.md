@@ -188,10 +188,10 @@ Sprint 37 (preregistered prior graph + A1 minimal-focus, `causal` arm only):
 
 1. `causal` vs `surrogate_only` at B80: **near-parity** (`p = 0.7337` two-sided MWU; means agree to six decimals: 0.006181 vs 0.006182). H0 from the Sprint 36 plan confirmed.
 2. `causal` vs `surrogate_only` at B40: not significant (`p = 0.2123`); means within 1.7e-5.
-3. `causal` vs `surrogate_only` at B20: trending toward `causal < surrogate_only` (`p = 0.0820`, not certified). Direction reported as observed.
-4. Both optimized strategies still certified over `random` at every budget (`p = 0.0002`).
-5. Sprint 35 bit-identical tie broken on every seed at every budget (A1 changes the trajectory exactly as Sprint 36's path 4 — soft-causal reranker — predicted, but the verdict-budget mean does not move).
-6. All five Section 7 gates PASS (null-control max ratio 1.0263, B80 aggregate median ESS 51,255, zero-support 0%, propensity sanity rel-dev ~1.9e-15, DR/SNIPW divergence 0.481%).
+3. `causal` vs `surrogate_only` at B20: trending toward `causal < surrogate_only` (`p = 0.0820`, not certified, `causal < surrogate_only` on 8/10 seeds — mean-regret direction only, not a certified regression).
+4. Both optimized strategies still certified over `random` at every budget. At B40/B80 both rows are `p = 0.0002` with 10/10 wins. At B20, `causal` vs `random` is `p = 0.0006` with 9/10 wins and `surrogate_only` vs `random` is `p = 0.0002` with 9/10 wins. Absolute B80 lift over `random`: `causal` ≈ 0.000750, `surrogate_only` ≈ 0.000751 (B80 means: causal 0.006181, s.o. 0.006182, random 0.005431).
+5. Sprint 35 bit-identical tie broken on every seed at every budget (A1 changes the trajectory exactly as Sprint 36's path 4 — soft-causal reranker — predicted, but the verdict-budget mean does not move). This is an honest near-parity, not a power-limited near-miss: the B80 means agree to six decimals, so more seeds will not change the verdict.
+6. All five Section 7 gates PASS with comfortable margins (null-control max ratio 1.0263 vs 1.05 band; B80 aggregate median ESS 51,255 vs floor 4,529; zero-support 0.0% best-of-seed; propensity sanity rel-dev ~1.9e-15 vs 10% band; DR/SNIPW cross-check max divergence 0.481% vs 25% tolerance).
 7. Backend `ax_botorch` on every cell, no RF fallback.
 8. `causal` arm B80 mean ESS rose ≈14.6% vs Sprint 35 (40,881 → 46,852); `n_effective_actions` rose 24.91 → 27.14. The A1 restriction biases the optimizer away from the most concentrated softmax policies without changing SNIPW.
 
