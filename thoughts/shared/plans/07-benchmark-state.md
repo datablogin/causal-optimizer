@@ -1,6 +1,6 @@
 # Benchmark State
 
-Updated: 2026-04-21 (Sprint 35 complete — first Men/Random Open Bandit benchmark merged as PR #192)
+Updated: 2026-04-22 (Sprint 37 complete — first preregistered Open Bandit prior graph + A1 minimal-focus rerun merged as PR #198; B80 near-parity confirms Sprint 36 H0)
 
 ## Purpose
 
@@ -16,7 +16,7 @@ Use it when:
 
 ## Current Position
 
-The project is now strongest as a **trustworthy research harness with one real-world positive, one clean non-energy boundary, one near-parity large-scale marketing result, and one clean multi-action Open Bandit row where both optimized strategies beat `random` at certified significance but `causal` and `surrogate_only` tie mechanically under a null prior graph**.
+The project is now strongest as a **trustworthy research harness with one real-world positive, one clean non-energy boundary, one near-parity large-scale marketing result, and one clean multi-action Open Bandit row where both optimized strategies beat `random` at certified significance and the first preregistered prior graph + A1 minimal-focus heuristic produced near-parity at the verdict budget — H0 from the Sprint 36 plan confirmed**.
 
 What is true today:
 
@@ -36,34 +36,87 @@ What is true today:
 14. Sprint 33 closure published the generalization scorecard — verdict GENERALITY IS REAL BUT CONDITIONAL
 15. Sprint 34 merged the Open Bandit contract and multi-action architecture brief as PR #184 — pinned Men/Random as the first slice, a new `DomainAdapter` subclass, SNIPW-primary OPE, five Section 7 support gates, and OBP as an optional extra
 16. Sprint 35 executed the contract end-to-end in four merged PRs (adapter #189, OPE stack #188, bridge #191, benchmark report #192) and produced the first Men/Random benchmark on the full 452,949-row slice under Ax/BoTorch with all five Section 7 gates PASS; `causal` and `surrogate_only` tie bit-identically on every seed because `BanditLogAdapter.get_prior_graph() -> None`, and both beat `random` at certified significance (p=0.0002, 10/10 wins, every budget)
+17. Sprint 36 (PR #195/#196) merged the docs-only preregistration of the first Open Bandit prior graph (seven nodes / six edges, no bidirected) and the post-Sprint-35 restart-doc sync; named Option A1 (focus-restriction engine flag enabled only for `causal`) as the recommended Sprint 37 lane
+18. Sprint 37 (PR #198, closes issue #197) implemented Option A1 and reran Men/Random under the same Sprint 35 contract; B80 verdict is **near-parity** (`p = 0.7337`, two-sided MWU, means agree to six decimals: 0.006181 vs 0.006182), all five Section 7 gates PASS, both optimized strategies still certified over `random` at every budget; the Sprint 35 bit-identical tie is broken on every seed but the verdict-budget mean does not move; H0 from the Sprint 36 plan confirmed
 
 ## Current Goal
 
-Sprint 35 is **complete**. The Open Bandit lane is now real on `main`:
-adapter (`BanditLogAdapter`), OPE stack (SNIPW primary, DM and DR
-secondary), all five Section 7 support gates, bridge between the adapter
-and the OPE path, and a published first-run Men/Random benchmark report.
-See [sprint-35-open-bandit-benchmark-report.md](../docs/sprint-35-open-bandit-benchmark-report.md)
-for the authoritative benchmark evidence and
-[sprint-34-open-bandit-contract.md](../docs/sprint-34-open-bandit-contract.md)
-for the pinning contract.
+Sprint 37 is **complete**. The first preregistered prior graph and the
+A1 minimal-focus engine flag are now on `main`, the Open Bandit
+benchmark has been rerun under A1, and the verdict at B80 is
+near-parity (the predicted H0 outcome). See
+[sprint-37-open-bandit-prior-graph-report.md](../docs/sprint-37-open-bandit-prior-graph-report.md)
+for the authoritative Sprint 37 evidence,
+[sprint-35-open-bandit-benchmark-report.md](../docs/sprint-35-open-bandit-benchmark-report.md)
+for the no-graph baseline, and
+[26-sprint-36-recommendation.md](26-sprint-36-recommendation.md) for
+the contract Sprint 38 inherits.
 
-The active lane is now **Sprint 36 planning**, not Sprint 35 execution.
-The high-level framing is preserved: Sprint 35 resolved the plumbing
-question (the Open Bandit path runs cleanly, all five gates pass, both
-optimized strategies beat `random`), but it did not and could not resolve
-the causal-vs-surrogate differentiation question on multi-action data —
-the Sprint 35 exact tie is the expected null result under a null prior
-graph (`get_prior_graph() -> None` per Sprint 34 contract Section 4e),
-not evidence that causal guidance is inert on multi-action data in
-general. Answering that question requires a bandit-log-compatible
-multi-action prior graph (authored or principled discovery), which is
-the most direct Sprint 36+ move. Sprint 36 detailed planning lives at
-`thoughts/shared/plans/26-sprint-36-recommendation.md` and
-`thoughts/shared/prompts/sprint-36-open-bandit-prior-graph.md`,
-owned by a different track. Sprint 36 scope is not owned by this file.
+The active lane is now **Sprint 38 planning**, not Sprint 37 execution.
+The Sprint 37 report's "Sprint 38+ Implications" section names three
+options the next sprint must pick between:
+
+- **Option B (graph widening):** add one non-ancestor structural node so the graph alone restricts the search (not just via screening). The Sprint 36 plan cites `logged_position_distribution` and `request_item_overlap` as candidates grounded in the adapter code.
+- **Option C (different heuristic):** replace `screened ∩ ancestors` with a magnitude-thresholded variant. Keeps the graph unchanged; changes only the engine-surface restriction.
+- **Option D (move on):** accept that under the Sprint 35 surface the `causal` and `surrogate_only` paths converge, and reopen the multi-objective or second-dataset workstream instead.
+
+Do **not** chase the Sprint 37 B20 trending row — direction is
+`causal < surrogate_only`, not certified, and the Sprint 36 plan
+explicitly forbade post-hoc convergence chasing.
 
 ## Current Sprint Status
+
+### Sprint 37
+
+Closed issues:
+
+1. [#197](https://github.com/datablogin/causal-optimizer/issues/197) Sprint 37: rerun Open Bandit Men/Random with the first prior graph and A1 minimal-focus flag — closed by PR #198
+
+Merged PRs:
+
+1. `#198` merged 2026-04-22 (commit `4e69132`)
+   - PR: [#198](https://github.com/datablogin/causal-optimizer/pull/198)
+   - issue: `#197` closed
+   - result: preregistered seven-node / six-edge prior graph in `BanditLogAdapter.get_prior_graph()`; new `pomis_minimal_focus: bool = False` flag on `ExperimentEngine` threaded through both `suggest_next` paths; new `_apply_minimal_focus_a1` helper applied in both optimization and exploitation (so B80 doesn't revert at the `>= 50` exploitation boundary); harness wires the flag only on the `causal` arm. Men/Random rerun under the Sprint 35 contract (10 seeds, B20/B40/B80, full slice, Ax/BoTorch primary, permutation seed 20260419) produced **near-parity at B80** (`p = 0.7337`, two-sided MWU; means agree to six decimals: 0.006181 vs 0.006182), all five Section 7 gates PASS, both optimized strategies still certified over `random` (`p = 0.0002`) at every budget, backend `ax_botorch` only on every cell. Sprint 35 bit-identical tie broken on every seed at every budget. H0 from the Sprint 36 plan confirmed.
+
+Report document:
+
+1. [sprint-37-open-bandit-prior-graph-report.md](../docs/sprint-37-open-bandit-prior-graph-report.md)
+
+Current Sprint 37 position:
+
+1. Sprint 37 Option A1 implementation: **complete** (PR #198 merged)
+2. Sprint 37 Men/Random rerun: **complete** (B80 near-parity, all Section 7 gates PASS, backend `ax_botorch` only)
+3. Verdict: clean Men/Random rerun row; **the `causal` vs `surrogate_only` near-parity at B80 is the H0 outcome** the Sprint 36 plan explicitly predicted under the preregistered minimal graph + screening-intersection restriction. The B20 row is trending toward `causal < surrogate_only` (`p = 0.0820`, not certified) and is not the verdict. The Sprint 33 closure verdict (GENERALITY IS REAL BUT CONDITIONAL) carries forward unchanged.
+
+### Sprint 36
+
+Closed issues (docs-only):
+
+1. [#193](https://github.com/datablogin/causal-optimizer/issues/193) restart-doc sync after Sprint 35 — closed by PR #196
+2. [#194](https://github.com/datablogin/causal-optimizer/issues/194) Sprint 36 prior-graph preregistration — closed by PR #195
+
+Merged PRs:
+
+1. `#195` merged
+   - PR: [#195](https://github.com/datablogin/causal-optimizer/pull/195)
+   - issue: `#194` closed
+   - result: docs-only preregistration of the first Open Bandit prior graph (seven nodes / six edges, no bidirected) plus engine-surface analysis enumerating all seven `causal_graph` read sites in `causal_optimizer/optimizer/suggest.py`; named Option A1 (engine change) and Option B (graph widening) as the two Sprint 37 Exit-Criterion alternatives; recommended A1
+2. `#196` merged
+   - PR: [#196](https://github.com/datablogin/causal-optimizer/pull/196)
+   - issue: `#193` closed
+   - result: post-Sprint-35 restart-doc sync (handoff.md + 07-benchmark-state.md updated to honest post-Sprint-35 state with steady-state location language)
+
+Report / planning documents:
+
+1. [26-sprint-36-recommendation.md](26-sprint-36-recommendation.md)
+2. [sprint-36-open-bandit-prior-graph.md](../prompts/sprint-36-open-bandit-prior-graph.md)
+
+Current Sprint 36 position:
+
+1. Sprint 36 prior-graph preregistration: **complete** (PR #195 merged)
+2. Sprint 36 restart-doc sync: **complete** (PR #196 merged)
+3. No Python change in Sprint 36 itself (per the rescoped contract); the adapter change and rerun were Sprint 37 deliverables (now complete).
 
 ### Sprint 35
 
@@ -324,25 +377,31 @@ Merged PRs:
 
 ## Immediate Next Step
 
-Sprint 35 is **complete**. All four Sprint 35 PRs (#188, #189, #191, #192)
-and their issues (#185, #186, #187, #190) are merged and closed. The first
-Men/Random Open Bandit benchmark is published as
-[sprint-35-open-bandit-benchmark-report.md](../docs/sprint-35-open-bandit-benchmark-report.md).
-The Sprint 33 closure verdict **GENERALITY IS REAL BUT CONDITIONAL**
-carries forward unchanged; no synthetic, energy, or binary-marketing
-benchmark ran in Sprint 34 or Sprint 35.
+Sprint 37 is **complete**. PR [#198](https://github.com/datablogin/causal-optimizer/pull/198)
+merged 2026-04-22, closing issue [#197](https://github.com/datablogin/causal-optimizer/issues/197).
+The first preregistered prior graph + A1 minimal-focus engine flag are
+on `main`, the Men/Random rerun is published as
+[sprint-37-open-bandit-prior-graph-report.md](../docs/sprint-37-open-bandit-prior-graph-report.md),
+and the verdict at B80 is near-parity (`p = 0.7337`) — the H0 outcome
+the Sprint 36 plan explicitly predicted under A1 + the preregistered
+minimal graph. The Sprint 33 closure verdict **GENERALITY IS REAL BUT
+CONDITIONAL** carries forward unchanged; no synthetic, energy, or
+binary-marketing benchmark ran in Sprint 34, 35, 36, or 37.
 
-The active lane is now **Sprint 36 planning**. Do **not** open new Sprint
-35 issues. If resuming:
+The active lane is now **Sprint 38 planning**. Do **not** open new
+Sprint 35, 36, or 37 issues. If resuming:
 
-1. read the [Sprint 35 Open Bandit benchmark report](../docs/sprint-35-open-bandit-benchmark-report.md) first — it pins the exact shape of the Men/Random result (clean diagnostics, all five Section 7 gates PASS, `causal == surrogate_only` exact tie on every seed and every budget, both beat `random` at certified significance)
-2. read the [Sprint 34 Open Bandit contract](../docs/sprint-34-open-bandit-contract.md) for the Men/Random slice, adapter interface, OPE stack, Section 7 support gates, and OBP dependency decision
-3. read the [Sprint 33 generalization scorecard](../docs/sprint-33-generalization-scorecard.md) for the synthesized verdict across ERCOT, Hillstrom, and Criteo
-4. read the [handoff document](../docs/handoff.md) for the post-Sprint-35 restart instructions
-5. Sprint 36 detailed planning lives at `thoughts/shared/plans/26-sprint-36-recommendation.md` and `thoughts/shared/prompts/sprint-36-open-bandit-prior-graph.md`, owned by a different track. Do not start new Sprint 36 implementation scope from this file
-6. do not describe the Sprint 35 exact tie as evidence that causal guidance is inert on multi-action data in general — the tie is mechanical (null prior graph), not empirical
-7. do not reopen Hillstrom or Criteo as the Sprint 36 main lane
-8. the ERCOT 10-seed rerun remains on the backlog but is not the Sprint 36 critical path
+1. read the [Sprint 37 Open Bandit prior-graph rerun report](../docs/sprint-37-open-bandit-prior-graph-report.md) first — it pins the A1 outcome (near-parity at B80, all five Section 7 gates PASS, B20 trending toward `causal < surrogate_only` but not certified, backend `ax_botorch` only)
+2. read the [Sprint 35 baseline benchmark report](../docs/sprint-35-open-bandit-benchmark-report.md) and the [Sprint 36 recommendation](26-sprint-36-recommendation.md) for the contract Sprint 38 inherits
+3. read the [Sprint 34 Open Bandit contract](../docs/sprint-34-open-bandit-contract.md) for the Men/Random slice, adapter interface, OPE stack, Section 7 support gates, and OBP dependency decision
+4. read the [Sprint 33 generalization scorecard](../docs/sprint-33-generalization-scorecard.md) for the synthesized verdict across ERCOT, Hillstrom, and Criteo
+5. read the [handoff document](../docs/handoff.md) for the post-Sprint-37 restart instructions
+6. Sprint 38 picks one of three options named in the Sprint 37 report's "Sprint 38+ Implications" section: Option B (graph widening with non-ancestor structural node), Option C (different focus heuristic — e.g. magnitude-thresholded), or Option D (move on to multi-objective / second dataset)
+7. do **not** chase the Sprint 37 B20 trending row — direction is `causal < surrogate_only`, not certified, and the Sprint 36 plan explicitly forbade post-hoc convergence chasing
+8. do not describe the Sprint 37 near-parity as evidence that causal guidance is inert on multi-action data in general — it is the H0 outcome under A1 + the preregistered minimal graph, exactly as the Sprint 36 plan predicted
+9. do not reopen Hillstrom or Criteo as the Sprint 38 main lane
+10. the ERCOT 10-seed rerun remains on the backlog but is not the Sprint 38 critical path
+11. the `claude-review.sh` script hangs on the new Claude CLI (`claude chat < FILE` stays interactive) — fixing the script (likely by switching to `claude --print` or equivalent) is a separate cleanup task, not a Sprint 38 blocker
 
 ## Canonical Docs
 
